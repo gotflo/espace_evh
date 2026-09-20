@@ -1,0 +1,19 @@
+{
+  "name": "Espace Vases d'Honneur Chicoutimi",
+  "short_name": "Vases d'Honneur",
+  "description": "Espace membre de l'eglise Vases d'Honneur Chicoutimi : suivi, evenements, annonces et vie spirituelle.",
+  "lang": "fr",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#06302c",
+  "theme_color": "#0a4a44",
+  "categories": ["lifestyle", "social"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
