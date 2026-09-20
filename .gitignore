@@ -17,4 +17,9 @@ backend/database/*.sqlite
 **/node_modules/
 **/vendor/
 frontend/dist/
-backend/public/build/
+
+# Build React copie dans le public de Laravel (regenere par `npm run build`)
+backend/public/*
+!backend/public/index.php
+!backend/public/.htaccess
+!backend/public/robots.txt
