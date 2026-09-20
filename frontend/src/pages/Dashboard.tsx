@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import { AppLayout } from '../components/AppLayout'
 import { MyExercises } from '../components/MyExercises'
 import { AnnouncementsFeed } from '../components/AnnouncementsFeed'
@@ -22,9 +23,12 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [welcome, setWelcome] = useState(false)
 
-  useEffect(() => {
+  const loadStats = useCallback(() => {
     if (canViewMembers) api<Stats>('/admin/stats').then(setStats).catch(() => setStats(null))
   }, [canViewMembers])
+
+  useEffect(() => { loadStats() }, [loadStats])
+  useAutoRefresh(loadStats, 20000, canViewMembers)
 
   // Mot de bienvenue au tout premier passage, puis il disparait de lui-meme.
   useEffect(() => {

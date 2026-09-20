@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
+import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import type { AdminRequest } from '../types'
 
 /** Widget tableau de bord : dernieres demandes des fideles + compteur de nouvelles. */
@@ -8,10 +9,13 @@ export function DashRequests() {
   const navigate = useNavigate()
   const [data, setData] = useState<{ requests: AdminRequest[]; new_count: number } | null>(null)
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api<{ requests: AdminRequest[]; new_count: number }>('/admin/requests')
       .then(setData).catch(() => setData(null))
   }, [])
+
+  useEffect(() => { load() }, [load])
+  useAutoRefresh(load)
 
   if (!data) return null
 
