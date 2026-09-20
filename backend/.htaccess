@@ -1,0 +1,12 @@
+# Fait pointer le sous-domaine (racine = ce dossier) vers le dossier public/ de Laravel,
+# sans exposer le code ni le fichier .env. A conserver a la racine du dossier deploye.
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# Blocage explicite des fichiers sensibles.
+<FilesMatch "(^\.env|\.env\.|\.log$|\.sqlite$)">
+    Require all denied
+</FilesMatch>
