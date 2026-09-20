@@ -39,8 +39,13 @@ export default function Login() {
       })
       setNormalizedPhone(res.phone)
       setStep('code')
-      // En dev, le backend renvoie le code pour faciliter les tests (jamais en production).
-      setInfo(res.dev_code ? `Code (mode test) : ${res.dev_code}` : res.message)
+      // Phase de test : le backend renvoie le code, on l'affiche et on le pre-remplit.
+      if (res.dev_code) {
+        setCode(res.dev_code)
+        setInfo(`Code (mode test) : ${res.dev_code}`)
+      } else {
+        setInfo(res.message)
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.firstMessage : 'Erreur reseau.')
     } finally {
