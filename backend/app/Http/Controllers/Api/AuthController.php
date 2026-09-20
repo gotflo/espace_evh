@@ -47,8 +47,9 @@ class AuthController extends Controller
             'phone' => $phone,
         ];
 
-        // En developpement uniquement : on renvoie le code pour tester sans vrai SMS.
-        if (app()->environment('local')) {
+        // En dev, ou en phase de test (EXPOSE_OTP=true) : on renvoie le code pour se
+        // connecter sans vrai SMS. A desactiver des que Twilio est en place.
+        if (app()->environment('local') || config('app.expose_otp')) {
             $payload['dev_code'] = $code;
         }
 

@@ -15,6 +15,10 @@ return [
 
     'name' => env('APP_NAME', 'Laravel'),
 
+    // Phase de test : si true, le code OTP est renvoye a l'ecran (aucun SMS requis).
+    // A repasser a false une fois le vrai envoi de SMS (Twilio) en place.
+    'expose_otp' => (bool) env('EXPOSE_OTP', false),
+
     /*
     |--------------------------------------------------------------------------
     | Application Environment

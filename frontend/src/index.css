@@ -964,9 +964,11 @@ h1, h2, h3 { font-family: var(--font-serif); font-weight: 600; line-height: 1.15
 
 /* Bandeau d'installation de la PWA */
 .install-banner {
-  position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px; z-index: 200;
+  /* Centrage par left/right + margin auto (pas de transform : compatible avec l'animation). */
+  position: fixed; left: 12px; right: 12px; margin: 0 auto; z-index: 200;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+  max-width: 440px;
   display: flex; align-items: center; gap: 0.8rem;
-  width: min(440px, calc(100% - 24px));
   background: linear-gradient(135deg, #0d5f57, #06302c); color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 16px;
   padding: 0.7rem 0.9rem; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.32);
