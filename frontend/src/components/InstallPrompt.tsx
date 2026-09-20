@@ -62,7 +62,7 @@ export function InstallPrompt() {
         <strong>Installer l'application</strong>
         {isIos()
           ? <small>Appuyez sur Partager puis « Sur l'ecran d'accueil ».</small>
-          : <small>Acces rapide depuis votre ecran d'accueil.</small>}
+          : <small>Accès rapide depuis votre ecran d'accueil.</small>}
       </div>
       {!isIos() && deferred && (
         <button className="btn btn-primary small" onClick={install}>Installer</button>

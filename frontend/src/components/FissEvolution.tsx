@@ -20,7 +20,7 @@ function DiffRow({ f }: { f: FissDiffField }) {
 }
 
 /**
- * Indicateur de tendance de la fiche courante par rapport a la precedente,
+ * Indicateur de tendance de la fiche courante par rapport à la precedente,
  * cliquable pour voir le detail de ce qui a change.
  */
 export function FissEvolution({ current, previous, previousLabel }: {
@@ -40,9 +40,9 @@ export function FissEvolution({ current, previous, previousLabel }: {
         <span className="fiss-evolution-icon">{TREND_ARROW[cmp.overall]}</span>
         <div className="fiss-evolution-text">
           <strong>Evolution : {TREND_LABEL[cmp.overall]}{cmp.diff !== 0 ? ` (${cmp.diff > 0 ? '+' : ''}${cmp.diff} pts)` : ''}</strong>
-          <small>Par rapport a {previousLabel ?? 'le mois precedent'} · {changed.length} element(s) modifie(s)</small>
+          <small>Par rapport a {previousLabel ?? 'le mois précédent'} · {changed.length} element(s) modifie(s)</small>
         </div>
-        <span className="fiss-evolution-toggle">{open ? 'Masquer' : 'Voir ce qui a change'}</span>
+        <span className="fiss-evolution-toggle">{open ? 'Masquer' : 'Voir ce qui a changé'}</span>
       </button>
       {open && (
         <div className="fiss-evolution-body">

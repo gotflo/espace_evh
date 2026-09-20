@@ -30,20 +30,20 @@ class AuthController extends Controller
         $phone = Phone::normalize($data['phone'], $data['country'] ?? 'CA');
         if (! $phone) {
             throw ValidationException::withMessages([
-                'phone' => 'Ce numero de telephone n\'est pas valide.',
+                'phone' => 'Ce numéro de téléphone n\'est pas valide.',
             ]);
         }
 
         if ($this->otp->isThrottled($phone)) {
             throw ValidationException::withMessages([
-                'phone' => 'Un code vient deja d\'etre envoye. Patientez un instant avant de reessayer.',
+                'phone' => 'Un code vient déjà d\'être envoyé. Patientez un instant avant de réessayer.',
             ]);
         }
 
         $code = $this->otp->sendCode($phone);
 
         $payload = [
-            'message' => 'Un code de verification a ete envoye par SMS.',
+            'message' => 'Un code de vérification a été envoyé par SMS.',
             'phone' => $phone,
         ];
 
@@ -67,7 +67,7 @@ class AuthController extends Controller
         $phone = Phone::normalize($data['phone']);
         if (! $phone || ! $this->otp->verify($phone, $data['code'])) {
             throw ValidationException::withMessages([
-                'code' => 'Code invalide ou expire.',
+                'code' => 'Code invalide ou expiré.',
             ]);
         }
 
@@ -175,6 +175,6 @@ class AuthController extends Controller
     {
         $request->user()->currentAccessToken()->delete();
 
-        return response()->json(['message' => 'Deconnecte.']);
+        return response()->json(['message' => 'Déconnecté.']);
     }
 }

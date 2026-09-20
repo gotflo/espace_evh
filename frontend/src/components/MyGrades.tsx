@@ -28,7 +28,7 @@ export function MyGrades() {
         <div className="grade-avg">
           <span className="grade-avg-value">{data.average?.toFixed(1)}</span>
           <span className="grade-avg-max">/ 20</span>
-          <span className="grade-avg-label">Moyenne generale</span>
+          <span className="grade-avg-label">Moyenne générale</span>
         </div>
         <div className="grade-bytype">
           {data.by_type.map((t) => (

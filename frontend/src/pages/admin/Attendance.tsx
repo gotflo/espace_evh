@@ -5,9 +5,9 @@ import { AppLayout } from '../../components/AppLayout'
 import type { AttendanceMember, AttendanceStatus, RosterData } from '../../types'
 
 const TODAY = new Date().toISOString().slice(0, 10)
-const EVENTS = ['Culte', 'Culte du dimanche', 'Reunion de priere', 'Etude biblique', 'Repetition', 'Autre']
+const EVENTS = ['Culte', 'Culte du dimanche', 'Réunion de prière', 'Étude biblique', 'Répétition', 'Autre']
 const REH_STATUS: { key: AttendanceStatus; label: string }[] = [
-  { key: 'present', label: 'Present' },
+  { key: 'present', label: 'Présent' },
   { key: 'retard', label: 'Retard' },
   { key: 'absent_justifie', label: 'Excuse' },
   { key: 'absent', label: 'Absent' },
@@ -57,7 +57,7 @@ export default function Attendance() {
   }
 
   return (
-    <AppLayout title="Presences" subtitle="Feuille de presence des cultes et repetitions">
+    <AppLayout title="Présences" subtitle="Feuille de présence des cultes et repetitions">
       <section className="panel">
         <div className="attendance-controls">
           <div className="field" style={{ marginBottom: 0 }}>
@@ -65,7 +65,7 @@ export default function Attendance() {
             <input className="input" type="date" max={TODAY} value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
           <div className="field" style={{ marginBottom: 0 }}>
-            <label>Evenement</label>
+            <label>Événement</label>
             <select className="select" value={event} onChange={(e) => setEvent(e.target.value)}>
               {EVENTS.map((ev) => <option key={ev} value={ev}>{ev}</option>)}
             </select>
@@ -82,11 +82,11 @@ export default function Attendance() {
 
         <div className="toolbar" style={{ marginTop: '1rem' }}>
           <p className="helper" style={{ margin: 0 }}>
-            {loading ? 'Chargement...' : `${presentCount} / ${members.length} present(s)`}
+            {loading ? 'Chargement...' : `${presentCount} / ${members.length} présent(s)`}
           </p>
           {canRecord && kind === 'culte' && members.length > 0 && (
             <div className="attendance-quick">
-              <button className="btn-link" onClick={() => setAll(true)}>Tout present</button>
+              <button className="btn-link" onClick={() => setAll(true)}>Tout présent</button>
               <button className="btn-link" onClick={() => setAll(false)}>Tout absent</button>
             </div>
           )}

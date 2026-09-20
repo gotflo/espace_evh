@@ -20,7 +20,7 @@ class OtpService
     public function __construct(private SmsSender $sms) {}
 
     /**
-     * Genere un code, l'enregistre (hache) et l'envoie par SMS.
+     * Genere un code, l'enregistré (hache) et l'envoie par SMS.
      * Retourne le code en clair (utilise seulement en local pour faciliter les tests).
      */
     public function sendCode(string $phone): string

@@ -8,9 +8,9 @@ import type { Department, EventAdminItem, EventCategory, EventParticipants, Trib
 
 const CATEGORIES: { key: EventCategory; label: string }[] = [
   { key: 'culte', label: 'Culte' },
-  { key: 'priere', label: 'Priere' },
+  { key: 'priere', label: 'Prière' },
   { key: 'formation', label: 'Formation' },
-  { key: 'reunion', label: 'Reunion' },
+  { key: 'reunion', label: 'Réunion' },
   { key: 'sortie', label: 'Sortie' },
   { key: 'autre', label: 'Autre' },
 ]
@@ -104,7 +104,7 @@ export default function Events() {
   }
 
   async function remove(id: number) {
-    if (!confirm('Supprimer cet evenement ?')) return
+    if (!confirm('Supprimer cet événement ?')) return
     setError('')
     try { await api(`/admin/events/${id}`, { method: 'DELETE' }); load() }
     catch (err) { setError(err instanceof ApiError ? err.firstMessage : 'Erreur.') }
@@ -114,8 +114,8 @@ export default function Events() {
   const past = items.filter((e) => e.is_past)
 
   return (
-    <AppLayout title="Evenements" subtitle="Cultes, reunions, formations, sorties..."
-      actions={mode === 'list' ? <button className="btn btn-primary small" onClick={openNew}>+ Nouvel evenement</button> : undefined}>
+    <AppLayout title="Événements" subtitle="Cultes, reunions, formations, sorties..."
+      actions={mode === 'list' ? <button className="btn btn-primary small" onClick={openNew}>+ Nouvel événement</button> : undefined}>
       {error && <div className="alert alert-error">{error}</div>}
 
       {participants && (
@@ -147,7 +147,7 @@ export default function Events() {
       {mode === 'form' ? (
         <section className="panel" style={{ maxWidth: 660 }}>
           <div className="panel-head">
-            <h3>{form.id ? "Modifier l'evenement" : 'Nouvel evenement'}</h3>
+            <h3>{form.id ? "Modifier l'événement" : 'Nouvel événement'}</h3>
             <button className="btn-link" onClick={() => setMode('list')}>Annuler</button>
           </div>
           <div className="field">
@@ -156,7 +156,7 @@ export default function Events() {
           </div>
           <div className="field-row">
             <div className="field" style={{ marginBottom: 0 }}>
-              <label>Categorie</label>
+              <label>Catégorie</label>
               <select className="select" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as EventCategory })}>
                 {CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
               </select>
@@ -199,7 +199,7 @@ export default function Events() {
             onId={(id) => setForm({ ...form, target_id: id })}
             tribes={tribes} departments={departments} />
           <button className="btn btn-primary mt" disabled={busy || !form.title.trim() || !form.starts_at || (form.target_type !== 'all' && !form.target_id)} onClick={save}>
-            {busy ? <span className="spinner" /> : form.id ? 'Enregistrer' : "Creer l'evenement"}
+            {busy ? <span className="spinner" /> : form.id ? 'Enregistrer' : "Créer l'événement"}
           </button>
         </section>
       ) : loading ? (
@@ -211,7 +211,7 @@ export default function Events() {
           <h3 className="section-label">A venir</h3>
           <div className="event-grid">
             {upcoming.map((e) => <EventCard key={e.id} e={e} onEdit={openEdit} onDelete={remove} />)}
-            {upcoming.length === 0 && <p className="helper">Aucun evenement a venir.</p>}
+            {upcoming.length === 0 && <p className="helper">Aucun événement à venir.</p>}
           </div>
           {past.length > 0 && (
             <>

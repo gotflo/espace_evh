@@ -66,6 +66,6 @@ class MyEventController extends Controller
             ['response' => $data['response'], 'volunteer' => $data['response'] === 'present' ? (bool) ($data['volunteer'] ?? false) : false],
         );
 
-        return response()->json(['message' => 'Reponse enregistree.']);
+        return response()->json(['message' => 'Réponse enregistrée.']);
     }
 }

@@ -12,7 +12,7 @@ class MyRequestController extends Controller
     public const CATEGORIES = [
         'rendez-vous' => 'Rendez-vous',
         'aide' => 'Besoin d\'aide',
-        'priere' => 'Demande de priere',
+        'priere' => 'Demande de prière',
         'question' => 'Question',
         'autre' => 'Autre',
     ];
@@ -44,7 +44,7 @@ class MyRequestController extends Controller
 
         $req = MemberRequest::create($data + ['user_id' => $request->user()->id, 'status' => 'nouvelle']);
 
-        return response()->json(['message' => 'Demande envoyee.', 'request' => $this->present($req)], 201);
+        return response()->json(['message' => 'Demande envoyée.', 'request' => $this->present($req)], 201);
     }
 
     /** @return array<string, mixed> */

@@ -61,7 +61,7 @@ class RoleController extends Controller
         ]);
         $role->permissions()->sync($this->permissionIds($data['permission_keys'] ?? []));
 
-        return response()->json(['message' => 'Role cree.', 'role_id' => $role->id]);
+        return response()->json(['message' => 'Rôle créé.', 'role_id' => $role->id]);
     }
 
     /** Modifier un role (personnalise ou de base : permissions/nom/description). */
@@ -77,18 +77,18 @@ class RoleController extends Controller
         $role->update($payload);
         $role->permissions()->sync($this->permissionIds($data['permission_keys'] ?? []));
 
-        return response()->json(['message' => 'Role mis a jour.']);
+        return response()->json(['message' => 'Rôle mis à jour.']);
     }
 
     /** Supprimer un role personnalise (les roles de base sont proteges). */
     public function destroy(Role $role): JsonResponse
     {
         if ($role->is_system) {
-            abort(403, 'Les roles de base ne peuvent pas etre supprimes.');
+            abort(403, 'Les rôles de base ne peuvent pas être supprimés.');
         }
         $role->delete(); // les attributions (role_user) sont supprimees en cascade
 
-        return response()->json(['message' => 'Role supprime.']);
+        return response()->json(['message' => 'Rôle supprimé.']);
     }
 
     private function validateRole(Request $request): array
@@ -135,10 +135,10 @@ class RoleController extends Controller
         $actor = $request->user();
         if (! $actor->isSuperAdmin()) {
             if ($role->key === User::SUPER_ADMIN) {
-                abort(403, 'Seul un super administrateur peut attribuer ce role.');
+                abort(403, 'Seul un super administrateur peut attribuer ce rôle.');
             }
             if ($role->rank >= $actor->highestRank()) {
-                abort(403, 'Vous ne pouvez pas attribuer un role de niveau superieur ou egal au votre.');
+                abort(403, 'Vous ne pouvez pas attribuer un rôle de niveau supérieur ou égal au vôtre.');
             }
         }
 
@@ -182,7 +182,7 @@ class RoleController extends Controller
             \App\Models\Gem::whereKey($scopeId)->update(['leader_user_id' => $user->id]);
         }
 
-        return response()->json(['message' => 'Role attribue.']);
+        return response()->json(['message' => 'Rôle attribué.']);
     }
 
     /** Retirer une attribution de role precise. */
@@ -196,11 +196,11 @@ class RoleController extends Controller
         // Empeche de retirer son propre role de super admin (eviter de se verrouiller dehors).
         $superAdmin = Role::where('key', User::SUPER_ADMIN)->first();
         if ($superAdmin && $row->role_id === $superAdmin->id && $user->id === $request->user()->id) {
-            abort(403, 'Vous ne pouvez pas retirer votre propre role de super administrateur.');
+            abort(403, 'Vous ne pouvez pas retirer votre propre rôle de super administrateur.');
         }
 
         DB::table('role_user')->where('id', $assignment)->delete();
 
-        return response()->json(['message' => 'Role retire.']);
+        return response()->json(['message' => 'Rôle retiré.']);
     }
 }

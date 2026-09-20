@@ -19,7 +19,7 @@ class StatsController extends Controller
         $viewAll = $user->hasPermission('members.view_all');
 
         if (! $viewAll && ! $user->hasPermission('members.view_scope')) {
-            abort(403, 'Acces refuse.');
+            abort(403, 'Accès refuse.');
         }
 
         $scope = fn ($query) => MemberScope::scopeProfiles($query, $user);

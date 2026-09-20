@@ -60,7 +60,7 @@ class SpiritualController extends Controller
             'note' => $data['note'] ?? null,
         ]);
 
-        return response()->json(['message' => 'Entree ajoutee.']);
+        return response()->json(['message' => 'Entrée ajoutée.']);
     }
 
     /** Supprimer une entree du journal. */
@@ -69,7 +69,7 @@ class SpiritualController extends Controller
         abort_unless($entry->member_user_id === $user->id, 404);
         $entry->delete();
 
-        return response()->json(['message' => 'Entree supprimee.']);
+        return response()->json(['message' => 'Entrée supprimée.']);
     }
 
     /** Cocher / decocher une etape franchie. */
@@ -90,6 +90,6 @@ class SpiritualController extends Controller
                 ->where('milestone_key', $data['milestone_key'])->delete();
         }
 
-        return response()->json(['message' => 'Etape mise a jour.']);
+        return response()->json(['message' => 'Étape mise à jour.']);
     }
 }

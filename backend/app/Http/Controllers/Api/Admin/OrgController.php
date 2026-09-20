@@ -16,7 +16,7 @@ class OrgController extends Controller
     {
         $user = $request->user();
         if (! $user->hasPermission('tribes.manage') && ! $user->hasPermission('departments.manage')) {
-            abort(403, 'Acces refuse.');
+            abort(403, 'Accès refuse.');
         }
 
         return response()->json([
@@ -32,7 +32,7 @@ class OrgController extends Controller
         $name = $this->validateName($request);
         Tribe::create(['name' => $name, 'slug' => $this->uniqueSlug(Tribe::class, $name)]);
 
-        return response()->json(['message' => 'Tribu creee.']);
+        return response()->json(['message' => 'Tribu créée.']);
     }
 
     public function updateTribe(Request $request, Tribe $tribe): JsonResponse
@@ -46,7 +46,7 @@ class OrgController extends Controller
     {
         $tribe->delete();
 
-        return response()->json(['message' => 'Tribu supprimee.']);
+        return response()->json(['message' => 'Tribu supprimée.']);
     }
 
     public function storeDepartment(Request $request): JsonResponse
@@ -54,7 +54,7 @@ class OrgController extends Controller
         $name = $this->validateName($request);
         Department::create(['name' => $name, 'slug' => $this->uniqueSlug(Department::class, $name)]);
 
-        return response()->json(['message' => 'Departement cree.']);
+        return response()->json(['message' => 'Département créé.']);
     }
 
     public function updateDepartment(Request $request, Department $department): JsonResponse
@@ -65,14 +65,14 @@ class OrgController extends Controller
         ]);
         $department->update($data);
 
-        return response()->json(['message' => 'Departement mis a jour.']);
+        return response()->json(['message' => 'Département mis à jour.']);
     }
 
     public function destroyDepartment(Department $department): JsonResponse
     {
         $department->delete();
 
-        return response()->json(['message' => 'Departement supprime.']);
+        return response()->json(['message' => 'Département supprimé.']);
     }
 
     private function validateName(Request $request): string

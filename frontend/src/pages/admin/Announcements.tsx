@@ -9,9 +9,9 @@ import type { AnnouncementAdminItem, Department, Tribe } from '../../types'
 const CATEGORIES = [
   { key: 'info', label: 'Information' },
   { key: 'important', label: 'Important' },
-  { key: 'evenement', label: 'Evenement' },
+  { key: 'evenement', label: 'Événement' },
 ]
-const CAT_LABEL: Record<string, string> = { info: 'Info', important: 'Important', evenement: 'Evenement' }
+const CAT_LABEL: Record<string, string> = { info: 'Info', important: 'Important', evenement: 'Événement' }
 
 export default function Announcements() {
   const [items, setItems] = useState<AnnouncementAdminItem[]>([])
@@ -82,7 +82,7 @@ export default function Announcements() {
   const createBtn = <button className="btn btn-primary small" onClick={openNew}>+ Nouvelle annonce</button>
 
   return (
-    <AppLayout title="Annonces" subtitle="Communiquer avec les fideles" actions={mode === 'list' ? createBtn : undefined}>
+    <AppLayout title="Annonces" subtitle="Communiquer avec les fidèles" actions={mode === 'list' ? createBtn : undefined}>
       {error && <div className="alert alert-error">{error}</div>}
 
       {mode === 'new' ? (
@@ -100,7 +100,7 @@ export default function Announcements() {
             <textarea className="input" rows={4} value={body} onChange={(e) => setBody(e.target.value)} />
           </div>
           <div className="field">
-            <label>Image <span className="helper" style={{ display: 'inline' }}>(optionnel , une annonce peut etre juste une image)</span></label>
+            <label>Image <span className="helper" style={{ display: 'inline' }}>(optionnel , une annonce peut être juste une image)</span></label>
             <div className="image-picker">
               <button type="button" className="image-drop" onClick={() => fileRef.current?.click()}>
                 {imagePreview ? <img src={imagePreview} alt="" /> : '🖼️'}
@@ -110,7 +110,7 @@ export default function Announcements() {
             </div>
           </div>
           <div className="field">
-            <label>Categorie</label>
+            <label>Catégorie</label>
             <select className="select" value={category} onChange={(e) => setCategory(e.target.value)}>
               {CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>

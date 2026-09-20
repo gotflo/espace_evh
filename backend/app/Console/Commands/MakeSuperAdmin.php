@@ -10,15 +10,15 @@ use Illuminate\Console\Command;
 
 class MakeSuperAdmin extends Command
 {
-    protected $signature = 'user:make-admin {phone : Numero de telephone du pasteur}';
+    protected $signature = 'user:make-admin {phone : Numéro de téléphone du pasteur}';
 
-    protected $description = 'Attribue le role super administrateur (pasteur) a un numero.';
+    protected $description = 'Attribué le rôle super administrateur (pasteur) a un numéro.';
 
     public function handle(): int
     {
         $phone = Phone::normalize($this->argument('phone'));
         if (! $phone) {
-            $this->error('Numero invalide.');
+            $this->error('Numéro invalide.');
             return self::FAILURE;
         }
 
@@ -33,7 +33,7 @@ class MakeSuperAdmin extends Command
 
         $user->roles()->syncWithoutDetaching([$role->id]);
 
-        $this->info("Super administrateur attribue a {$phone}.");
+        $this->info("Super administrateur attribué à {$phone}.");
         return self::SUCCESS;
     }
 }

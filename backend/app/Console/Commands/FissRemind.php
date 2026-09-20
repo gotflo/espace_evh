@@ -12,7 +12,7 @@ class FissRemind extends Command
 {
     protected $signature = 'fiss:remind {--type=auto : advance | urgent | auto (selon le jour du mois)}';
 
-    protected $description = 'Rappelle aux fideles de remplir leur fiche de sante spirituelle (FISS) du mois.';
+    protected $description = 'Rappelle aux fidèles de remplir leur fiche de santé spirituelle (FISS) du mois.';
 
     public function handle(): int
     {
@@ -35,10 +35,10 @@ class FissRemind extends Command
             return self::SUCCESS;
         }
 
-        $title = "Rappel : fiche de sante spirituelle de {$monthLabel}";
+        $title = "Rappel : fiche de santé spirituelle de {$monthLabel}";
         $body = $type === 'urgent'
-            ? "Le mois se termine bientot. Merci de remplir votre fiche de sante spirituelle de {$monthLabel} des aujourd'hui."
-            : "Pensez a remplir votre fiche de sante spirituelle de {$monthLabel} avant la fin du mois.";
+            ? "Le mois se termine bientôt. Merci de remplir votre fiche de santé spirituelle de {$monthLabel} dès aujourd'hui."
+            : "Pensez à remplir votre fiche de santé spirituelle de {$monthLabel} avant la fin du mois.";
 
         // Une seule annonce-rappel par mois : on la recree a chaque passage avec la liste a jour.
         Announcement::where('title', $title)->delete();
@@ -51,7 +51,7 @@ class FissRemind extends Command
         ]);
         $ann->recipients()->attach($missing->all());
 
-        $this->info("Rappel ({$type}) envoye a {$missing->count()} fidele(s) pour {$monthLabel}.");
+        $this->info("Rappel ({$type}) envoyé à {$missing->count()} fidèle(s) pour {$monthLabel}.");
 
         return self::SUCCESS;
     }

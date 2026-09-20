@@ -45,7 +45,7 @@ export function AppLayout({ title, subtitle, actions, children }: {
   const canRequests = hasPermission('requests.handle')
 
   const initials = ((profile?.first_name?.[0] ?? '') + (profile?.last_name?.[0] ?? '')).toUpperCase()
-  const mainRole = roles[0]?.name ?? 'Fidele'
+  const mainRole = roles[0]?.name ?? 'Fidèle'
   const [menuOpen, setMenuOpen] = useState(false)
 
   async function onLogout() {
@@ -73,7 +73,7 @@ export function AppLayout({ title, subtitle, actions, children }: {
             <NavLink to="/admin/membres" className="nav-item"><Icon path={ICONS.members} /><span>Membres</span></NavLink>
           )}
           {canAttendance && (
-            <NavLink to="/admin/presences" className="nav-item"><Icon path={ICONS.attendance} /><span>Presences</span></NavLink>
+            <NavLink to="/admin/presences" className="nav-item"><Icon path={ICONS.attendance} /><span>Présences</span></NavLink>
           )}
           {canExercises && (
             <NavLink to="/admin/exercices" className="nav-item"><Icon path={ICONS.exercises} /><span>Exercices</span></NavLink>
@@ -82,13 +82,13 @@ export function AppLayout({ title, subtitle, actions, children }: {
             <NavLink to="/admin/annonces" className="nav-item"><Icon path={ICONS.announce} /><span>Annonces</span></NavLink>
           )}
           {canEvents && (
-            <NavLink to="/admin/evenements" className="nav-item"><Icon path={ICONS.events} /><span>Evenements</span></NavLink>
+            <NavLink to="/admin/evenements" className="nav-item"><Icon path={ICONS.events} /><span>Événements</span></NavLink>
           )}
           {canRequests && (
             <NavLink to="/admin/demandes" className="nav-item"><Icon path={ICONS.requests} /><span>Demandes</span></NavLink>
           )}
           {canManageRoles && (
-            <NavLink to="/admin/roles" className="nav-item"><Icon path={ICONS.roles} /><span>Roles</span></NavLink>
+            <NavLink to="/admin/roles" className="nav-item"><Icon path={ICONS.roles} /><span>Rôles</span></NavLink>
           )}
           {canManageGems && (
             <NavLink to="/admin/gems" className="nav-item"><Icon path={ICONS.members} /><span>GEMs</span></NavLink>
@@ -110,7 +110,7 @@ export function AppLayout({ title, subtitle, actions, children }: {
               <small>{mainRole}</small>
             </div>
           </div>
-          <button className="nav-item nav-logout" onClick={onLogout}><Icon path={ICONS.logout} /><span>Deconnexion</span></button>
+          <button className="nav-item nav-logout" onClick={onLogout}><Icon path={ICONS.logout} /><span>Déconnexion</span></button>
         </div>
       </aside>
 

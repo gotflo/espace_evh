@@ -59,7 +59,7 @@ class MyExerciseController extends Controller
             ['response' => $data['response'], 'completed_at' => Carbon::now()],
         );
 
-        return response()->json(['message' => 'Reponse enregistree.']);
+        return response()->json(['message' => 'Réponse enregistrée.']);
     }
 
     private function targetsUser(Exercise $exercise, $user): bool

@@ -4,8 +4,8 @@ import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import type { EventCategory, MyEvent } from '../types'
 
 const CAT_LABEL: Record<EventCategory, string> = {
-  culte: 'Culte', priere: 'Priere', formation: 'Formation',
-  reunion: 'Reunion', sortie: 'Sortie', autre: 'Autre',
+  culte: 'Culte', priere: 'Prière', formation: 'Formation',
+  reunion: 'Réunion', sortie: 'Sortie', autre: 'Autre',
 }
 
 function dayParts(iso: string) {
@@ -46,7 +46,7 @@ export function EventsFeed() {
 
   return (
     <section className="panel mt">
-      <div className="panel-head"><h3>Evenements a venir</h3></div>
+      <div className="panel-head"><h3>Événements à venir</h3></div>
       <div className="event-grid">
         {items.map((e) => {
           const p = dayParts(e.starts_at)
@@ -62,7 +62,7 @@ export function EventsFeed() {
                 <p className="event-meta">🕒 {p.full} · {p.time}{e.location ? ` · 📍 ${e.location}` : ''}</p>
 
                 <div className="rsvp">
-                  <button className={`rsvp-btn ${e.my_response === 'present' ? 'on' : ''}`} onClick={() => rsvp(e, 'present')}>Je serai present</button>
+                  <button className={`rsvp-btn ${e.my_response === 'present' ? 'on' : ''}`} onClick={() => rsvp(e, 'present')}>Je serai présent</button>
                   <button className={`rsvp-btn ${e.my_response === 'absent' ? 'off' : ''}`} onClick={() => rsvp(e, 'absent')}>Absent</button>
                   {e.going_count > 0 && <span className="rsvp-count">{e.going_count} inscrit(s)</span>}
                 </div>

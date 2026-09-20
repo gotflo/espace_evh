@@ -14,7 +14,7 @@ class EvaluationController extends Controller
     /** Notes d'un fidele (pour un responsable). */
     public function index(Request $request, User $user): JsonResponse
     {
-        abort_unless($request->user()->canViewMember($user), 403, 'Acces refuse.');
+        abort_unless($request->user()->canViewMember($user), 403, 'Accès refuse.');
 
         $items = Evaluation::with('author.profile')
             ->where('user_id', $user->id)
@@ -30,7 +30,7 @@ class EvaluationController extends Controller
 
     public function store(Request $request, User $user): JsonResponse
     {
-        abort_unless($request->user()->canViewMember($user), 403, 'Acces refuse.');
+        abort_unless($request->user()->canViewMember($user), 403, 'Accès refuse.');
 
         $data = $request->validate([
             'type' => ['required', 'in:'.implode(',', array_keys(EvaluationCatalog::TYPES))],
@@ -46,16 +46,16 @@ class EvaluationController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
-        return response()->json(['message' => 'Note enregistree.', 'average' => $this->average($user->id)], 201);
+        return response()->json(['message' => 'Note enregistrée.', 'average' => $this->average($user->id)], 201);
     }
 
     public function destroy(Request $request, Evaluation $evaluation): JsonResponse
     {
-        abort_unless($request->user()->canViewMember($evaluation->member), 403, 'Acces refuse.');
+        abort_unless($request->user()->canViewMember($evaluation->member), 403, 'Accès refuse.');
         $uid = $evaluation->user_id;
         $evaluation->delete();
 
-        return response()->json(['message' => 'Note supprimee.', 'average' => $this->average($uid)]);
+        return response()->json(['message' => 'Note supprimée.', 'average' => $this->average($uid)]);
     }
 
     private function average(int $userId): ?float

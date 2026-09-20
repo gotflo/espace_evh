@@ -6,7 +6,7 @@ import { TargetField } from '../../components/TargetField'
 import type { Department, ExerciseListItem, ExerciseResponseItem, Tribe } from '../../types'
 
 const TYPES = [
-  { key: 'verset', label: 'Verset a mediter' },
+  { key: 'verset', label: 'Verset à méditer' },
   { key: 'quiz', label: 'Quiz' },
   { key: 'reflexion', label: 'Reflexion' },
   { key: 'lecture', label: 'Lecture' },
@@ -56,7 +56,7 @@ export default function Exercises() {
   }
 
   async function remove(id: number) {
-    if (!confirm('Supprimer cet exercice et ses reponses ?')) return
+    if (!confirm('Supprimer cet exercice et ses réponses ?')) return
     setError('')
     try { await api(`/admin/exercises/${id}`, { method: 'DELETE' }); load() }
     catch (err) { setError(err instanceof ApiError ? err.firstMessage : 'Erreur.') }
@@ -67,12 +67,12 @@ export default function Exercises() {
     setResponses({ title: r.exercise.title, items: r.responses })
   }
 
-  const createBtn = <button className="btn btn-primary small" onClick={() => setMode('new')}>+ Creer un exercice</button>
+  const createBtn = <button className="btn btn-primary small" onClick={() => setMode('new')}>+ Créer un exercice</button>
 
   // --- Vue reponses ---
   if (responses) {
     return (
-      <AppLayout title="Reponses" subtitle={responses.title}
+      <AppLayout title="Réponses" subtitle={responses.title}
         actions={<button className="btn btn-ghost small" onClick={() => setResponses(null)}>← Retour</button>}>
         <section className="panel">
           <div className="journal-list">
@@ -85,7 +85,7 @@ export default function Exercises() {
                 <p className="journal-note">{r.response}</p>
               </div>
             ))}
-            {responses.items.length === 0 && <p className="helper">Aucune reponse pour le moment.</p>}
+            {responses.items.length === 0 && <p className="helper">Aucune réponse pour le moment.</p>}
           </div>
         </section>
       </AppLayout>
@@ -93,7 +93,7 @@ export default function Exercises() {
   }
 
   return (
-    <AppLayout title="Exercices" subtitle="Exercices spirituels pour les fideles"
+    <AppLayout title="Exercices" subtitle="Exercices spirituels pour les fidèles"
       actions={mode === 'list' ? createBtn : undefined}>
       {error && <div className="alert alert-error">{error}</div>}
 
@@ -145,7 +145,7 @@ export default function Exercises() {
               </button>
             </div>
           ))}
-          {exercises.length === 0 && <p className="helper">Aucun exercice. Cliquez sur "Creer un exercice".</p>}
+          {exercises.length === 0 && <p className="helper">Aucun exercice. Cliquez sur "Créer un exercice".</p>}
         </div>
       )}
     </AppLayout>

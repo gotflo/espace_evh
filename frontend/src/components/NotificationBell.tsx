@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import type { MyAnnouncement } from '../types'
 
-const CAT: Record<string, string> = { info: 'Info', important: 'Important', evenement: 'Evenement' }
+const CAT: Record<string, string> = { info: 'Info', important: 'Important', evenement: 'Événement' }
 
 export function NotificationBell() {
   const [count, setCount] = useState(0)

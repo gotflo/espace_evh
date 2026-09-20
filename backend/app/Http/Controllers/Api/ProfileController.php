@@ -70,7 +70,7 @@ class ProfileController extends Controller
         $profile->departments()->sync($departmentIds);
 
         return response()->json([
-            'message' => 'Profil enregistre.',
+            'message' => 'Profil enregistré.',
             'profile' => $profile->fresh()->load('tribe', 'departments'),
         ]);
     }

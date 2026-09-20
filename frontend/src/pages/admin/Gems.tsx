@@ -54,7 +54,7 @@ export default function Gems() {
   const byTribe = tribes.map((t) => ({ tribe: t, gems: gems.filter((g) => g.tribe_id === t.id) }))
 
   return (
-    <AppLayout title="GEMs" subtitle="Groupes de 3 a 5 membres, menes par un GAD"
+    <AppLayout title="GEMs" subtitle="Groupes de 3 à 5 membres, menés par un GAD"
       actions={mode === 'list' ? <button className="btn btn-primary small" onClick={openNew}>+ Nouveau GEM</button> : undefined}>
       {error && <div className="alert alert-error">{error}</div>}
 
@@ -80,7 +80,7 @@ export default function Gems() {
             </select>
           </div>
           <button className="btn btn-primary mt" disabled={busy || !name.trim() || !tribeId} onClick={save}>
-            {busy ? <span className="spinner" /> : editId ? 'Enregistrer' : 'Creer le GEM'}
+            {busy ? <span className="spinner" /> : editId ? 'Enregistrer' : 'Créer le GEM'}
           </button>
         </section>
       ) : (

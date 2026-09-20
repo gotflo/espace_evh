@@ -49,7 +49,7 @@ export default function Requests() {
   }
 
   return (
-    <AppLayout title="Demandes des fideles" subtitle="Messages recus, a traiter">
+    <AppLayout title="Demandes des fidèles" subtitle="Messages recus, a traiter">
       {error && <div className="alert alert-error">{error}</div>}
       {loading ? (
         <div className="feed"><SkeletonCard /><SkeletonCard /></div>
@@ -75,17 +75,17 @@ export default function Requests() {
               {replyFor === r.id ? (
                 <div className="req-reply-box">
                   <textarea className="input" rows={3} value={replyText} autoFocus
-                    onChange={(e) => setReplyText(e.target.value)} placeholder="Ecrivez votre reponse au fidele..." />
+                    onChange={(e) => setReplyText(e.target.value)} placeholder="Ecrivez votre réponse au fidèle..." />
                   <div className="req-reply-actions">
                     <button className="btn-link" onClick={() => setReplyFor(null)}>Annuler</button>
                     <button className="btn btn-primary small" disabled={busy || !replyText.trim()} onClick={() => sendReply(r.id)}>
-                      {busy ? <span className="spinner" /> : 'Envoyer la reponse'}
+                      {busy ? <span className="spinner" /> : 'Envoyer la réponse'}
                     </button>
                   </div>
                 </div>
               ) : (
                 <div className="req-actions">
-                  <button className="btn-link" onClick={() => openReply(r)}>{r.reply ? 'Modifier la reponse' : '✍️ Repondre'}</button>
+                  <button className="btn-link" onClick={() => openReply(r)}>{r.reply ? 'Modifier la réponse' : '✍️ Répondre'}</button>
                   {r.sender_phone && <a className="btn-link" href={`tel:${r.sender_phone}`}>📞 {r.sender_phone}</a>}
                   <div className="req-status-btns">
                     {NEXT.map((s) => (

@@ -32,9 +32,9 @@ function ExerciseCard({ ex, canRespond, onDone }: { ex: MyExercise; canRespond: 
 
       {canRespond && (editing ? (
         <>
-          <textarea className="input mt" rows={3} placeholder="Votre reponse..." value={text} onChange={(e) => setText(e.target.value)} />
+          <textarea className="input mt" rows={3} placeholder="Votre réponse..." value={text} onChange={(e) => setText(e.target.value)} />
           <button className="btn btn-primary small mt" disabled={busy || !text.trim()} onClick={submit}>
-            {busy ? <span className="spinner" /> : 'Envoyer ma reponse'}
+            {busy ? <span className="spinner" /> : 'Envoyer ma réponse'}
           </button>
         </>
       ) : (

@@ -67,7 +67,7 @@ export default function Dashboard() {
 
   const tribePanel = (
     <section className="panel">
-      <div className="panel-head"><h3>Repartition par tribu</h3></div>
+      <div className="panel-head"><h3>Répartition par tribu</h3></div>
       <div className="bar-list">
         {stats?.by_tribe.map((t) => (
           <div key={t.name} className="bar-row">
@@ -76,7 +76,7 @@ export default function Dashboard() {
             <span className="bar-value">{t.total}</span>
           </div>
         ))}
-        {stats && stats.by_tribe.length === 0 && <p className="helper">Aucune tribu renseignee pour l'instant.</p>}
+        {stats && stats.by_tribe.length === 0 && <p className="helper">Aucune tribu renseignée pour l'instant.</p>}
       </div>
     </section>
   )
@@ -98,8 +98,8 @@ export default function Dashboard() {
       <div className="verse-banner">
         <span className="verse-label">Notre appel</span>
         <p className="verse-text">
-          Prenez donc garde a vous-memes, et a tout le troupeau au sein duquel le Saint-Esprit
-          vous a etablis eveques, pour paitre l'Eglise de Dieu, qu'il s'est acquise par son propre sang.
+          Prenez donc garde à vous-mêmes, et à tout le troupeau au sein duquel le Saint-Esprit
+          vous a établis évêques, pour paître l'Église de Dieu, qu'il s'est acquise par son propre sang.
         </p>
         <span className="verse-ref">Actes 20.28</span>
       </div>
@@ -116,7 +116,7 @@ export default function Dashboard() {
             <div className="stat-row">
               <button className="stat-tile" onClick={() => navigate('/admin/membres')}>
                 <span className="stat-value">{stats?.total ?? '-'}</span>
-                <span className="stat-label">Fideles</span>
+                <span className="stat-label">Fidèles</span>
               </button>
               <button className="stat-tile stat-ok" onClick={() => navigate('/admin/membres?statut=actif')}>
                 <span className="stat-value">{stats?.active ?? '-'}</span>
@@ -128,7 +128,7 @@ export default function Dashboard() {
               </button>
               <button className="stat-tile" onClick={() => navigate('/admin/membres')}>
                 <span className="stat-value">{stats?.completed ?? '-'}</span>
-                <span className="stat-label">Profils completes</span>
+                <span className="stat-label">Profils complétés</span>
               </button>
             </div>
           )}
@@ -170,7 +170,7 @@ export default function Dashboard() {
               <div className="detail-list">
                 <div className="detail-line"><span>Tribu</span><strong>{profile?.tribe?.name ?? 'Aucune'}</strong></div>
                 <div className="detail-line">
-                  <span>Departements</span>
+                  <span>Départements</span>
                   <strong>{profile?.departments && profile.departments.length > 0
                     ? profile.departments.map((d) => d.name).join(', ')
                     : 'Aucun'}</strong>

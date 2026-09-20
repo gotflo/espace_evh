@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
 
 class ExerciseController extends Controller
 {
-    public const TYPES = ['verset' => 'Verset a mediter', 'quiz' => 'Quiz', 'reflexion' => 'Reflexion', 'lecture' => 'Lecture'];
+    public const TYPES = ['verset' => 'Verset à méditer', 'quiz' => 'Quiz', 'reflexion' => 'Reflexion', 'lecture' => 'Lecture'];
 
     /** Liste des exercices, avec le nombre de reponses. */
     public function index(): JsonResponse
@@ -51,7 +51,7 @@ class ExerciseController extends Controller
             abort(422, 'Tribu invalide.');
         }
         if ($targetType === 'department' && ! Department::whereKey($targetId)->exists()) {
-            abort(422, 'Departement invalide.');
+            abort(422, 'Département invalide.');
         }
 
         Exercise::create([
@@ -64,14 +64,14 @@ class ExerciseController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
-        return response()->json(['message' => 'Exercice cree.']);
+        return response()->json(['message' => 'Exercice créé.']);
     }
 
     public function destroy(Exercise $exercise): JsonResponse
     {
         $exercise->delete();
 
-        return response()->json(['message' => 'Exercice supprime.']);
+        return response()->json(['message' => 'Exercice supprimé.']);
     }
 
     /** Reponses des fideles a un exercice. */
@@ -97,7 +97,7 @@ class ExerciseController extends Controller
             'tribe' => 'Tribu '.(Tribe::find($e->target_id)?->name ?? '?'),
             'department' => 'Dept. '.(Department::find($e->target_id)?->name ?? '?'),
             'gem' => 'GEM '.(\App\Models\Gem::find($e->target_id)?->name ?? '?'),
-            default => "Toute l'eglise",
+            default => "Toute l'église",
         };
     }
 

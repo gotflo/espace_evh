@@ -63,7 +63,7 @@ class RequestController extends Controller
             'handled_by' => $memberRequest->handled_by ?? $request->user()->id,
         ]);
 
-        return response()->json(['message' => 'Reponse envoyee.']);
+        return response()->json(['message' => 'Réponse envoyée.']);
     }
 
     /** Compteur de demandes nouvelles (pour un badge), limite a la portee. */
@@ -92,6 +92,6 @@ class RequestController extends Controller
             'handled_at' => $data['status'] === 'traitee' ? now() : null,
         ]);
 
-        return response()->json(['message' => 'Statut mis a jour.']);
+        return response()->json(['message' => 'Statut mis à jour.']);
     }
 }

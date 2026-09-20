@@ -11,13 +11,13 @@ class SpiritualCatalog
     /** Types d'entree du journal (cle => libelle). */
     public const ENTRY_TYPES = [
         'conversion' => 'Conversion',
-        'priere' => 'Priere / accompagnement',
-        'jeune' => 'Jeune',
+        'priere' => 'Prière / accompagnement',
+        'jeune' => 'Jeûne',
         'visite' => 'Visite',
-        'enseignement' => 'Enseignement recu',
+        'enseignement' => 'Enseignement reçu',
         'exhortation' => 'Exhortation',
-        'besoin' => 'Besoin / difficulte',
-        'temoignage' => 'Temoignage',
+        'besoin' => 'Besoin / difficulté',
+        'temoignage' => 'Témoignage',
         'autre' => 'Autre',
     ];
 
@@ -27,11 +27,11 @@ class SpiritualCatalog
     /** Etapes du parcours (cle => libelle). */
     public const MILESTONES = [
         'nouveau_converti' => 'Nouveau converti',
-        'bapteme_eau' => "Bapteme d'eau",
-        'bapteme_esprit' => 'Bapteme du Saint-Esprit',
-        'membre_engage' => 'Membre engage',
+        'bapteme_eau' => "Baptême d'eau",
+        'bapteme_esprit' => 'Baptême du Saint-Esprit',
+        'membre_engage' => 'Membre engagé',
         'formation_disciple' => 'Formation de disciple',
-        'service_actif' => 'Engage dans un service',
+        'service_actif' => 'Engagé dans un service',
     ];
 
     public static function entryTypes(): array

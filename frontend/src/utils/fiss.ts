@@ -16,10 +16,10 @@ export type FissComparison = {
 }
 
 const NUM_FIELDS: [keyof FissForm, string][] = [
-  ['meditation', 'Meditation'],
-  ['priere', 'Priere'],
-  ['jeune', 'Jeune'],
-  ['situation_financiere', 'Financiere'],
+  ['meditation', 'Méditation'],
+  ['priere', 'Prière'],
+  ['jeune', 'Jeûne'],
+  ['situation_financiere', 'Financière'],
   ['situation_familiale', 'Familiale'],
   ['situation_conjugale', 'Conjugale'],
 ]
