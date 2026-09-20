@@ -96,12 +96,12 @@ class RolesAndPermissionsSeeder extends Seeder
                 'scope_kind' => 'gem', 'rank' => 40, 'is_system' => true,
                 'permissions' => ['members.view_scope', 'spiritual.view', 'spiritual.record', 'evaluations.manage', 'attendance.view', 'attendance.record', 'exercises.assign', 'exercises.respond', 'requests.handle'],
             ],
-            // Administrateur : un membre (fidele) qui peut UNIQUEMENT attribuer des roles.
+            // Administrateur : un membre (fidele) qui gere les roles (creer, modifier, attribuer).
             'administrateur' => [
                 'name' => 'Administrateur',
-                'description' => 'Membre pouvant attribuer des roles aux fideles (rien d\'autre).',
+                'description' => 'Membre pouvant gerer les roles : creer, modifier et attribuer aux fideles.',
                 'scope_kind' => 'none', 'rank' => 80, 'is_system' => true,
-                'permissions' => ['exercises.respond', 'members.view_all', 'roles.assign'],
+                'permissions' => ['exercises.respond', 'members.view_all', 'roles.assign', 'roles.manage'],
             ],
             // Membre.
             'fidele' => [

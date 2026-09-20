@@ -20,10 +20,24 @@ export default function Dashboard() {
   const canRequests = hasPermission('requests.handle')
 
   const [stats, setStats] = useState<Stats | null>(null)
+  const [welcome, setWelcome] = useState(false)
 
   useEffect(() => {
     if (canViewMembers) api<Stats>('/admin/stats').then(setStats).catch(() => setStats(null))
   }, [canViewMembers])
+
+  // Mot de bienvenue au tout premier passage, puis il disparait de lui-meme.
+  useEffect(() => {
+    let show = false
+    try {
+      show = localStorage.getItem('evh_welcome') === '1'
+      if (show) localStorage.removeItem('evh_welcome')
+    } catch { /* ignore */ }
+    if (!show) return
+    setWelcome(true)
+    const timer = setTimeout(() => setWelcome(false), 9000)
+    return () => clearTimeout(timer)
+  }, [])
 
   const maxTribe = Math.max(1, ...(stats?.by_tribe.map((t) => t.total) ?? [1]))
 
@@ -65,6 +79,27 @@ export default function Dashboard() {
 
   return (
     <AppLayout title="Tableau de bord" subtitle={`Bonjour ${profile?.first_name || ''}`.trim()}>
+      {welcome && (
+        <div className="welcome-banner" role="status">
+          <div className="welcome-text">
+            <strong>Bienvenue dans ta famille spirituelle{profile?.first_name ? `, ${profile.first_name}` : ''} !</strong>
+            <span>Nous sommes heureux de t'accueillir dans l'espace Vases d'Honneur Chicoutimi.</span>
+          </div>
+          <button className="welcome-close" onClick={() => setWelcome(false)} aria-label="Fermer">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+      )}
+
+      <div className="verse-banner">
+        <span className="verse-label">Notre appel</span>
+        <p className="verse-text">
+          Prenez donc garde a vous-memes, et a tout le troupeau au sein duquel le Saint-Esprit
+          vous a etablis eveques, pour paitre l'Eglise de Dieu, qu'il s'est acquise par son propre sang.
+        </p>
+        <span className="verse-ref">Actes 20.28</span>
+      </div>
+
       <FissReminder />
       <FissSummary />
       {canViewMembers ? (

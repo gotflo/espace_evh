@@ -96,10 +96,12 @@ class AuthController extends Controller
         // Comptes predefinis (bootstrap) : role(s) attribue(s) automatiquement a la connexion.
         $this->applyPredefinedRoles($user, $phone);
 
+        $isNewAccount = $user->wasRecentlyCreated;
+
         $token = $user->createToken('mobile')->plainTextToken;
 
         return response()->json(array_merge(
-            ['token' => $token],
+            ['token' => $token, 'is_new_account' => $isNewAccount],
             $this->authPayload($user->fresh()),
         ));
     }
