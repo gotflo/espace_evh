@@ -1,24 +1,28 @@
+import { lazy, Suspense, type ReactNode } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext'
-import Login from './pages/Login'
-import ProfileSetup from './pages/ProfileSetup'
-import Dashboard from './pages/Dashboard'
-import Members from './pages/admin/Members'
-import MemberDetail from './pages/admin/MemberDetail'
-import RolesAdmin from './pages/admin/RolesAdmin'
-import Organization from './pages/admin/Organization'
-import Gems from './pages/admin/Gems'
-import Attendance from './pages/admin/Attendance'
-import Exercises from './pages/admin/Exercises'
-import Announcements from './pages/admin/Announcements'
-import Events from './pages/admin/Events'
-import Requests from './pages/admin/Requests'
-import Contact from './pages/Contact'
-import MySpiritual from './pages/MySpiritual'
-import MyProfile from './pages/MyProfile'
-import MyFiss from './pages/MyFiss'
 import { InstallPrompt } from './components/InstallPrompt'
-import type { ReactNode } from 'react'
+import { PullToRefresh } from './components/PullToRefresh'
+
+// Chargement a la demande : chaque page arrive dans son propre paquet,
+// le demarrage de l'application est donc beaucoup plus rapide.
+const Login = lazy(() => import('./pages/Login'))
+const ProfileSetup = lazy(() => import('./pages/ProfileSetup'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Members = lazy(() => import('./pages/admin/Members'))
+const MemberDetail = lazy(() => import('./pages/admin/MemberDetail'))
+const RolesAdmin = lazy(() => import('./pages/admin/RolesAdmin'))
+const Organization = lazy(() => import('./pages/admin/Organization'))
+const Gems = lazy(() => import('./pages/admin/Gems'))
+const Attendance = lazy(() => import('./pages/admin/Attendance'))
+const Exercises = lazy(() => import('./pages/admin/Exercises'))
+const Announcements = lazy(() => import('./pages/admin/Announcements'))
+const Events = lazy(() => import('./pages/admin/Events'))
+const Requests = lazy(() => import('./pages/admin/Requests'))
+const Contact = lazy(() => import('./pages/Contact'))
+const MySpiritual = lazy(() => import('./pages/MySpiritual'))
+const MyProfile = lazy(() => import('./pages/MyProfile'))
+const MyFiss = lazy(() => import('./pages/MyFiss'))
 
 function Loading() {
   return <div className="loading-screen"><span className="spinner" /></div>
@@ -61,7 +65,9 @@ const MEMBER_PERMS = ['members.view_all', 'members.view_scope']
 export default function App() {
   return (
     <>
+    <PullToRefresh />
     <InstallPrompt />
+    <Suspense fallback={<Loading />}>
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/connexion" element={<PublicOnly><Login /></PublicOnly>} />
@@ -83,6 +89,7 @@ export default function App() {
       <Route path="/admin/demandes" element={<RequireAuth requireComplete anyPermission={['requests.handle']}><Requests /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
     </>
   )
 }

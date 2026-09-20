@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
+import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import type { EventCategory, MyEvent } from '../types'
 
 const CAT_LABEL: Record<EventCategory, string> = {
@@ -20,9 +21,12 @@ function dayParts(iso: string) {
 export function EventsFeed() {
   const [items, setItems] = useState<MyEvent[]>([])
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api<{ events: MyEvent[] }>('/me/events').then((r) => setItems(r.events)).catch(() => {})
   }, [])
+
+  useEffect(() => { load() }, [load])
+  useAutoRefresh(load)
 
   async function rsvp(ev: MyEvent, response: 'present' | 'absent', volunteer?: boolean) {
     const vol = volunteer ?? (response === 'present' ? ev.my_volunteer : false)

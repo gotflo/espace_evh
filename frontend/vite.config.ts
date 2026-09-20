@@ -11,4 +11,16 @@ export default defineConfig({
       '/storage': 'http://127.0.0.1:8000',
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Les librairies changent rarement : on les isole pour que le
+        // navigateur les garde en cache entre deux mises a jour de l'app.
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          phone: ['libphonenumber-js'],
+        },
+      },
+    },
+  },
 })

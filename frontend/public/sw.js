@@ -1,7 +1,9 @@
 // Service worker de la PWA Vases d'Honneur.
-// Strategie : reseau d'abord (contenu a jour), repli sur le cache hors-ligne.
-// L'API et les fichiers /storage passent toujours par le reseau (jamais mis en cache).
-const CACHE = 'evh-app-v1'
+// - Fichiers /assets/ (JS/CSS au nom horodate, donc immuables) : cache d'abord,
+//   l'application s'ouvre donc instantanement une fois installee.
+// - Navigation (routes) : reseau d'abord, repli sur le cache hors-ligne.
+// - L'API et les medias /storage passent toujours par le reseau (jamais en cache).
+const CACHE = 'evh-app-v2'
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/logo-vh.png', '/icon-192.png']
 
 self.addEventListener('install', (event) => {
@@ -32,7 +34,19 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Autres ressources (JS/CSS/images) : reseau d'abord + mise en cache, repli cache.
+  // Fichiers build /assets/ : noms horodates (immuables) => cache d'abord (ouverture immediate).
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.match(req).then((hit) => hit || fetch(req).then((res) => {
+        const copy = res.clone()
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {})
+        return res
+      })),
+    )
+    return
+  }
+
+  // Autres ressources (images, icones...) : reseau d'abord + mise en cache, repli cache.
   event.respondWith(
     fetch(req)
       .then((res) => {

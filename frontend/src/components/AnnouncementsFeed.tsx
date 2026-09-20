@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
+import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import type { MyAnnouncement } from '../types'
 
 const CAT: Record<string, string> = { info: 'Info', important: 'Important', evenement: 'Evenement' }
@@ -7,9 +8,12 @@ const CAT: Record<string, string> = { info: 'Info', important: 'Important', even
 export function AnnouncementsFeed() {
   const [items, setItems] = useState<MyAnnouncement[]>([])
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api<{ announcements: MyAnnouncement[] }>('/me/announcements').then((r) => setItems(r.announcements)).catch(() => {})
   }, [])
+
+  useEffect(() => { load() }, [load])
+  useAutoRefresh(load)
 
   if (items.length === 0) return null
 
