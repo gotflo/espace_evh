@@ -8,7 +8,7 @@ import { DEFAULT_COUNTRY, type Country } from '../data/countries'
 import { CountrySelect } from '../components/CountrySelect'
 import { AsYouType, isValidPhoneNumber, type CountryCode } from 'libphonenumber-js'
 
-type VerifyResponse = AuthPayload & { token: string }
+type VerifyResponse = AuthPayload & { token: string; is_new_account?: boolean }
 
 export default function Login() {
   const [step, setStep] = useState<'phone' | 'code'>('phone')
@@ -60,6 +60,10 @@ export default function Login() {
       const res = await api<VerifyResponse>('/auth/verify-otp', {
         method: 'POST', body: { phone: normalizedPhone, code }, auth: false,
       })
+      // Nouveau compte : on note le premier passage pour afficher le mot de bienvenue.
+      if (res.is_new_account) {
+        try { localStorage.setItem('evh_welcome', '1') } catch { /* ignore */ }
+      }
       login(res.token, res)
       navigate(res.profile_completed ? '/tableau-de-bord' : '/profil', { replace: true })
     } catch (err) {

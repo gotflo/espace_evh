@@ -23,3 +23,6 @@ backend/public/*
 !backend/public/index.php
 !backend/public/.htaccess
 !backend/public/robots.txt
+
+# Archives de deploiement
+*.zip
