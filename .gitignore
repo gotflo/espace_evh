@@ -1,0 +1,20 @@
+# Fichiers systeme
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editeurs
+.idea/
+.vscode/
+*.swp
+
+# Secrets (jamais versionnes)
+**/.env
+**/.env.production
+backend/database/*.sqlite
+
+# Dependances et build (regeneres)
+**/node_modules/
+**/vendor/
+frontend/dist/
+backend/public/build/
