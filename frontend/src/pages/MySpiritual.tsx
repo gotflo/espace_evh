@@ -38,7 +38,7 @@ export default function MySpiritual() {
   }
 
   async function removeEntry(id: number) {
-    if (!confirm('Supprimer cette entree ?')) return
+    if (!confirm('Supprimer cette entrée ?')) return
     setError('')
     try { await api(`/me/spiritual/entries/${id}`, { method: 'DELETE' }); load() }
     catch (err) { setError(err instanceof ApiError ? err.firstMessage : 'Erreur.') }
@@ -62,7 +62,7 @@ export default function MySpiritual() {
         <div className="panel-grid">
           <section className="panel">
             <div className="panel-head"><h3>Mon parcours</h3></div>
-            <p className="helper" style={{ marginTop: 0, marginBottom: '0.8rem' }}>Cochez les etapes que vous avez franchies.</p>
+            <p className="helper" style={{ marginTop: 0, marginBottom: '0.8rem' }}>Cochez les étapes que vous avez franchies.</p>
             <div className="milestone-list">
               {data?.milestones.map((m) => (
                 <button key={m.key} className={`milestone-toggle ${m.reached ? 'on' : ''}`}
@@ -76,7 +76,7 @@ export default function MySpiritual() {
           </section>
 
           <section className="panel">
-            <div className="panel-head"><h3>Nouvelle entree</h3></div>
+            <div className="panel-head"><h3>Nouvelle entrée</h3></div>
             <div className="field-row">
               <div className="field" style={{ marginBottom: 0 }}>
                 <label>Type</label>
@@ -90,11 +90,11 @@ export default function MySpiritual() {
               </div>
             </div>
             <div className="field mt">
-              <label>Votre message (temoignage, priere, besoin...)</label>
+              <label>Votre message (temoignage, prière, besoin...)</label>
               <textarea className="input" rows={4} value={note} onChange={(e) => setNote(e.target.value)} />
             </div>
             <button className="btn btn-primary" disabled={busy || !note.trim()} onClick={addEntry}>
-              {busy ? <span className="spinner" /> : 'Ajouter a mon journal'}
+              {busy ? <span className="spinner" /> : 'Ajouter à mon journal'}
             </button>
           </section>
         </div>
@@ -114,7 +114,7 @@ export default function MySpiritual() {
                 {e.note && <p className="feed-body">{e.note}</p>}
               </article>
             ))}
-            {data && data.entries.length === 0 && <p className="helper">Votre journal est vide. Ajoutez votre premiere entree.</p>}
+            {data && data.entries.length === 0 && <p className="helper">Votre journal est vide. Ajoutez votre premiere entrée.</p>}
           </div>
         </section>
       )}

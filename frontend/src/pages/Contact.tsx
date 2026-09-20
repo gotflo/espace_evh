@@ -7,7 +7,7 @@ import type { MyRequest, RequestCategory } from '../types'
 const CATEGORIES: { key: RequestCategory; label: string }[] = [
   { key: 'rendez-vous', label: 'Rendez-vous' },
   { key: 'aide', label: "Besoin d'aide" },
-  { key: 'priere', label: 'Demande de priere' },
+  { key: 'priere', label: 'Demande de prière' },
   { key: 'question', label: 'Question' },
   { key: 'autre', label: 'Autre' },
 ]
@@ -35,14 +35,14 @@ export default function Contact() {
     try {
       await api('/me/requests', { method: 'POST', body: { category, subject: subject || null, message } })
       setSubject(''); setMessage(''); setCategory('question')
-      setOk('Votre demande a bien ete envoyee.'); load()
+      setOk('Votre demande a bien été envoyée.'); load()
     } catch (err) {
       setError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
     } finally { setBusy(false) }
   }
 
   return (
-    <AppLayout title="Nous contacter" subtitle="Envoyez une demande a un responsable">
+    <AppLayout title="Nous contacter" subtitle="Envoyez une demande à un responsable">
       {error && <div className="alert alert-error">{error}</div>}
       {ok && <div className="alert alert-ok">{ok}</div>}
 
@@ -83,13 +83,13 @@ export default function Contact() {
                   <p className="feed-body">{r.message}</p>
                   {r.reply && (
                     <div className="req-reply">
-                      <span className="req-reply-label">Reponse du responsable{r.replied_at ? ` · ${r.replied_at}` : ''}</span>
+                      <span className="req-reply-label">Réponse du responsable{r.replied_at ? ` · ${r.replied_at}` : ''}</span>
                       <p>{r.reply}</p>
                     </div>
                   )}
                 </article>
               ))}
-              {items.length === 0 && <p className="helper">Vous n'avez pas encore envoye de demande.</p>}
+              {items.length === 0 && <p className="helper">Vous n'avez pas encore envoyé de demande.</p>}
             </div>
           )}
         </section>

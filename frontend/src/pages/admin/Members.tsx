@@ -38,7 +38,7 @@ export default function Members() {
   }
 
   return (
-    <AppLayout title="Membres" subtitle="Voir, suivre et gerer les fideles">
+    <AppLayout title="Membres" subtitle="Voir, suivre et gérer les fidèles">
       <section className="panel">
         <div className="toolbar">
           <div className="tabs">
@@ -49,7 +49,7 @@ export default function Members() {
             ))}
           </div>
           <input
-            className="input search-input" placeholder="Rechercher par nom ou telephone..."
+            className="input search-input" placeholder="Rechercher par nom ou téléphone..."
             value={q} onChange={(e) => setQ(e.target.value)}
           />
         </div>
@@ -64,7 +64,7 @@ export default function Members() {
                 : <span className="member-avatar">{(m.full_name[0] ?? '?').toUpperCase()}</span>}
               <span className="member-main">
                 <span className="member-name">{m.full_name}</span>
-                <span className="member-meta">{[m.tribe, ...m.departments].filter(Boolean).join(' · ') || 'Sans tribu ni departement'}</span>
+                <span className="member-meta">{[m.tribe, ...m.departments].filter(Boolean).join(' · ') || 'Sans tribu ni département'}</span>
               </span>
               <span className="member-roles">
                 {m.roles.slice(0, 2).map((r) => <span key={r} className="badge">{r}</span>)}

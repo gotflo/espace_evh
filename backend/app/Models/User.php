@@ -34,7 +34,7 @@ class User extends Authenticatable
     public const SUPER_ADMIN = 'super_admin';
 
     /**
-     * Statut d'activite effectif : le remplacement manuel l'emporte,
+     * Statut d'activité effectif : le remplacement manuel l'emporte,
      * sinon on calcule d'apres la derniere fois vu (presence ou connexion).
      */
     public static function activityFrom(?string $override, ?Carbon $lastSeen): string

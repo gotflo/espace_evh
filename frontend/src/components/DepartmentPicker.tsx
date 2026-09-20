@@ -20,7 +20,7 @@ export function DepartmentPicker({ departments, selected, onChange }: {
           {d.name}
         </button>
       ))}
-      {departments.length === 0 && <p className="helper">Aucun departement.</p>}
+      {departments.length === 0 && <p className="helper">Aucun département.</p>}
     </div>
   )
 }

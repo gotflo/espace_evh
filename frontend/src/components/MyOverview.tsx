@@ -33,12 +33,12 @@ export function MyOverview() {
 
   return (
     <section className="gstat-grid">
-      <StatCard mood={assiduiteMood} value={d.assiduite} label="Assiduite" sub="presences (3 mois)" />
-      <StatCard mood={noteMood} value={d.note_moyenne ?? '-'} unit={d.note_moyenne != null ? '/20' : ''} label="Vertumetre" sub="moyenne des notes" />
-      <StatCard mood={d.parcours > 0 ? 'good' : 'idle'} value={d.parcours} label="Parcours" sub="etapes franchies" />
+      <StatCard mood={assiduiteMood} value={d.assiduite} label="Assiduité" sub="présences (3 mois)" />
+      <StatCard mood={noteMood} value={d.note_moyenne ?? '-'} unit={d.note_moyenne != null ? '/20' : ''} label="Vertumètre" sub="moyenne des notes" />
+      <StatCard mood={d.parcours > 0 ? 'good' : 'idle'} value={d.parcours} label="Parcours" sub="étapes franchies" />
       {r && (
-        <StatCard mood={puncMood} value={r.punctuality_rate ?? '-'} unit={r.punctuality_rate != null ? '%' : ''} label="Ponctualite"
-          sub={`${r.present} present · ${r.retard} retard · ${r.absent_justifie + r.absent} absent`} />
+        <StatCard mood={puncMood} value={r.punctuality_rate ?? '-'} unit={r.punctuality_rate != null ? '%' : ''} label="Ponctualité"
+          sub={`${r.present} présent · ${r.retard} retard · ${r.absent_justifie + r.absent} absent`} />
       )}
     </section>
   )

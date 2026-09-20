@@ -12,7 +12,7 @@ use Illuminate\Http\Request;
 
 class AnnouncementController extends Controller
 {
-    public const CATEGORIES = ['info' => 'Information', 'important' => 'Important', 'evenement' => 'Evenement'];
+    public const CATEGORIES = ['info' => 'Information', 'important' => 'Important', 'evenement' => 'Événement'];
 
     public function index(): JsonResponse
     {
@@ -56,7 +56,7 @@ class AnnouncementController extends Controller
             abort(422, 'Tribu invalide.');
         }
         if ($data['target_type'] === 'department' && ! Department::whereKey($data['target_id'] ?? null)->exists()) {
-            abort(422, 'Departement invalide.');
+            abort(422, 'Département invalide.');
         }
 
         $announcement = Announcement::create([
@@ -84,7 +84,7 @@ class AnnouncementController extends Controller
         }
         $announcement->delete();
 
-        return response()->json(['message' => 'Annonce supprimee.']);
+        return response()->json(['message' => 'Annonce supprimée.']);
     }
 
     private function targetLabel(Announcement $a): string
@@ -92,7 +92,7 @@ class AnnouncementController extends Controller
         return match ($a->target_type) {
             'tribe' => 'Tribu '.(Tribe::find($a->target_id)?->name ?? '?'),
             'department' => 'Dept. '.(Department::find($a->target_id)?->name ?? '?'),
-            default => "Toute l'eglise",
+            default => "Toute l'église",
         };
     }
 }

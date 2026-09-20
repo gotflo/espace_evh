@@ -81,23 +81,23 @@ export default function Login() {
         {step === 'phone' && (
           <form onSubmit={requestCode}>
             <h2 className="section-title">Connexion</h2>
-            <p className="section-sub">Entrez votre numero de telephone pour recevoir un code.</p>
+            <p className="section-sub">Entrez votre numéro de téléphone pour recevoir un code.</p>
 
             {error && <div className="alert alert-error">{error}</div>}
 
             <div className="field">
-              <label htmlFor="phone">Numero de telephone</label>
+              <label htmlFor="phone">Numéro de téléphone</label>
               <div className="phone-input">
                 <CountrySelect value={country} onChange={setCountry} />
                 <input
                   id="phone" className="input" type="tel" inputMode="tel" autoComplete="tel"
-                  placeholder={country.iso === 'CA' || country.iso === 'US' ? '418 123 4567' : 'Numero'}
+                  placeholder={country.iso === 'CA' || country.iso === 'US' ? '418 123 4567' : 'Numéro'}
                   value={national} onChange={(e) => onPhoneChange(e.target.value)} required autoFocus
                 />
               </div>
               {national.trim() && !phoneValid
-                ? <p className="helper" style={{ color: 'var(--red)' }}>Ce numero ne semble pas valide pour ce pays.</p>
-                : <p className="helper">Un code de verification vous sera envoye par SMS.</p>}
+                ? <p className="helper" style={{ color: 'var(--red)' }}>Ce numéro ne semble pas valide pour ce pays.</p>
+                : <p className="helper">Un code de vérification vous sera envoyé par SMS.</p>}
             </div>
 
             <button className="btn btn-primary" disabled={busy || !phoneValid}>
@@ -108,16 +108,16 @@ export default function Login() {
 
         {step === 'code' && (
           <form onSubmit={verifyCode}>
-            <h2 className="section-title">Verification</h2>
+            <h2 className="section-title">Vérification</h2>
             <p className="section-sub">
-              Code envoye au <strong>{normalizedPhone}</strong>.
+              Code envoyé au <strong>{normalizedPhone}</strong>.
             </p>
 
             {info && !error && <div className="alert alert-info">{info}</div>}
             {error && <div className="alert alert-error">{error}</div>}
 
             <div className="field">
-              <label htmlFor="code">Code a 6 chiffres</label>
+              <label htmlFor="code">Code à 6 chiffres</label>
               <input
                 id="code" className="input otp" inputMode="numeric" maxLength={6}
                 placeholder="000000" value={code} autoFocus
@@ -131,7 +131,7 @@ export default function Login() {
 
             <div className="center mt">
               <button type="button" className="btn-link" onClick={() => { setStep('phone'); setCode(''); setError('') }}>
-                Modifier le numero
+                Modifier le numéro
               </button>
             </div>
           </form>

@@ -92,7 +92,7 @@ class AttendanceController extends Controller
 
         $present = $rows->where('status', 'present')->count();
 
-        return response()->json(['message' => "Session enregistree ({$present} present(s))."]);
+        return response()->json(['message' => "Session enregistrée ({$présent} présent(s))."]);
     }
 
     /** Profils visibles par l'utilisateur (toute l'eglise ou sa portee). */

@@ -15,7 +15,7 @@ class FissController extends Controller
     /** Historique des fiches de sante spirituelle d'un membre (pour le responsable). */
     public function index(Request $request, User $user): JsonResponse
     {
-        abort_unless($request->user()->canViewMember($user), 403, 'Acces refuse.');
+        abort_unless($request->user()->canViewMember($user), 403, 'Accès refuse.');
 
         $forms = SpiritualHealthForm::where('user_id', $user->id)
             ->orderByDesc('period')->limit(24)->get()

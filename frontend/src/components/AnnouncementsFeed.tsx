@@ -3,7 +3,7 @@ import { api } from '../api/client'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import type { MyAnnouncement } from '../types'
 
-const CAT: Record<string, string> = { info: 'Info', important: 'Important', evenement: 'Evenement' }
+const CAT: Record<string, string> = { info: 'Info', important: 'Important', evenement: 'Événement' }
 
 export function AnnouncementsFeed() {
   const [items, setItems] = useState<MyAnnouncement[]>([])

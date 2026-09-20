@@ -15,10 +15,10 @@ export function FissDetail({ form }: { form: FissForm }) {
         <span>Vie sociale <b>{form.vie_sociale_total ?? '-'}</b></span>
       </div>
       <div className="fiss-detail-grid">
-        <span>Meditation <b>{form.meditation ?? '-'}/20</b></span>
-        <span>Priere <b>{form.priere ?? '-'}/20</b></span>
-        <span>Jeune <b>{form.jeune ?? '-'}/20</b></span>
-        <span>Financiere <b>{form.situation_financiere ?? '-'}/20</b></span>
+        <span>Méditation <b>{form.meditation ?? '-'}/20</b></span>
+        <span>Prière <b>{form.priere ?? '-'}/20</b></span>
+        <span>Jeûne <b>{form.jeune ?? '-'}/20</b></span>
+        <span>Financière <b>{form.situation_financiere ?? '-'}/20</b></span>
         <span>Familiale <b>{form.situation_familiale ?? '-'}/20</b></span>
         {form.situation_conjugale != null && <span>Conjugale <b>{form.situation_conjugale}/20</b></span>}
       </div>

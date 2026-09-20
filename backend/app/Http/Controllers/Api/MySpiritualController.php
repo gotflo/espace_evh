@@ -63,7 +63,7 @@ class MySpiritualController extends Controller
             'note' => $data['note'],
         ]);
 
-        return response()->json(['message' => 'Entree ajoutee a votre journal.'], 201);
+        return response()->json(['message' => 'Entrée ajoutée à votre journal.'], 201);
     }
 
     /** Le fidele supprime une de SES propres entrees. */
@@ -73,7 +73,7 @@ class MySpiritualController extends Controller
         abort_unless($entry->member_user_id === $user->id && $entry->author_user_id === $user->id, 403);
         $entry->delete();
 
-        return response()->json(['message' => 'Entree supprimee.']);
+        return response()->json(['message' => 'Entrée supprimée.']);
     }
 
     /** Le fidele coche / decoche une etape de son parcours. */
@@ -95,6 +95,6 @@ class MySpiritualController extends Controller
                 ->where('milestone_key', $data['milestone_key'])->delete();
         }
 
-        return response()->json(['message' => 'Etape mise a jour.']);
+        return response()->json(['message' => 'Étape mise à jour.']);
     }
 }

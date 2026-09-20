@@ -7,14 +7,14 @@ import { DepartmentPicker } from '../components/DepartmentPicker'
 import type { Department, Profile, SpiritualProfileData, Tribe } from '../types'
 
 const MARITAL = [
-  ['celibataire', 'Celibataire'], ['marie', 'Marie(e)'], ['fiance', 'Fiance(e)'],
-  ['veuf', 'Veuf(ve)'], ['divorce', 'Divorce(e)'], ['concubinage', 'En concubinage'],
+  ['celibataire', 'Célibataire'], ['marie', 'Marié(e)'], ['fiance', 'Fiancé(e)'],
+  ['veuf', 'Veuf(ve)'], ['divorce', 'Divorcé(e)'], ['concubinage', 'En concubinage'],
 ]
-const CIVILITY = [['dr', 'Dr'], ['reverend', 'Reverend'], ['pasteur', 'Pasteur'], ['m', 'M.'], ['mme', 'Mme'], ['mlle', 'Mlle']]
-const MONTHS = ['Janvier', 'Fevrier', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Decembre']
+const CIVILITY = [['dr', 'Dr'], ['reverend', 'Révérend'], ['pasteur', 'Pasteur'], ['m', 'M.'], ['mme', 'Mme'], ['mlle', 'Mlle']]
+const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 const TSHIRT = ['S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'XXXXL']
 const HOLY_SPIRIT = [['oui', 'Oui'], ['non', 'Non'], ['je_ne_sais_pas', 'Je ne sais pas'], ['autre', 'Autre']]
-const PRAYER_FREQ = [['quotidien', 'Quotidienne'], ['hebdomadaire', 'Quelques fois par semaine'], ['rare', 'Pas tres souvent']]
+const PRAYER_FREQ = [['quotidien', 'Quotidienne'], ['hebdomadaire', 'Quelques fois par semaine'], ['rare', 'Pas très souvent']]
 
 type Tab = 'identite' | 'perso' | 'spirituel'
 
@@ -87,7 +87,7 @@ export default function MyProfile() {
       if (tshirt) fd.append('tshirt_size', tshirt)
       if (yearVerse) fd.append('year_verse', yearVerse)
       const res = await api<{ profile: Profile }>('/profile', { method: 'POST', body: fd })
-      setProfile(res.profile); setPhotoFile(null); flash('Profil enregistre.')
+      setProfile(res.profile); setPhotoFile(null); flash('Profil enregistré.')
     } catch (err) {
       setError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
     } finally { setBusy(false) }
@@ -99,14 +99,14 @@ export default function MyProfile() {
       const body: Record<string, unknown> = { ...sp }
       Object.keys(body).forEach((k) => { if (body[k] === '' ) body[k] = null })
       await api('/me/spiritual-profile', { method: 'PUT', body })
-      flash('Profil spirituel enregistre.')
+      flash('Profil spirituel enregistré.')
     } catch (err) {
       setError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
     } finally { setBusy(false) }
   }
 
   const initials = ((firstName[0] ?? '') + (lastName[0] ?? '')).toUpperCase()
-  const mainRole = roles[0]?.name ?? 'Fidele'
+  const mainRole = roles[0]?.name ?? 'Fidèle'
 
   return (
     <AppLayout title="Mon profil" subtitle="Vos informations personnelles et spirituelles">
@@ -130,7 +130,7 @@ export default function MyProfile() {
 
       {/* Onglets */}
       <div className="tabs2">
-        <button className={`tab2 ${tab === 'identite' ? 'on' : ''}`} onClick={() => setTab('identite')}>Identite</button>
+        <button className={`tab2 ${tab === 'identite' ? 'on' : ''}`} onClick={() => setTab('identite')}>Identité</button>
         <button className={`tab2 ${tab === 'perso' ? 'on' : ''}`} onClick={() => setTab('perso')}>Infos personnelles</button>
         <button className={`tab2 ${tab === 'spirituel' ? 'on' : ''}`} onClick={() => setTab('spirituel')}>Vie spirituelle</button>
       </div>
@@ -151,7 +151,7 @@ export default function MyProfile() {
             </div>
           </div>
           <div className="field-row">
-            <div className="field"><label>Prenoms</label><input className="input" value={firstName} onChange={(e) => setFirstName(e.target.value)} /></div>
+            <div className="field"><label>Prénoms</label><input className="input" value={firstName} onChange={(e) => setFirstName(e.target.value)} /></div>
             <div className="field"><label>Nom</label><input className="input" value={lastName} onChange={(e) => setLastName(e.target.value)} /></div>
           </div>
           <div className="field-row">
@@ -167,7 +167,7 @@ export default function MyProfile() {
             </div>
             <div className="field"><label>Genre</label>
               <select className="select" value={gender} onChange={(e) => setGender(e.target.value)}>
-                <option value="">Non precise</option><option value="homme">Homme</option><option value="femme">Femme</option><option value="autre">Autre</option>
+                <option value="">Non précisé</option><option value="homme">Homme</option><option value="femme">Femme</option><option value="autre">Autre</option>
               </select>
             </div>
           </div>
@@ -176,7 +176,7 @@ export default function MyProfile() {
               <option value="">Aucune</option>{tribes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
-          <div className="field"><label>Departements <span className="helper" style={{ display: 'inline' }}>(plusieurs possibles)</span></label>
+          <div className="field"><label>Départements <span className="helper" style={{ display: 'inline' }}>(plusieurs possibles)</span></label>
             <DepartmentPicker departments={departments} selected={deptIds} onChange={setDeptIds} />
           </div>
           <button className="btn btn-primary" disabled={busy || !firstName.trim() || !lastName.trim()} onClick={savePersonal}>
@@ -187,19 +187,19 @@ export default function MyProfile() {
 
       {tab === 'perso' && (
         <section className="panel form-panel">
-          <div className="field"><label>Mon verset de l'annee</label>
+          <div className="field"><label>Mon verset de l'année</label>
             <input className="input" value={yearVerse} onChange={(e) => setYearVerse(e.target.value)} placeholder="Ex. Philippiens 4:13" />
           </div>
           <div className="field"><label>E-mail</label><input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
           <div className="field-row">
             <div className="field"><label>Situation matrimoniale</label>
               <select className="select" value={marital} onChange={(e) => setMarital(e.target.value)}>
-                <option value="">Non precise</option>{MARITAL.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                <option value="">Non précisé</option>{MARITAL.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </select>
             </div>
             <div className="field"><label>Civilite</label>
               <select className="select" value={civility} onChange={(e) => setCivility(e.target.value)}>
-                <option value="">Non precise</option>{CIVILITY.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                <option value="">Non précisé</option>{CIVILITY.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </select>
             </div>
           </div>
@@ -207,7 +207,7 @@ export default function MyProfile() {
             <div className="field"><label>Nombre d'enfants</label><input className="input" type="number" min="0" value={children} onChange={(e) => setChildren(e.target.value)} /></div>
             <div className="field"><label>Taille de t-shirt</label>
               <select className="select" value={tshirt} onChange={(e) => setTshirt(e.target.value)}>
-                <option value="">Non precise</option>{TSHIRT.map((s) => <option key={s} value={s}>{s}</option>)}
+                <option value="">Non précisé</option>{TSHIRT.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
           </div>
@@ -220,7 +220,7 @@ export default function MyProfile() {
       {tab === 'spirituel' && (
         <section className="panel form-panel">
           <div className="field-row">
-            <div className="field"><label>Annee de conversion</label>
+            <div className="field"><label>Année de conversion</label>
               <input className="input" type="number" min="1900" max={new Date().getFullYear()} value={sp.conversion_year ?? ''} onChange={(e) => setSpField('conversion_year', e.target.value ? Number(e.target.value) : null)} />
             </div>
             <div className="field"><label>Passage biblique de ma conversion</label>
@@ -229,12 +229,12 @@ export default function MyProfile() {
           </div>
 
           <div className="field-row">
-            <div className="field"><label>Date de bapteme par immersion</label>
+            <div className="field"><label>Date de baptême par immersion</label>
               <input className="input" type="date" value={sp.baptism_immersion_date ?? ''} onChange={(e) => setSpField('baptism_immersion_date', e.target.value || null)} />
             </div>
             <div className="field"><label>Baptise(e) du Saint-Esprit</label>
               <select className="select" value={sp.baptism_holy_spirit ?? ''} onChange={(e) => setSpField('baptism_holy_spirit', e.target.value || null)}>
-                <option value="">Non precise</option>{HOLY_SPIRIT.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                <option value="">Non précisé</option>{HOLY_SPIRIT.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </select>
             </div>
           </div>
@@ -247,7 +247,7 @@ export default function MyProfile() {
             </div>
           </div>
           {sp.speaks_tongues === true && (
-            <div className="field"><label>Depuis quelle annee ?</label>
+            <div className="field"><label>Depuis quelle année ?</label>
               <input className="input" type="number" min="1900" max={new Date().getFullYear()} value={sp.tongues_since_year ?? ''} onChange={(e) => setSpField('tongues_since_year', e.target.value ? Number(e.target.value) : null)} />
             </div>
           )}
@@ -260,9 +260,9 @@ export default function MyProfile() {
             </div>
           </div>
 
-          <div className="field"><label>Frequence de priere et de meditation de la Parole</label>
+          <div className="field"><label>Fréquence de prière et de méditation de la Parole</label>
             <select className="select" value={sp.prayer_frequency ?? ''} onChange={(e) => setSpField('prayer_frequency', e.target.value || null)}>
-              <option value="">Non precise</option>{PRAYER_FREQ.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              <option value="">Non précisé</option>{PRAYER_FREQ.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
           </div>
 
@@ -274,7 +274,7 @@ export default function MyProfile() {
             </div>
           </div>
           {sp.gifts_known === true && (
-            <div className="field"><label>Precisez vos dons</label>
+            <div className="field"><label>Précisez vos dons</label>
               <textarea className="input" rows={2} value={sp.gifts_detail ?? ''} onChange={(e) => setSpField('gifts_detail', e.target.value)} />
             </div>
           )}

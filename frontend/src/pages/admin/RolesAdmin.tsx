@@ -7,7 +7,7 @@ const SCOPE_LABEL: Record<string, string> = {
   none: 'Sans portee',
   tribe: 'Par tribu',
   gem: 'Par GEM',
-  department: 'Par departement',
+  department: 'Par département',
 }
 type ScopeKind = 'none' | 'tribe' | 'gem' | 'department'
 
@@ -57,7 +57,7 @@ export default function RolesAdmin() {
       if (editing === 'new') {
         await api('/admin/roles', { method: 'POST', body })
       } else if (editing) {
-        await api(`/admin/roles/${editing.id}`, { method: 'PUT', body })
+        await api(`/admin/rôles/${editing.id}`, { method: 'PUT', body })
       }
       setEditing(null); loadRoles()
     } catch (err) {
@@ -67,10 +67,10 @@ export default function RolesAdmin() {
 
   async function remove() {
     if (editing === 'new' || !editing) return
-    if (!confirm(`Supprimer le role "${editing.name}" ?`)) return
+    if (!confirm(`Supprimer le rôle "${editing.name}" ?`)) return
     setError('')
     try {
-      await api(`/admin/roles/${editing.id}`, { method: 'DELETE' })
+      await api(`/admin/rôles/${editing.id}`, { method: 'DELETE' })
       setEditing(null); loadRoles()
     } catch (err) {
       setError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
@@ -79,10 +79,10 @@ export default function RolesAdmin() {
 
   const isSystem = editing !== 'new' && editing !== null && editing.is_system
 
-  const createBtn = <button className="btn btn-primary small" onClick={() => openEditor('new')}>+ Creer un role</button>
+  const createBtn = <button className="btn btn-primary small" onClick={() => openEditor('new')}>+ Créer un role</button>
 
   return (
-    <AppLayout title="Roles et permissions" subtitle="Definir qui peut faire quoi" actions={editing ? undefined : createBtn}>
+    <AppLayout title="Rôles et permissions" subtitle="Definir qui peut faire quoi" actions={editing ? undefined : createBtn}>
       {!editing ? (
         <div className="role-grid">
           {roles.map((r) => (
@@ -102,15 +102,15 @@ export default function RolesAdmin() {
       ) : (
         <section className="panel" style={{ maxWidth: 720 }}>
           <div className="panel-head">
-            <h3>{editing === 'new' ? 'Nouveau role' : `Modifier : ${editing.name}`}</h3>
+            <h3>{editing === 'new' ? 'Nouveau rôle' : `Modifier : ${editing.name}`}</h3>
             <button className="btn-link" onClick={() => setEditing(null)}>Annuler</button>
           </div>
 
           {error && <div className="alert alert-error">{error}</div>}
-          {isSystem && <div className="alert alert-info">Role de base : vous pouvez ajuster ses permissions, mais pas sa portee ni le supprimer.</div>}
+          {isSystem && <div className="alert alert-info">Rôle de base : vous pouvez ajuster ses permissions, mais pas sa portee ni le supprimer.</div>}
 
           <div className="field">
-            <label>Nom du role</label>
+            <label>Nom du rôle</label>
             <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex. Coordinateur integration" />
           </div>
           <div className="field">
@@ -122,9 +122,9 @@ export default function RolesAdmin() {
             <select className="select" value={scopeKind} disabled={isSystem}
               onChange={(e) => setScopeKind(e.target.value as ScopeKind)}>
               <option value="none">Sans portee (global)</option>
-              <option value="tribe">Rattache a une tribu</option>
-              <option value="gem">Rattache a un GEM</option>
-              <option value="department">Rattache a un departement</option>
+              <option value="tribe">Rattaché à une tribu</option>
+              <option value="gem">Rattaché à un GEM</option>
+              <option value="department">Rattaché à un département</option>
             </select>
           </div>
 

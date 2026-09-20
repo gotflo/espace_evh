@@ -7,7 +7,7 @@ import type { Department, Profile, Tribe } from '../types'
 import { Brand } from '../components/Brand'
 import { DepartmentPicker } from '../components/DepartmentPicker'
 
-const MONTHS = ['Janvier', 'Fevrier', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Decembre']
+const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 
 export default function ProfileSetup() {
   const { profile, setProfile, profileCompleted } = useAuth()
@@ -82,7 +82,7 @@ export default function ProfileSetup() {
 
         <h2 className="section-title">{profileCompleted ? 'Mon profil' : 'Bienvenue !'}</h2>
         <p className="section-sub">
-          {profileCompleted ? 'Mettez a jour vos informations.' : 'Quelques informations pour finaliser votre compte.'}
+          {profileCompleted ? 'Mettez à jour vos informations.' : 'Quelques informations pour finaliser votre compte.'}
         </p>
 
         {error && <div className="alert alert-error">{error}</div>}
@@ -106,7 +106,7 @@ export default function ProfileSetup() {
 
           <div className="field-row">
             <div className="field">
-              <label htmlFor="fn">Prenoms</label>
+              <label htmlFor="fn">Prénoms</label>
               <input id="fn" className="input" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
             </div>
             <div className="field">
@@ -132,7 +132,7 @@ export default function ProfileSetup() {
             <div className="field">
               <label htmlFor="g">Genre</label>
               <select id="g" className="select" value={gender} onChange={(e) => setGender(e.target.value)}>
-                <option value="">Non precise</option>
+                <option value="">Non précisé</option>
                 <option value="homme">Homme</option>
                 <option value="femme">Femme</option>
                 <option value="autre">Autre</option>
@@ -149,7 +149,7 @@ export default function ProfileSetup() {
           </div>
 
           <div className="field">
-            <label>Departements <span className="helper" style={{ display: 'inline' }}>(plusieurs possibles)</span></label>
+            <label>Départements <span className="helper" style={{ display: 'inline' }}>(plusieurs possibles)</span></label>
             <DepartmentPicker departments={departments} selected={deptIds} onChange={setDeptIds} />
           </div>
 

@@ -20,7 +20,7 @@ class MemberController extends Controller
         $viewAll = $user->hasPermission('members.view_all');
 
         if (! $viewAll && ! $user->hasPermission('members.view_scope')) {
-            abort(403, 'Acces refuse.');
+            abort(403, 'Accès refuse.');
         }
 
         $query = Profile::query()->with([
@@ -74,7 +74,7 @@ class MemberController extends Controller
     {
         $viewer = $request->user();
         if (! $viewer->canViewMember($user)) {
-            abort(403, 'Acces refuse.');
+            abort(403, 'Accès refuse.');
         }
 
         $user->load(['profile.tribe', 'profile.gem', 'profile.departments', 'roles.permissions', 'spiritualProfile']);
@@ -105,14 +105,14 @@ class MemberController extends Controller
      */
     public function setActivity(Request $request, User $user): JsonResponse
     {
-        abort_unless($request->user()->canViewMember($user), 403, 'Acces refuse.');
+        abort_unless($request->user()->canViewMember($user), 403, 'Accès refuse.');
 
         $data = $request->validate(['status' => ['required', 'in:active,inactive,auto']]);
 
         $user->update(['activity_override' => $data['status'] === 'auto' ? null : $data['status']]);
 
         return response()->json([
-            'message' => 'Statut mis a jour.',
+            'message' => 'Statut mis à jour.',
             'activity' => $user->activityStatus(),
             'activity_override' => $user->activity_override,
         ]);
@@ -121,7 +121,7 @@ class MemberController extends Controller
     /** Assigner la tribu et les departements d'un membre (appartenance). */
     public function updateBelonging(Request $request, User $user): JsonResponse
     {
-        abort_unless($request->user()->canViewMember($user), 403, 'Acces refuse.');
+        abort_unless($request->user()->canViewMember($user), 403, 'Accès refuse.');
 
         $data = $request->validate([
             'tribe_id' => ['nullable', 'exists:tribes,id'],
@@ -139,7 +139,7 @@ class MemberController extends Controller
         $profile->departments()->sync($data['department_ids'] ?? []);
 
         return response()->json([
-            'message' => 'Appartenance mise a jour.',
+            'message' => 'Appartenance mise à jour.',
             'profile' => $profile->fresh()->load('tribe', 'gem', 'departments'),
         ]);
     }

@@ -73,18 +73,18 @@ export default function MyFiss() {
     setError(''); setOk(''); setBusy(true)
     try {
       const r = await api<{ current: FissForm }>('/me/fiss', { method: 'POST', body: form })
-      setOk('Fiche enregistree. Merci !')
+      setOk('Fiche enregistrée. Merci !')
       setData((d) => d ? { ...d, filled: true, current: r.current, reminder: { level: 'none', days_left: null } } : d)
     } catch (err) {
       setError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
     } finally { setBusy(false) }
   }
 
-  if (!data) return <AppLayout title="Fiche de sante spirituelle"><div className="panel-grid"><SkeletonCard /><SkeletonCard /></div></AppLayout>
+  if (!data) return <AppLayout title="Fiche de santé spirituelle"><div className="panel-grid"><SkeletonCard /><SkeletonCard /></div></AppLayout>
 
   const rl = data.reminder.level
   return (
-    <AppLayout title="Fiche de sante spirituelle" subtitle={`Auto-evaluation mensuelle · ${data.period_label}`}>
+    <AppLayout title="Fiche de santé spirituelle" subtitle={`Auto-évaluation mensuelle · ${data.period_label}`}>
       {error && <div className="alert alert-error">{error}</div>}
       {ok && <div className="alert alert-ok">{ok}</div>}
 
@@ -92,7 +92,7 @@ export default function MyFiss() {
         <div className={`fiss-reminder fiss-reminder-${rl}`}>
           <span className="fiss-reminder-icon">{rl === 'urgent' ? '⏰' : '📝'}</span>
           <div>
-            <strong>{rl === 'urgent' ? 'Derniers jours !' : 'Fiche du mois a remplir'}</strong>
+            <strong>{rl === 'urgent' ? 'Derniers jours !' : 'Fiche du mois à remplir'}</strong>
             <small>Votre fiche de {data.period_label} n'est pas encore remplie{data.reminder.days_left != null ? ` · ${data.reminder.days_left} jour(s) avant la fin du mois` : ''}.</small>
           </div>
         </div>
@@ -107,20 +107,20 @@ export default function MyFiss() {
         <div className="fiss-main">
           <section className="panel">
             <div className="panel-head"><h3>Vie spirituelle <span className="fiss-total">{vieSpi}/60</span></h3></div>
-            <ScoreField label="Meditation" value={form.meditation} onChange={(v) => set('meditation', v)} />
-            <ScoreField label="Priere" value={form.priere} onChange={(v) => set('priere', v)} />
-            <ScoreField label="Jeune" value={form.jeune} onChange={(v) => set('jeune', v)} />
+            <ScoreField label="Méditation" value={form.meditation} onChange={(v) => set('meditation', v)} />
+            <ScoreField label="Prière" value={form.priere} onChange={(v) => set('priere', v)} />
+            <ScoreField label="Jeûne" value={form.jeune} onChange={(v) => set('jeune', v)} />
             <div className="fiss-subtitle">Sanctification</div>
-            <SanctField label="Du corps (impudicite, mensonge, exces...)" value={form.sanctification_corps} onChange={(v) => set('sanctification_corps', v)} />
-            <SanctField label="De l'ame (colere, jalousie, rancunes...)" value={form.sanctification_ame} onChange={(v) => set('sanctification_ame', v)} />
-            <SanctField label="De l'esprit (idolatrie, fausses doctrines...)" value={form.sanctification_esprit} onChange={(v) => set('sanctification_esprit', v)} />
+            <SanctField label="Du corps (impudicité, mensonge, excès...)" value={form.sanctification_corps} onChange={(v) => set('sanctification_corps', v)} />
+            <SanctField label="De l'âme (colère, jalousie, rancunes...)" value={form.sanctification_ame} onChange={(v) => set('sanctification_ame', v)} />
+            <SanctField label="De l'esprit (idolâtrie, fausses doctrines...)" value={form.sanctification_esprit} onChange={(v) => set('sanctification_esprit', v)} />
           </section>
 
           <section className="panel mt">
             <div className="panel-head"><h3>Vie sociale <span className="fiss-total">{vieSoc}/{form.situation_conjugale != null ? 60 : 40}</span></h3></div>
-            <ScoreField label="Situation financiere" value={form.situation_financiere} onChange={(v) => set('situation_financiere', v)} />
+            <ScoreField label="Situation financière" value={form.situation_financiere} onChange={(v) => set('situation_financiere', v)} />
             <ScoreField label="Situation familiale" hint="(famille biologique)" value={form.situation_familiale} onChange={(v) => set('situation_familiale', v)} />
-            <ScoreField label="Situation conjugale" hint="(maries uniquement)" value={form.situation_conjugale} onChange={(v) => set('situation_conjugale', v)} />
+            <ScoreField label="Situation conjugale" hint="(mariés uniquement)" value={form.situation_conjugale} onChange={(v) => set('situation_conjugale', v)} />
             <div className="fiss-field">
               <label>Commentaire (optionnel)</label>
               <textarea className="input" rows={3} value={form.comment ?? ''} onChange={(e) => set('comment', e.target.value)} />
@@ -134,7 +134,7 @@ export default function MyFiss() {
         <aside className="fiss-aside">
           <div className="panel">
             <div className="panel-head"><h3>Indices de notation</h3></div>
-            <p className="helper" style={{ marginTop: 0 }}>Aide-vous de ce bareme pour vous noter.</p>
+            <p className="helper" style={{ marginTop: 0 }}>Aide-vous de ce barème pour vous noter.</p>
             {Object.values(data.indices).map((idx, i) => <IndexBox key={i} idx={idx} />)}
           </div>
         </aside>

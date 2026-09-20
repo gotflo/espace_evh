@@ -17,7 +17,7 @@ export function FissReminder() {
     <button className={`fiss-reminder fiss-reminder-${lvl} fiss-reminder-btn`} onClick={() => navigate('/ma-fiche')}>
       <span className="fiss-reminder-icon">{lvl === 'urgent' ? '⏰' : '📝'}</span>
       <div style={{ flex: 1, textAlign: 'left' }}>
-        <strong>{lvl === 'urgent' ? 'Derniers jours : remplissez votre fiche !' : 'Fiche de sante spirituelle du mois'}</strong>
+        <strong>{lvl === 'urgent' ? 'Derniers jours : remplissez votre fiche !' : 'Fiche de santé spirituelle du mois'}</strong>
         <small>Votre fiche de {data.period_label} n'est pas remplie{data.reminder.days_left != null ? ` · ${data.reminder.days_left} j restants` : ''}. Cliquez pour la remplir.</small>
       </div>
       <span className="fiss-reminder-cta">Remplir →</span>

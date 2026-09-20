@@ -13,9 +13,9 @@ class EventController extends Controller
 {
     public const CATEGORIES = [
         'culte' => 'Culte',
-        'priere' => 'Priere',
+        'priere' => 'Prière',
         'formation' => 'Formation',
-        'reunion' => 'Reunion',
+        'reunion' => 'Réunion',
         'sortie' => 'Sortie',
         'autre' => 'Autre',
     ];
@@ -59,7 +59,7 @@ class EventController extends Controller
         }
         $event = Event::create($data + ['created_by' => $request->user()->id]);
 
-        return response()->json(['message' => 'Evenement cree.', 'event' => $this->present($event)], 201);
+        return response()->json(['message' => 'Événement créé.', 'event' => $this->present($event)], 201);
     }
 
     public function update(Request $request, Event $event): JsonResponse
@@ -73,7 +73,7 @@ class EventController extends Controller
         }
         $event->update($data);
 
-        return response()->json(['message' => 'Evenement mis a jour.', 'event' => $this->present($event->fresh())]);
+        return response()->json(['message' => 'Événement mis à jour.', 'event' => $this->present($event->fresh())]);
     }
 
     public function destroy(Event $event): JsonResponse
@@ -83,7 +83,7 @@ class EventController extends Controller
         }
         $event->delete();
 
-        return response()->json(['message' => 'Evenement supprime.']);
+        return response()->json(['message' => 'Événement supprimé.']);
     }
 
     /** @return array<string, mixed> */
@@ -111,7 +111,7 @@ class EventController extends Controller
             abort(422, 'Tribu invalide.');
         }
         if ($data['target_type'] === 'department' && ! Department::whereKey($data['target_id'] ?? null)->exists()) {
-            abort(422, 'Departement invalide.');
+            abort(422, 'Département invalide.');
         }
         $data['target_id'] = $data['target_type'] === 'all' ? null : $data['target_id'];
 
@@ -146,7 +146,7 @@ class EventController extends Controller
             'tribe' => 'Tribu '.(Tribe::find($e->target_id)?->name ?? '?'),
             'department' => 'Dept. '.(Department::find($e->target_id)?->name ?? '?'),
             'gem' => 'GEM '.(\App\Models\Gem::find($e->target_id)?->name ?? '?'),
-            default => "Toute l'eglise",
+            default => "Toute l'église",
         };
     }
 }

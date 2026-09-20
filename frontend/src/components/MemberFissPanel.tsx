@@ -16,7 +16,7 @@ export function MemberFissPanel({ userId }: { userId: string }) {
 
   return (
     <section className="panel mt">
-      <div className="panel-head"><h3>Fiches de sante spirituelle (FISS)</h3></div>
+      <div className="panel-head"><h3>Fiches de santé spirituelle (FISS)</h3></div>
       <div className="fiss-admin-list">
         {forms.map((f, i) => {
           const cmp = compareFiss(f, forms[i + 1])

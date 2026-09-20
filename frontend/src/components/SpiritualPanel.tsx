@@ -49,7 +49,7 @@ export function SpiritualPanel({ userId, canRecord }: { userId: string; canRecor
       {error && <div className="alert alert-error">{error}</div>}
 
       {/* Etapes */}
-      <label className="mini-label">Etapes du parcours</label>
+      <label className="mini-label">Étapes du parcours</label>
       <div className="chip-picker">
         {data.milestones.map((m) => (
           <button
@@ -70,7 +70,7 @@ export function SpiritualPanel({ userId, canRecord }: { userId: string; canRecor
         <div className="journal-form">
           <div className="journal-form-row">
             <select className="select" value={type} onChange={(e) => setType(e.target.value)}>
-              <option value="">Type d'evenement...</option>
+              <option value="">Type d'événement...</option>
               {data.entry_types.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
             </select>
             <input className="input" type="date" max={TODAY} value={date} onChange={(e) => setDate(e.target.value)} />
@@ -94,7 +94,7 @@ export function SpiritualPanel({ userId, canRecord }: { userId: string; canRecor
             {e.author && <span className="journal-author">par {e.author}</span>}
           </div>
         ))}
-        {data.entries.length === 0 && <p className="helper">Aucune entree dans le journal.</p>}
+        {data.entries.length === 0 && <p className="helper">Aucune entrée dans le journal.</p>}
       </div>
     </section>
   )

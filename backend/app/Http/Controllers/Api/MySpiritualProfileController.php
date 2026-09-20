@@ -39,6 +39,6 @@ class MySpiritualProfileController extends Controller
         $sp = SpiritualProfile::firstOrCreate(['user_id' => $request->user()->id]);
         $sp->fill($data)->save();
 
-        return response()->json(['message' => 'Profil spirituel enregistre.', 'spiritual' => $sp->fresh()]);
+        return response()->json(['message' => 'Profil spirituel enregistré.', 'spiritual' => $sp->fresh()]);
     }
 }

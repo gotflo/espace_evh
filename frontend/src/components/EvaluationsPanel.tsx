@@ -19,7 +19,7 @@ export function EvaluationsPanel({ userId }: { userId: string }) {
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(() => {
-    api<{ evaluations: EvaluationItem[]; average: number | null; types: { key: string; label: string }[] }>(`/admin/members/${userId}/evaluations`)
+    api<{ evaluations: EvaluationItem[]; average: number | null; types: { key: string; label: string }[] }>(`/admin/members/${userId}/évaluations`)
       .then((r) => { setItems(r.evaluations); setAverage(r.average); setTypes(r.types) })
       .catch(() => setItems([]))
   }, [userId])
@@ -28,7 +28,7 @@ export function EvaluationsPanel({ userId }: { userId: string }) {
   async function add() {
     setError(''); setBusy(true)
     try {
-      await api(`/admin/members/${userId}/evaluations`, {
+      await api(`/admin/members/${userId}/évaluations`, {
         method: 'POST',
         body: { type, title: title || null, score: Number(score), evaluated_on: date, comment: comment || null },
       })
@@ -40,7 +40,7 @@ export function EvaluationsPanel({ userId }: { userId: string }) {
 
   async function remove(id: number) {
     if (!confirm('Supprimer cette note ?')) return
-    try { await api(`/admin/evaluations/${id}`, { method: 'DELETE' }); load() }
+    try { await api(`/admin/évaluations/${id}`, { method: 'DELETE' }); load() }
     catch (err) { setError(err instanceof ApiError ? err.firstMessage : 'Erreur.') }
   }
 
@@ -69,7 +69,7 @@ export function EvaluationsPanel({ userId }: { userId: string }) {
           <div className="field-row mt">
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Titre (optionnel)</label>
-              <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. Meditation du mois" />
+              <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. Méditation du mois" />
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Date</label>

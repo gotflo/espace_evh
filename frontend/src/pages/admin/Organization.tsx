@@ -65,7 +65,7 @@ function OrgSection({ title, singular, items, endpoint, canManage, showRehearsal
             {showRehearsal && (
               <button type="button" className={`rehearsal-toggle ${it.tracks_rehearsal ? 'on' : ''}`}
                 disabled={!canManage || busy}
-                title="Suit la ponctualite aux repetitions (retards, absences)"
+                title="Suit la ponctualité aux repetitions (retards, absences)"
                 onClick={() => call(() => api(`/admin/${endpoint}/${it.id}`, { method: 'PUT', body: { tracks_rehearsal: !it.tracks_rehearsal } }))}>
                 {it.tracks_rehearsal ? '🎵 Repetitions' : 'Repetitions ?'}
               </button>
@@ -97,13 +97,13 @@ export default function Organization() {
   useEffect(() => { load() }, [load])
 
   return (
-    <AppLayout title="Organisation" subtitle="Tribus et departements de l'eglise">
+    <AppLayout title="Organisation" subtitle="Tribus et départements de l'église">
       {error && <div className="alert alert-error">{error}</div>}
       <div className="detail-grid">
         <OrgSection title="Tribus" singular="tribu" endpoint="tribes"
           items={data?.tribes ?? []} canManage={hasPermission('tribes.manage')}
           onChange={load} onError={setError} />
-        <OrgSection title="Departements" singular="departement" endpoint="departments"
+        <OrgSection title="Départements" singular="departement" endpoint="departments"
           items={data?.departments ?? []} canManage={hasPermission('departments.manage')}
           showRehearsal onChange={load} onError={setError} />
       </div>

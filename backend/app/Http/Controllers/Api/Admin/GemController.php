@@ -44,7 +44,7 @@ class GemController extends Controller
         // Le responsable nomme recoit aussitot le role GAD sur ce GEM.
         LeaderRole::sync('gad', 'gem', $gem->id, $gem->leader_user_id, $request->user()->id);
 
-        return response()->json(['message' => 'GEM cree.', 'gem' => $this->present($gem->load('tribe', 'leader.profile')->loadCount('members'))], 201);
+        return response()->json(['message' => 'GEM créé.', 'gem' => $this->present($gem->load('tribe', 'leader.profile')->loadCount('members'))], 201);
     }
 
     public function update(Request $request, Gem $gem): JsonResponse
@@ -52,7 +52,7 @@ class GemController extends Controller
         $gem->update($this->validated($request));
         LeaderRole::sync('gad', 'gem', $gem->id, $gem->leader_user_id, $request->user()->id);
 
-        return response()->json(['message' => 'GEM mis a jour.']);
+        return response()->json(['message' => 'GEM mis à jour.']);
     }
 
     public function destroy(Request $request, Gem $gem): JsonResponse
@@ -61,7 +61,7 @@ class GemController extends Controller
         LeaderRole::sync('gad', 'gem', $gem->id, null, $request->user()->id);
         $gem->delete();
 
-        return response()->json(['message' => 'GEM supprime.']);
+        return response()->json(['message' => 'GEM supprimé.']);
     }
 
     /** @return array<string, mixed> */
@@ -74,12 +74,12 @@ class GemController extends Controller
         ]);
         // Le GAD doit avoir un profil (etre un membre).
         if (! empty($data['leader_user_id']) && ! User::whereKey($data['leader_user_id'])->whereHas('profile')->exists()) {
-            abort(422, 'Le responsable choisi doit etre un membre.');
+            abort(422, 'Le responsable choisi doit être un membre.');
         }
         // Un responsable de tribu ne peut creer un GEM que dans sa propre tribu.
         $allowed = $this->allowedTribeIds($request->user());
         if ($allowed !== null && ! in_array((int) $data['tribe_id'], $allowed, true)) {
-            abort(403, 'Vous ne pouvez creer un GEM que dans votre tribu.');
+            abort(403, 'Vous ne pouvez créer un GEM que dans votre tribu.');
         }
 
         return $data;

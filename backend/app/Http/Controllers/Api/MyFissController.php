@@ -54,7 +54,7 @@ class MyFissController extends Controller
             $data,
         );
 
-        return response()->json(['message' => 'Fiche de sante spirituelle enregistree.', 'current' => $this->present($form)]);
+        return response()->json(['message' => 'Fiche de santé spirituelle enregistrée.', 'current' => $this->present($form)]);
     }
 
     /** Niveau de rappel selon le jour du mois (aucun si deja remplie). */

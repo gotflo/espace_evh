@@ -48,8 +48,8 @@ export function FissSummary() {
           <span className="fiss-summary-label">Vie sociale</span>
         </div>
         <div className="fiss-summary-detail">
-          <span className="fiss-summary-line">Meditation <b>{f.meditation ?? '-'}</b> · Priere <b>{f.priere ?? '-'}</b> · Jeune <b>{f.jeune ?? '-'}</b></span>
-          <span className="fiss-summary-line">Financiere <b>{f.situation_financiere ?? '-'}</b> · Familiale <b>{f.situation_familiale ?? '-'}</b>{f.situation_conjugale != null ? <> · Conjugale <b>{f.situation_conjugale}</b></> : null}</span>
+          <span className="fiss-summary-line">Méditation <b>{f.meditation ?? '-'}</b> · Prière <b>{f.priere ?? '-'}</b> · Jeûne <b>{f.jeune ?? '-'}</b></span>
+          <span className="fiss-summary-line">Financière <b>{f.situation_financiere ?? '-'}</b> · Familiale <b>{f.situation_familiale ?? '-'}</b>{f.situation_conjugale != null ? <> · Conjugale <b>{f.situation_conjugale}</b></> : null}</span>
           <span className="fiss-summary-sanct">Sanctification {sanctDot(f.sanctification_corps)}{sanctDot(f.sanctification_ame)}{sanctDot(f.sanctification_esprit)}</span>
         </div>
       </div>
