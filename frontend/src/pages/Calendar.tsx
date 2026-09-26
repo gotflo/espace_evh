@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../api/client'
 import { AppLayout } from '../components/AppLayout'
 import { EventEditor } from '../components/EventEditor'
-import { useAutoRefresh } from '../hooks/useAutoRefresh'
+import { usePulse } from '../pulse'
 import type { CalendarData, CalendarItem, EventOccurrence } from '../types'
 import { CAT_LABEL, hhmm, longDay, optimisticRsvp, parseYmd, rsvpOccurrence, timeRange, ymd } from '../utils/events'
 
@@ -118,7 +118,7 @@ export default function Calendar() {
   }, [fromS, toS])
 
   useEffect(() => { setLoading(true); load() }, [load])
-  useAutoRefresh(load, 60000)
+  usePulse(['events', 'exercises'], load)
 
   // L'URL reflete la vue : lien partageable, retour arriere, liens des notifications.
   useEffect(() => {

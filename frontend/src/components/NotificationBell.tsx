@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
-import { NOTIF_ICON, refreshUnread, setUnread, timeAgo, useUnreadCount } from '../notifications'
+import { NOTIF_ICON, setUnread, timeAgo, useUnreadCount } from '../notifications'
+import { startPulse } from '../pulse'
 import type { AppNotification, NotificationPage } from '../types'
 
 export function NotificationBell() {
@@ -17,22 +18,9 @@ export function NotificationBell() {
       .catch(() => setItems([]))
   }, [])
 
-  // Compteur quasi temps reel : toutes les 30 s, au retour sur l'appli et a chaque push recu.
-  useEffect(() => {
-    refreshUnread()
-    const tick = () => { if (document.visibilityState === 'visible') refreshUnread() }
-    const id = window.setInterval(tick, 30000)
-    document.addEventListener('visibilitychange', tick)
-    window.addEventListener('focus', tick)
-    const onMessage = (e: MessageEvent) => { if (e.data?.type === 'evh-push') refreshUnread() }
-    navigator.serviceWorker?.addEventListener('message', onMessage)
-    return () => {
-      window.clearInterval(id)
-      document.removeEventListener('visibilitychange', tick)
-      window.removeEventListener('focus', tick)
-      navigator.serviceWorker?.removeEventListener('message', onMessage)
-    }
-  }, [])
+  // Le compteur est tenu a jour par le pouls de l'application (pulse.ts) : toutes les ~45 s,
+  // au retour sur l'appli et a chaque push recu.
+  useEffect(() => { startPulse() }, [])
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {

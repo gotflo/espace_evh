@@ -68,15 +68,23 @@ class FissService
     public static function requestEdit(User $member, SpiritualHealthForm $form, string $reason): FissEditRequest
     {
         abort_unless($form->user_id === $member->id, 404);
-        abort_unless($form->isLocked(), 422, 'Cette fiche est déjà modifiable.');
-        abort_if($form->editRequests()->whereIn('status', ['pending'])->exists(), 409, 'Une demande est déjà en attente pour cette fiche.');
-        abort_if(self::openRequest($form) !== null, 409, 'Une modification a déjà été approuvée : vous pouvez modifier la fiche.');
-        $used = self::requestsCount($form);
-        abort_if($used >= FissEditRequest::MAX_PER_FORM, 422,
-            'Vous avez déjà fait '.FissEditRequest::MAX_PER_FORM.' demandes de modification pour cette fiche : ce n\'est plus possible.');
 
-        $req = FissEditRequest::create(['form_id' => $form->id, 'user_id' => $member->id, 'reason' => $reason, 'status' => 'pending']);
-        Audit::log('fiss.edit_requested', $req, $member->id, [], ['reason' => $reason, 'request_number' => $used + 1], ['form_id' => $form->id, 'period' => $form->period]);
+        // Verrou sur la fiche : deux demandes simultanees sont traitees l'une apres l'autre,
+        // la limite de 2 demandes ne peut donc pas etre depassee.
+        [$req, $used] = DB::transaction(function () use ($member, $form, $reason) {
+            $form = SpiritualHealthForm::whereKey($form->id)->lockForUpdate()->firstOrFail();
+            abort_unless($form->isLocked(), 422, 'Cette fiche est déjà modifiable.');
+            abort_if($form->editRequests()->whereIn('status', ['pending'])->exists(), 409, 'Une demande est déjà en attente pour cette fiche.');
+            abort_if(self::openRequest($form) !== null, 409, 'Une modification a déjà été approuvée : vous pouvez modifier la fiche.');
+            $used = self::requestsCount($form);
+            abort_if($used >= FissEditRequest::MAX_PER_FORM, 422,
+                'Vous avez déjà fait '.FissEditRequest::MAX_PER_FORM.' demandes de modification pour cette fiche : ce n\'est plus possible.');
+
+            $req = FissEditRequest::create(['form_id' => $form->id, 'user_id' => $member->id, 'reason' => $reason, 'status' => 'pending']);
+            Audit::log('fiss.edit_requested', $req, $member->id, [], ['reason' => $reason, 'request_number' => $used + 1], ['form_id' => $form->id, 'period' => $form->period]);
+
+            return [$req, $used];
+        });
 
         $name = $member->profile?->full_name ?: $member->phone;
         Notifier::send(self::reviewers($member), 'fiss_request', "Demande de modification de FISS : {$name}",

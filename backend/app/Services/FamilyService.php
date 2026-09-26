@@ -6,6 +6,7 @@ use App\Models\FamilyLink;
 use App\Models\Profile;
 use App\Models\User;
 use App\Support\Audit;
+use App\Support\Like;
 use App\Support\ProfileCompletion;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -35,7 +36,11 @@ class FamilyService
         return Profile::where('is_completed', true)->where('user_id', '!=', $me->id)
             ->where(function ($w) use ($terms) {
                 foreach ($terms as $t) {
-                    $w->where(fn ($x) => $x->whereRaw('LOWER(first_name) LIKE ?', ["%{$t}%"])->orWhereRaw('LOWER(last_name) LIKE ?', ["%{$t}%"]));
+                    $pattern = '%'.Like::escape($t).'%';
+                    $w->where(function ($x) use ($pattern) {
+                        Like::where($x, 'LOWER(first_name)', $pattern);
+                        Like::where($x, 'LOWER(last_name)', $pattern, 'or');
+                    });
                 }
             })
             ->with('tribe:id,name')->orderBy('first_name')->limit(10)->get()

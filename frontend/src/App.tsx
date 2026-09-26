@@ -6,7 +6,8 @@ import { PullToRefresh } from './components/PullToRefresh'
 import { Toaster } from './components/Toaster'
 import { api } from './api/client'
 import { syncPush } from './push'
-import { refreshUnread, setUnread, getUnread } from './notifications'
+import { setUnread, getUnread } from './notifications'
+import { pollNow } from './pulse'
 
 // Chargement a la demande : chaque page arrive dans son propre paquet,
 // le demarrage de l'application est donc beaucoup plus rapide.
@@ -31,6 +32,8 @@ const Calendar = lazy(() => import('./pages/Calendar'))
 const Services = lazy(() => import('./pages/Services'))
 const Notifications = lazy(() => import('./pages/Notifications'))
 const Validations = lazy(() => import('./pages/admin/Validations'))
+const MyExercisesPage = lazy(() => import('./pages/Exercises'))
+const ExerciseDetail = lazy(() => import('./pages/ExerciseDetail'))
 const Reports = lazy(() => import('./pages/admin/Reports'))
 const AuditLog = lazy(() => import('./pages/admin/AuditLog'))
 
@@ -100,7 +103,7 @@ function PushBridge() {
       if (e.data?.type === 'evh-navigate' && typeof e.data.url === 'string') {
         const url = new URL(e.data.url, window.location.origin)
         if (url.origin === window.location.origin) navigate(url.pathname + url.search + url.hash)
-        refreshUnread()
+        void pollNow()
       } else if (e.data?.type === 'evh-push-resubscribe') {
         syncPush()
       }
@@ -131,6 +134,8 @@ export default function App() {
       <Route path="/contact" element={<RequireAuth requireComplete><Contact /></RequireAuth>} />
       <Route path="/calendrier" element={<RequireAuth requireComplete><Calendar /></RequireAuth>} />
       <Route path="/servir" element={<RequireAuth requireComplete><Services /></RequireAuth>} />
+      <Route path="/exercices" element={<RequireAuth requireComplete><MyExercisesPage /></RequireAuth>} />
+      <Route path="/exercices/:id" element={<RequireAuth requireComplete><ExerciseDetail /></RequireAuth>} />
       <Route path="/notifications" element={<RequireAuth requireComplete><Notifications /></RequireAuth>} />
       <Route path="/admin/membres" element={<RequireAuth requireComplete anyPermission={MEMBER_PERMS}><Members /></RequireAuth>} />
       <Route path="/admin/membres/:id" element={<RequireAuth requireComplete anyPermission={MEMBER_PERMS}><MemberDetail /></RequireAuth>} />

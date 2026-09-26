@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
-import { useAutoRefresh } from '../hooks/useAutoRefresh'
+import { usePulse } from '../pulse'
 import { AppLayout } from '../components/AppLayout'
 import { MyExercises } from '../components/MyExercises'
 import { AnnouncementsFeed } from '../components/AnnouncementsFeed'
 import { EventsFeed } from '../components/EventsFeed'
+import { ServiceSchedule } from '../components/ServiceSchedule'
 import { DashRequests } from '../components/DashRequests'
 import { FissReminder } from '../components/FissReminder'
 import { FissSummary } from '../components/FissSummary'
@@ -30,7 +31,7 @@ export default function Dashboard() {
   }, [canViewMembers])
 
   useEffect(() => { loadStats() }, [loadStats])
-  useAutoRefresh(loadStats, 20000, canViewMembers)
+  usePulse(['members', 'fiss', 'attendance'], loadStats, canViewMembers)
 
   // Mot de bienvenue au tout premier passage, puis il disparait de lui-meme.
   useEffect(() => {
@@ -126,6 +127,7 @@ export default function Dashboard() {
               <EventsFeed />
             </div>
             <div className="dash-col dash-side-col">
+              <ServiceSchedule />
               {canViewAll && tribePanel}
               {canRequests && <DashRequests />}
               <AnnouncementsFeed />
@@ -141,6 +143,7 @@ export default function Dashboard() {
             <MyExercises />
           </div>
           <div className="dash-col dash-side-col">
+            <ServiceSchedule />
             <section className="panel">
               <div className="panel-head"><h3>Mes fonctions</h3></div>
               <div className="badges">

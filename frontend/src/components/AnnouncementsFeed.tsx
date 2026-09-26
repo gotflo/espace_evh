@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
-import { useAutoRefresh } from '../hooks/useAutoRefresh'
+import { usePulse } from '../pulse'
 import type { MyAnnouncement } from '../types'
 
 const CAT: Record<string, string> = { info: 'Info', important: 'Important', evenement: 'Événement' }
@@ -13,7 +13,7 @@ export function AnnouncementsFeed() {
   }, [])
 
   useEffect(() => { load() }, [load])
-  useAutoRefresh(load)
+  usePulse('announcements', load)
 
   if (items.length === 0) return null
 

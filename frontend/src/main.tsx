@@ -8,14 +8,23 @@ import './toast.css'
 import './mission.css'
 import App from './App.tsx'
 import { AuthProvider } from './auth/AuthContext'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { isStaleBuildError, reloadOnce } from './utils/reload'
+
+// Apres une mise a jour du site, un ancien ecran peut chercher un fichier qui n'existe plus :
+// on recharge une fois pour obtenir la nouvelle version (au lieu d'une page blanche).
+window.addEventListener('vite:preloadError', (e) => { e.preventDefault(); reloadOnce() })
+window.addEventListener('unhandledrejection', (e) => { if (isStaleBuildError(e.reason)) reloadOnce() })
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   </StrictMode>,
 )
 

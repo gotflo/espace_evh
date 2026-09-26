@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
-import { useAutoRefresh } from '../hooks/useAutoRefresh'
+import { usePulse } from '../pulse'
 import type { NewMember, NewMemberCounts } from '../types'
 import { Skeleton } from './Skeleton'
 
@@ -32,7 +32,7 @@ export function NewMembersPanel() {
   }, [filter])
 
   useEffect(() => { setItems(null); load() }, [load])
-  useAutoRefresh(load, 30000)
+  usePulse('members', load)
 
   async function toggleWelcome(m: NewMember) {
     setBusy(m.user_id)

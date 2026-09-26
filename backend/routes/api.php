@@ -28,6 +28,7 @@ use App\Http\Controllers\Api\MyFissController;
 use App\Http\Controllers\Api\MyOverviewController;
 use App\Http\Controllers\Api\MyExerciseController;
 use App\Http\Controllers\Api\MyNotificationController;
+use App\Http\Controllers\Api\PulseController;
 use App\Http\Controllers\Api\MyServiceController;
 use App\Http\Controllers\Api\MyRequestController;
 use App\Http\Controllers\Api\MySpiritualController;
@@ -62,6 +63,7 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', \App\Http\Middleware\TrackA
     Route::post('/me/announcements/read', [MyAnnouncementController::class, 'markRead']);
 
     // --- Centre de notifications + notifications push ---
+    Route::get('/me/pulse', [PulseController::class, 'show']);
     Route::get('/me/notifications', [MyNotificationController::class, 'index']);
     Route::get('/me/notifications/unread-count', [MyNotificationController::class, 'unreadCount']);
     Route::post('/me/notifications/read-all', [MyNotificationController::class, 'markAllRead']);
@@ -135,6 +137,9 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', \App\Http\Middleware\TrackA
 
     // --- Espace fidele : mes exercices ---
     Route::get('/me/exercises', [MyExerciseController::class, 'index']);
+    Route::get('/me/exercises/{exercise}', [MyExerciseController::class, 'show']);
+    Route::post('/me/exercises/{exercise}/progress', [MyExerciseController::class, 'progress'])
+        ->middleware('throttle:video-progress');
     Route::post('/me/exercises/{exercise}/respond', [MyExerciseController::class, 'respond'])
         ->middleware('permission:exercises.respond');
 
@@ -214,6 +219,8 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', \App\Http\Middleware\TrackA
             Route::post('/exercises', [ExerciseController::class, 'store']);
             Route::delete('/exercises/{exercise}', [ExerciseController::class, 'destroy']);
             Route::get('/exercises/{exercise}/responses', [ExerciseController::class, 'responses']);
+            Route::get('/exercises/{exercise}/tracking', [ExerciseController::class, 'tracking']);
+            Route::post('/exercises/video-preview', [ExerciseController::class, 'videoPreview'])->middleware('throttle:member-search');
         });
 
         // Annonces / communication

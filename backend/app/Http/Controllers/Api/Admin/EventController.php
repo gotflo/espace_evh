@@ -160,10 +160,13 @@ class EventController extends Controller
             'recurrence' => ['nullable', 'in:'.implode(',', array_keys(Event::RECURRENCES))],
             'recurrence_until' => ['nullable', 'date'],
             'location' => ['nullable', 'string', 'max:200'],
+            'remind_all' => ['nullable', 'boolean'],
         ]);
         unset($data['image']); // le fichier est traite a part (store/update)
 
         $data['all_day'] = (bool) ($data['all_day'] ?? false);
+        // Rappel a tous avant chaque occurrence : reserve aux rendez-vous recurrents (cultes...).
+        $data['remind_all'] = (bool) ($data['remind_all'] ?? false) && ($data['recurrence'] ?? 'none') !== 'none';
         $data['recurrence'] = $data['recurrence'] ?? 'none';
         if ($data['recurrence'] === 'none') {
             $data['recurrence_until'] = null;
@@ -232,6 +235,7 @@ class EventController extends Controller
             'recurrence' => $e->recurrence ?? 'none',
             'recurrence_label' => Event::RECURRENCES[$e->recurrence ?? 'none'] ?? null,
             'recurrence_until' => $e->recurrence_until?->toDateString(),
+            'remind_all' => (bool) $e->remind_all,
             'next_occurrence' => $next?->toIso8601String(),
             'location' => $e->location,
             'scopes' => $e->audienceList(),

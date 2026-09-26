@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
-import { useAutoRefresh } from '../hooks/useAutoRefresh'
+import { usePulse } from '../pulse'
 import type { AdminRequest } from '../types'
 
 /** Widget tableau de bord : dernieres demandes des fideles + compteur de nouvelles. */
@@ -15,7 +15,7 @@ export function DashRequests() {
   }, [])
 
   useEffect(() => { load() }, [load])
-  useAutoRefresh(load)
+  usePulse('requests', load)
 
   if (!data) return null
 

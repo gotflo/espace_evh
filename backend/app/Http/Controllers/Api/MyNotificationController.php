@@ -95,7 +95,11 @@ class MyNotificationController extends Controller
         // Meme page, et les parametres de la notification (ex. ?date=...) sont presents dans l'adresse visitee.
         parse_str((string) parse_url($url, PHP_URL_QUERY), $visited);
         $ids = $request->user()->notifications()->whereNull('read_at')
-            ->where(fn ($q) => $q->where('url', $path)->orWhere('url', 'like', $path.'?%')->orWhere('url', 'like', $path.'#%'))
+            ->where(function ($q) use ($path) {
+                $q->where('url', $path);
+                \App\Support\Like::where($q, 'url', \App\Support\Like::escape($path).'?%', 'or');
+                \App\Support\Like::where($q, 'url', \App\Support\Like::escape($path).'#%', 'or');
+            })
             ->get(['id', 'url'])
             ->filter(function ($n) use ($visited) {
                 parse_str((string) parse_url($n->url, PHP_URL_QUERY), $wanted);

@@ -2,11 +2,9 @@
 
 namespace App\Models\Concerns;
 
-use App\Models\Department;
-use App\Models\Gem;
 use App\Models\PublicationScope;
-use App\Models\Tribe;
 use App\Models\User;
+use App\Support\ScopeNames;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
@@ -62,14 +60,19 @@ trait HasPublicationScopes
             return "Toute l'église";
         }
         $parts = [];
-        $names = fn (string $model, string $type) => $model::whereIn('id', $this->scopes->where('scope_type', $type)->pluck('scope_id'))->orderBy('name')->pluck('name')->all();
-        if ($t = $names(Tribe::class, 'tribe')) {
+        $names = function (string $type) {
+            $all = ScopeNames::for($type);
+            $list = $this->scopes->where('scope_type', $type)->map(fn ($s) => $all[$s->scope_id] ?? null)->filter()->sort()->values()->all();
+
+            return $list;
+        };
+        if ($t = $names('tribe')) {
             $parts[] = (count($t) > 1 ? 'Tribus ' : 'Tribu ').implode(', ', $t);
         }
-        if ($g = $names(Gem::class, 'gem')) {
+        if ($g = $names('gem')) {
             $parts[] = (count($g) > 1 ? 'GEMs ' : 'GEM ').implode(', ', $g);
         }
-        if ($d = $names(Department::class, 'department')) {
+        if ($d = $names('department')) {
             $parts[] = 'Dépt. '.implode(', ', $d);
         }
 

@@ -171,7 +171,8 @@ class CalendarController extends Controller
 
     private function escape(string $text): string
     {
-        return str_replace(['\\', ';', ',', "\r\n", "\n"], ['\\\\', '\;', '\,', '\n', '\n'], $text);
+        // Aucun retour a la ligne brut (CR, LF) : impossible d'injecter une ligne iCal.
+        return str_replace(['\\', ';', ',', "\r\n", "\n", "\r"], ['\\\\', '\;', '\,', '\n', '\n', '\n'], $text);
     }
 
     /** Lignes de 75 octets maximum (RFC 5545), sans couper un caractere UTF-8. */

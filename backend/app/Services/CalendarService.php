@@ -6,6 +6,7 @@ use App\Models\Event;
 use App\Models\EventParticipation;
 use App\Models\Exercise;
 use App\Models\ExerciseResponse;
+use App\Models\ExerciseVideoView;
 use App\Models\Profile;
 use App\Models\SpiritualHealthForm;
 use App\Models\User;
@@ -117,6 +118,7 @@ class CalendarService
                 'series_starts_at' => $e->starts_at->toIso8601String(),
                 'series_ends_at' => $e->ends_at?->toIso8601String(),
                 'personal' => (bool) $e->is_personal,
+                'remind_all' => (bool) $e->remind_all,
                 'can_edit' => $editable($e),
                 'going_count' => (int) ($going[$key] ?? 0),
                 'my_response' => $mine->get($key)?->response,
@@ -272,20 +274,21 @@ class CalendarService
     {
         $out = [];
         $exercises = self::exercisesFor($user)
-            ->whereNotNull('due_date')
-            ->whereDate('due_date', '>=', $from->toDateString())
-            ->whereDate('due_date', '<=', $to->toDateString())
+            ->whereNotNull('closes_at')
+            ->whereBetween('closes_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()])
             ->get();
-        $done = ExerciseResponse::where('user_id', $user->id)->whereIn('exercise_id', $exercises->pluck('id'))->pluck('exercise_id')->all();
+        $responses = ExerciseResponse::where('user_id', $user->id)->whereIn('exercise_id', $exercises->pluck('id'))->get()->keyBy('exercise_id');
+        $views = ExerciseVideoView::where('user_id', $user->id)->whereIn('exercise_id', $exercises->pluck('id'))->get()->keyBy('exercise_id');
         foreach ($exercises as $ex) {
             $out[] = [
                 'key' => 'task-'.$ex->id,
                 'kind' => 'task',
-                'title' => 'À rendre : '.$ex->title,
-                'date' => $ex->due_date->toDateString(),
+                'title' => ($ex->isVideo() ? 'À regarder : ' : 'À rendre : ').$ex->title,
+                'date' => $ex->closes_at->toDateString(),
+                'time' => $ex->closes_at->format('H:i'),
                 'all_day' => true,
-                'done' => in_array($ex->id, $done, true),
-                'url' => '/tableau-de-bord#exercices',
+                'done' => ExerciseProgress::isDone($ex, $views->get($ex->id), $responses->get($ex->id)),
+                'url' => '/exercices/'.$ex->id,
             ];
         }
 

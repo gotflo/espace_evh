@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
-import { useAutoRefresh } from '../hooks/useAutoRefresh'
+import { usePulse } from '../pulse'
 import type { EventOccurrence } from '../types'
 import { CAT_LABEL, longDay, optimisticRsvp, parseYmd, relativeDay, rsvpOccurrence, timeRange } from '../utils/events'
 import { Skeleton } from './Skeleton'
@@ -21,7 +21,7 @@ export function EventsFeed({ days = 30, limit = 8 }: { days?: number; limit?: nu
   }, [days])
 
   useEffect(() => { load() }, [load])
-  useAutoRefresh(load)
+  usePulse('events', load)
 
   async function rsvp(ev: EventOccurrence, response: 'present' | 'absent', volunteer?: boolean) {
     setItems((prev) => prev?.map((e) => e.key === ev.key ? optimisticRsvp(e, response, volunteer) : e) ?? null)

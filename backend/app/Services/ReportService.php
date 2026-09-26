@@ -116,35 +116,57 @@ class ReportService
             ->orWhereHas('scopes', fn ($s) => $s->where('scope_type', 'tribe')->whereIn('scope_id', $scope['tribe_ids'] ?: [0]))));
         $occurrences = CalendarService::occurrences($eventsQuery, $start->copy(), $end->copy());
 
+        // Une seule passe sur les donnees (et non une par mois) : le calcul reste rapide
+        // meme pour 500 membres sur 12 mois.
+        $joined = array_count_values($members->map(fn ($p) => $p->created_at ? $p->created_at->format('Y-m') : '9999-99')->all());
+        ksort($joined);
+        $formsByPeriod = [];
+        foreach ($forms as $f) {
+            $formsByPeriod[$f->period][] = ['spiritual' => $f->spiritualScore(), 'social' => $f->socialScore()];
+        }
+        $month = fn ($date) => substr((string) ($date instanceof \DateTimeInterface ? $date->format('Y-m-d') : $date), 0, 10);
+        $evalByMonth = [];
+        foreach ($evaluations as $e) {
+            $evalByMonth[substr($month($e->evaluated_on), 0, 7)][] = (float) $e->score;
+        }
+        $attByMonth = [];
+        foreach ($attendance as $a) {
+            $day = $month($a->attended_on);
+            $key = substr($day, 0, 7);
+            $attByMonth[$key]['sessions'][$day.'|'.$a->event] = true;
+            $attByMonth[$key]['present'] = ($attByMonth[$key]['present'] ?? 0) + ($a->status === 'present' ? 1 : 0);
+        }
+        $partByMonth = array_count_values($participations->map(fn ($p) => substr($month($p->occurs_on), 0, 7))->all());
+        $eventsByMonth = array_count_values($occurrences->map(fn ($o) => $o['start']->format('Y-m'))->all());
+        $activeCount = $active->count();
+
         $monthly = [];
         foreach ($periods as $period) {
             $mStart = Carbon::createFromFormat('Y-m-d', $period.'-01')->startOfDay();
-            $mEnd = $mStart->copy()->endOfMonth();
-            $eligible = $members->filter(fn ($p) => $p->created_at && $p->created_at->lte($mEnd))->count();
-            $mForms = $forms->where('period', $period);
-            $spiritual = $mForms->map(fn ($f) => $f->spiritualScore())->filter(fn ($v) => $v !== null);
-            $social = $mForms->map(fn ($f) => $f->socialScore())->filter(fn ($v) => $v !== null);
-            $mEval = $evaluations->filter(fn ($e) => substr((string) $e->evaluated_on, 0, 7) === $period);
-            $mAtt = $attendance->filter(fn ($a) => substr((string) $a->attended_on, 0, 7) === $period);
-            $sessions = $mAtt->map(fn ($a) => substr((string) $a->attended_on, 0, 10).'|'.$a->event)->unique()->count();
-            $present = $mAtt->where('status', 'present')->count();
-            $denominator = $sessions * max(1, $active->count());
+            $eligible = array_sum(array_filter($joined, fn ($n, $m) => $m <= $period, ARRAY_FILTER_USE_BOTH));
+            $mForms = $formsByPeriod[$period] ?? [];
+            $spiritual = collect(array_column($mForms, 'spiritual'))->filter(fn ($v) => $v !== null);
+            $social = collect(array_column($mForms, 'social'))->filter(fn ($v) => $v !== null);
+            $mEval = $evalByMonth[$period] ?? [];
+            $sessions = count($attByMonth[$period]['sessions'] ?? []);
+            $present = $attByMonth[$period]['present'] ?? 0;
+            $denominator = $sessions * max(1, $activeCount);
 
             $monthly[] = [
                 'month' => $period,
                 'label' => ucfirst($mStart->locale('fr')->isoFormat('MMM YY')),
                 'members' => $eligible,
-                'new_members' => $members->filter(fn ($p) => $p->created_at && $p->created_at->between($mStart, $mEnd))->count(),
-                'fiss_filled' => $mForms->count(),
-                'fiss_rate' => $eligible ? round($mForms->count() / $eligible * 100, 1) : null,
+                'new_members' => $joined[$period] ?? 0,
+                'fiss_filled' => count($mForms),
+                'fiss_rate' => $eligible ? round(count($mForms) / $eligible * 100, 1) : null,
                 'spiritual_score' => $spiritual->count() ? round($spiritual->avg(), 1) : null,
                 'social_score' => $social->count() ? round($social->avg(), 1) : null,
-                'vertumetre' => $mEval->count() ? round((float) $mEval->avg('score'), 1) : null,
+                'vertumetre' => $mEval ? round(array_sum($mEval) / count($mEval), 1) : null,
                 'attendance_sessions' => $sessions,
                 'attendance_present' => $present,
                 'attendance_rate' => $sessions ? min(100, round($present / $denominator * 100, 1)) : null,
-                'events' => $occurrences->filter(fn ($o) => $o['start']->format('Y-m') === $period)->count(),
-                'participations' => $participations->filter(fn ($p) => substr((string) $p->occurs_on, 0, 7) === $period)->count(),
+                'events' => $eventsByMonth[$period] ?? 0,
+                'participations' => $partByMonth[$period] ?? 0,
             ];
         }
 
