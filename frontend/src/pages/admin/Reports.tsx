@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../api/client'
 import { AppLayout } from '../../components/AppLayout'
 import { ColumnChart, HBarChart, LineChart, Meter, VIZ } from '../../components/charts'
 import { toast } from '../../toast'
 import type { ReportData, ReportMemberRow, ReportOptions } from '../../types'
+
+interface MembersPage { members: ReportMemberRow[]; total: number; has_more: boolean }
 
 type Tab = 'overview' | 'members'
 type Filter = 'all' | 'active' | 'inactive' | 'incomplete' | 'fiss_missing'
@@ -74,6 +76,10 @@ export default function Reports() {
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
   const [rows, setRows] = useState<ReportMemberRow[] | null>(null)
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [query, setQuery] = useState('')
   const [exporting, setExporting] = useState(false)
 
@@ -96,15 +102,29 @@ export default function Reports() {
   }, [scope, months])
   useEffect(() => { loadReport() }, [loadReport])
 
+  // Liste affichee par pages de 60 (recherche cote serveur) ; liste complete seulement pour le PDF.
+  const membersUrl = useCallback((p: number, all = false) =>
+    `/admin/reports/members?scope=${encodeURIComponent(scope)}&filter=${filter}&q=${encodeURIComponent(query.trim())}${all ? '&all=1' : `&page=${p}`}`,
+  [scope, filter, query])
   useEffect(() => {
     if (!scope || tab !== 'members') return
-    setRows(null)
-    api<{ members: ReportMemberRow[] }>(`/admin/reports/members?scope=${encodeURIComponent(scope)}&filter=${filter}`)
-      .then((r) => setRows(r.members)).catch(() => setRows([]))
-  }, [scope, filter, tab])
+    const t = window.setTimeout(() => {
+      setRows(null)
+      api<MembersPage>(membersUrl(1))
+        .then((r) => { setRows(r.members); setTotal(r.total); setHasMore(r.has_more); setPage(1) })
+        .catch(() => { setRows([]); setTotal(0); setHasMore(false) })
+    }, 250)
+    return () => window.clearTimeout(t)
+  }, [scope, tab, membersUrl])
 
-  const q = query.trim().toLowerCase()
-  const shown = useMemo(() => (rows ?? []).filter((r) => !q || r.name.toLowerCase().includes(q) || (r.phone ?? '').includes(q)), [rows, q])
+  function moreMembers() {
+    setLoadingMore(true)
+    api<MembersPage>(membersUrl(page + 1))
+      .then((r) => { setRows((prev) => [...(prev ?? []), ...r.members]); setHasMore(r.has_more); setPage(page + 1) })
+      .catch(() => {})
+      .finally(() => setLoadingMore(false))
+  }
+  const shown = rows ?? []
 
   async function exportReport() {
     if (!report) return
@@ -121,8 +141,8 @@ export default function Reports() {
     if (!rows) return
     setExporting(true)
     try {
-      const { downloadMembersPdf } = await import('../../reports/pdf')
-      await downloadMembersPdf(report?.scope.label ?? '', FILTERS.find((f) => f.key === filter)?.label ?? '', shown)
+      const [{ downloadMembersPdf }, all] = await Promise.all([import('../../reports/pdf'), api<MembersPage>(membersUrl(1, true))])
+      await downloadMembersPdf(report?.scope.label ?? '', FILTERS.find((f) => f.key === filter)?.label ?? '', all.members)
       api('/admin/reports/exported', { method: 'POST', body: { scope, kind: 'members' }, toast: false }).catch(() => {})
       toast.success('La liste PDF a été téléchargée.', { title: 'PDF prêt' })
     } catch { toast.error('La génération du PDF a échoué. Réessayez.') } finally { setExporting(false) }
@@ -258,7 +278,7 @@ export default function Reports() {
             <div className="empty-state compact"><span aria-hidden>👥</span><p>Aucun membre pour ce filtre.</p></div>
           ) : (
             <div className="member-cards">
-              <p className="helper">{shown.length} membre(s)</p>
+              <p className="helper">{total > shown.length ? `${shown.length} sur ${total} membres` : `${total} membre(s)`}</p>
               {shown.map((r) => (
                 <button key={r.user_id} className="member-card" onClick={() => navigate(`/admin/membres/${r.user_id}`)}>
                   <div className="member-card-head">
@@ -275,6 +295,13 @@ export default function Reports() {
                   </div>
                 </button>
               ))}
+              {hasMore && (
+                <div className="center member-more">
+                  <button className="btn btn-ghost" disabled={loadingMore} onClick={moreMembers}>
+                    {loadingMore ? <span className="spinner" /> : `Afficher plus (${total - shown.length} restant(s))`}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </>

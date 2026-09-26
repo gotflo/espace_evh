@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { clearDraft, readDraft, useDraft } from '../utils/drafts'
 import { api } from '../api/client'
 import { AppLayout } from '../components/AppLayout'
 import { SkeletonCard } from '../components/Skeleton'
@@ -115,12 +116,15 @@ export default function MyFiss() {
     api<FissData>('/me/fiss').then((d) => {
       setData(d)
       setEditing(null)
-      setForm(d.current ? { ...EMPTY } : EMPTY)
+      setForm(d.current ? { ...EMPTY } : (readDraft<FissForm>('fiss:new') ?? EMPTY))
     }).catch(() => setData(null))
   }, [])
   useEffect(() => { load() }, [load])
 
   const set = <K extends keyof FissForm>(k: K, v: FissForm[K]) => setForm((f) => ({ ...f, [k]: v }))
+  // Brouillon de la fiche en cours de saisie (jamais perdue si l'envoi echoue).
+  const draftKey = editing?.id ? `fiss:${editing.id}` : data && !data.current ? 'fiss:new' : null
+  useDraft(draftKey, form, (v) => FIELDS.every((k) => v[k] === null || v[k] === undefined || v[k] === ''))
 
   const vieSpi = useMemo(() => (form.meditation ?? 0) + (form.priere ?? 0) + (form.jeune ?? 0), [form])
   const vieSoc = useMemo(() => (form.situation_financiere ?? 0) + (form.situation_familiale ?? 0) + (form.situation_conjugale ?? 0), [form])
@@ -137,6 +141,7 @@ export default function MyFiss() {
     try {
       if (editing?.id) await api(`/me/fiss/${editing.id}`, { method: 'PUT', body })
       else await api('/me/fiss', { method: 'POST', body })
+      if (draftKey) clearDraft(draftKey)
       load()
     } catch { /* toast automatique */ } finally { setBusy(false) }
   }

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { AppLayout } from '../components/AppLayout'
 import { PushSettings } from '../components/PushSettings'
+import { NotificationPrefs } from '../components/NotificationPrefs'
 import { SkeletonCard } from '../components/Skeleton'
 import { usePulse } from '../pulse'
 import { NOTIF_ICON, setUnread, timeAgo, useUnreadCount } from '../notifications'
@@ -138,11 +139,13 @@ export default function Notifications() {
 
         <aside className="notif-side">
           <PushSettings />
+          <NotificationPrefs />
           <section className="panel">
             <div className="panel-head"><h3>Vous êtes prévenu pour</h3></div>
             <ul className="notif-help">
               <li>📢 Les annonces qui vous concernent</li>
               <li>📅 Les nouveaux événements, et un rappel la veille et 1 h avant</li>
+              <li>⛪ Les cultes : le programme la veille au soir et un rappel 30 min avant</li>
               <li>📝 Les exercices à faire et leur date limite</li>
               <li>🩺 Votre fiche FISS du mois</li>
               <li>✉️ Les réponses à vos demandes</li>

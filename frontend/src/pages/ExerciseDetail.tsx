@@ -6,6 +6,7 @@ import { YouTubePlayer, type WatchResult } from '../components/YouTubePlayer'
 import { useAuth } from '../auth/AuthContext'
 import type { MyExercise } from '../types'
 import { deadlineLabel } from '../utils/exercises'
+import { clearDraft, readDraft, useDraft } from '../utils/drafts'
 
 export default function ExerciseDetail() {
   const { id } = useParams()
@@ -16,11 +17,12 @@ export default function ExerciseDetail() {
   const [editing, setEditing] = useState(true)
   const [busy, setBusy] = useState(false)
   const [resumeAt, setResumeAt] = useState<number | null>(null)
+  useDraft(ex && editing && !ex.is_closed ? `exercise:${id}` : null, text, (v) => !v.trim() || v === ex?.my_response)
 
   const load = useCallback(() => {
     api<{ exercise: MyExercise }>(`/me/exercises/${id}`).then((r) => {
       setEx(r.exercise)
-      setText(r.exercise.my_response ?? '')
+      setText(r.exercise.my_response ?? readDraft<string>(`exercise:${id}`) ?? '')
       setEditing(!r.exercise.my_response)
       setResumeAt((prev) => prev ?? r.exercise.resume_at ?? 0)
     }).catch(() => setMissing(true))
@@ -35,6 +37,7 @@ export default function ExerciseDetail() {
     setBusy(true)
     try {
       await api(`/me/exercises/${id}/respond`, { method: 'POST', body: { response: text } })
+      clearDraft(`exercise:${id}`)
       load()
     } catch (err) {
       if (err instanceof ApiError && err.status === 422) load()

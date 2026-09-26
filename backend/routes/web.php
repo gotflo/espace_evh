@@ -14,4 +14,4 @@ Route::get('/{any}', function () {
     abort_unless(File::exists($index), 404, "Application non deployee (index.html manquant).");
 
     return response(File::get($index), 200, ['Content-Type' => 'text/html; charset=UTF-8']);
-})->where('any', '^(?!api|up).*$');
+})->where('any', '^(?!api|up)(?!.*\.[A-Za-z0-9]{1,8}$).*$'); // une adresse de fichier absente renvoie 404

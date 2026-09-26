@@ -51,6 +51,10 @@ class AuditLogController extends Controller
         'evaluation.created' => 'Note ajoutée',
         'evaluation.deleted' => 'Note supprimée',
         'report.exported' => 'Rapport exporté (PDF)',
+        'verse.created' => 'Verset du tableau de bord ajouté',
+        'verse.updated' => 'Verset du tableau de bord modifié',
+        'verse.deleted' => 'Verset du tableau de bord supprimé',
+        'verse.reordered' => 'Ordre des versets modifié',
     ];
 
     public function index(Request $request): JsonResponse

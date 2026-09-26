@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { api, ApiError, auth as tokenStore } from '../api/client'
 import { forgetPushOnThisDevice } from '../push'
 import { setUnread } from '../notifications'
+import { rememberPreviousVisit } from '../utils/visit'
 import type { AuthPayload, Profile, User, UserRole } from '../types'
 
 interface AuthState {
@@ -31,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   const apply = useCallback((p: AuthPayload) => {
+    rememberPreviousVisit(p.user?.last_seen_at)
     setUser(p.user)
     setProfileState(p.profile)
     setRoles(p.roles ?? [])

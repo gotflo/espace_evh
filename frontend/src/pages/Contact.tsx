@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { clearDraft, readDraft, useDraft } from '../utils/drafts'
 import { api, ApiError } from '../api/client'
 import { AppLayout } from '../components/AppLayout'
 import { SkeletonCard } from '../components/Skeleton'
@@ -15,10 +16,13 @@ const CATEGORIES: { key: RequestCategory; label: string }[] = [
 export default function Contact() {
   const [items, setItems] = useState<MyRequest[]>([])
   const [loading, setLoading] = useState(true)
-  const [category, setCategory] = useState<RequestCategory>('question')
-  const [subject, setSubject] = useState('')
-  const [message, setMessage] = useState('')
+  // Brouillon : un message commence n'est jamais perdu (restaure a l'ouverture).
+  const [draft] = useState(() => readDraft<{ category: RequestCategory; subject: string; message: string }>('contact'))
+  const [category, setCategory] = useState<RequestCategory>(draft?.category ?? 'question')
+  const [subject, setSubject] = useState(draft?.subject ?? '')
+  const [message, setMessage] = useState(draft?.message ?? '')
   const [busy, setBusy] = useState(false)
+  useDraft('contact', { category, subject, message }, (v) => !v.subject.trim() && !v.message.trim())
   const [error, setError] = useState('')
 
   function load() {
@@ -33,7 +37,7 @@ export default function Contact() {
     setError(''); setBusy(true)
     try {
       await api('/me/requests', { method: 'POST', body: { category, subject: subject || null, message }, toast: 'Votre demande a bien été envoyée. Un responsable vous répondra.' })
-      setSubject(''); setMessage(''); setCategory('question')
+      setSubject(''); setMessage(''); setCategory('question'); clearDraft('contact')
       load()
     } catch (err) {
       setError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
@@ -59,7 +63,8 @@ export default function Contact() {
           </div>
           <div className="field">
             <label>Message</label>
-            <textarea className="input" rows={5} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Ecrivez votre message..." />
+            <textarea className="input" rows={5} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Écrivez votre message…" />
+            {draft && message === draft.message && <p className="helper">✎ Brouillon retrouvé : votre message n’avait pas encore été envoyé.</p>}
           </div>
           <button className="btn btn-primary" disabled={busy || !message.trim()} onClick={send}>
             {busy ? <span className="spinner" /> : 'Envoyer la demande'}

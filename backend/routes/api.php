@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\Admin\AuditLogController;
 use App\Http\Controllers\Api\Admin\NewMemberController;
 use App\Http\Controllers\Api\Admin\ReportController;
 use App\Http\Controllers\Api\Admin\ValidationController;
+use App\Http\Controllers\Api\Admin\VerseController;
 use App\Http\Controllers\Api\MyFamilyController;
 use App\Http\Controllers\Api\MyTribeChangeController;
 use App\Http\Controllers\Api\AuthController;
@@ -28,6 +29,8 @@ use App\Http\Controllers\Api\MyFissController;
 use App\Http\Controllers\Api\MyOverviewController;
 use App\Http\Controllers\Api\MyExerciseController;
 use App\Http\Controllers\Api\MyNotificationController;
+use App\Http\Controllers\Api\MyNotificationPrefsController;
+use App\Http\Controllers\Api\MyWelcomeController;
 use App\Http\Controllers\Api\PulseController;
 use App\Http\Controllers\Api\MyServiceController;
 use App\Http\Controllers\Api\MyRequestController;
@@ -45,6 +48,9 @@ Route::post('/auth/verify-otp', [AuthController::class, 'verifyOtp'])->middlewar
 // --- Abonnement calendrier (Google Agenda, iPhone, Outlook) : jeton personnel dans l'URL ---
 Route::get('/calendar/feed/{token}.ics', [CalendarController::class, 'ics'])
     ->where('token', '[A-Za-z0-9]+')->middleware('throttle:30,1');
+
+// --- Etat de sante (surveillance externe), sans donnee sensible ---
+Route::get('/health', \App\Http\Controllers\Api\HealthController::class)->middleware('throttle:30,1');
 
 // --- Routes protegees (jeton Sanctum requis) ---
 Route::middleware(['auth:sanctum', 'throttle:150,1', \App\Http\Middleware\TrackActivity::class])->group(function () {
@@ -64,6 +70,10 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', \App\Http\Middleware\TrackA
 
     // --- Centre de notifications + notifications push ---
     Route::get('/me/pulse', [PulseController::class, 'show']);
+    Route::get('/dashboard/verse', [VerseController::class, 'current']);
+    Route::get('/me/welcome-back', [MyWelcomeController::class, 'show']);
+    Route::get('/me/notification-prefs', [MyNotificationPrefsController::class, 'show']);
+    Route::put('/me/notification-prefs', [MyNotificationPrefsController::class, 'update']);
     Route::get('/me/notifications', [MyNotificationController::class, 'index']);
     Route::get('/me/notifications/unread-count', [MyNotificationController::class, 'unreadCount']);
     Route::post('/me/notifications/read-all', [MyNotificationController::class, 'markAllRead']);
@@ -224,6 +234,16 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', \App\Http\Middleware\TrackA
         });
 
         // Annonces / communication
+        // Versets du tableau de bord (PR, PA)
+        Route::middleware('permission:content.manage')->group(function () {
+            Route::get('/verses', [VerseController::class, 'index']);
+            Route::post('/verses', [VerseController::class, 'store']);
+            Route::post('/verses/reorder', [VerseController::class, 'reorder']);
+            Route::put('/verses/{verse}', [VerseController::class, 'update']);
+            Route::delete('/verses/{verse}', [VerseController::class, 'destroy']);
+            Route::get('/verses/{verse}/history', [VerseController::class, 'history']);
+        });
+
         Route::middleware('permission:announcements.publish')->group(function () {
             Route::get('/announcements', [AnnouncementController::class, 'index']);
             Route::post('/announcements', [AnnouncementController::class, 'store']);

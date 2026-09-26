@@ -35,10 +35,21 @@ class ReportController extends Controller
         $data = $request->validate([
             'scope' => ['required', 'string', 'max:30'],
             'filter' => ['nullable', 'in:all,active,inactive,incomplete,fiss_missing'],
+            'q' => ['nullable', 'string', 'max:80'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'all' => ['nullable', 'boolean'],
         ]);
-        $rows = ReportService::memberRows($request->user(), $data['scope'], $data['filter'] ?? 'all');
+        // Affichage : 60 par page. Liste complete seulement pour l'export PDF (all=1).
+        $all = $request->boolean('all');
+        $page = $all ? null : (int) ($data['page'] ?? 1);
+        $result = ReportService::memberRows($request->user(), $data['scope'], $data['filter'] ?? 'all', (string) ($data['q'] ?? ''), $page);
 
-        return response()->json(['members' => $rows, 'total' => count($rows)]);
+        return response()->json([
+            'members' => $result['rows'],
+            'total' => $result['total'],
+            'page' => $page ?? 1,
+            'has_more' => $page !== null && $page * 60 < $result['total'],
+        ]);
     }
 
     /** Trace l'export d'un rapport PDF (genere sur l'appareil a partir des donnees autorisees). */

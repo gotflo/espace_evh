@@ -422,3 +422,64 @@
 /* ---------- Ecran de secours (erreur d'affichage) ---------- */
 .crash-card { text-align: center; display: flex; flex-direction: column; align-items: stretch; gap: 0.4rem; }
 .crash-icon { font-size: 2.6rem; margin-bottom: 0.4rem; }
+.member-more { grid-column: 1 / -1; margin-top: 0.4rem; }
+
+/* ---------- Versets du tableau de bord ---------- */
+.verse-skeleton { height: 150px; border-radius: var(--radius-lg); margin-bottom: 1.2rem; }
+.verse-message { margin-top: 0.7rem; font-size: 0.9rem; color: rgba(255, 255, 255, 0.82); position: relative; }
+.verse-editor { width: 620px; }
+.verse-editor .verse-banner { margin-bottom: 0; }
+.verse-list { list-style: none; display: flex; flex-direction: column; gap: 0.6rem; }
+.verse-item { display: flex; gap: 0.8rem; align-items: flex-start; padding: 0.8rem; background: #fff; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); }
+.verse-item.state-expired, .verse-item.state-draft { background: #fafbfb; }
+.verse-order { display: flex; flex-direction: column; gap: 0.2rem; }
+.icon-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border-subtle); background: #fff; color: var(--text-muted); cursor: pointer; font-size: 0.7rem; }
+.icon-btn:hover:not(:disabled) { border-color: #0d5f57; color: #0d5f57; }
+.icon-btn:disabled { opacity: 0.35; cursor: default; }
+.verse-item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.verse-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; }
+.verse-item-head small { color: var(--text-soft); }
+.verse-item-text { font-family: var(--font-serif); font-size: 1.02rem; line-height: 1.45; color: var(--text); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.verse-state { font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.55rem; border-radius: 999px; background: var(--chip-bg); color: var(--text-muted); }
+.verse-state.live { background: rgba(30, 158, 90, 0.14); color: #137a44; }
+.verse-state.scheduled { background: #e7eefb; color: #1f4fa3; }
+.verse-state.expired { background: #eceff0; color: #5c6966; }
+.verse-state.pinned { background: #fff4d6; color: #8a5a00; }
+.verse-item-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem; }
+@media (max-width: 600px) {
+  .verse-item { flex-wrap: wrap; }
+  .verse-item-actions { flex-direction: row; flex-wrap: wrap; width: 100%; justify-content: flex-end; align-items: center; }
+}
+
+/* ---------- Content de vous revoir ---------- */
+.welcome-back { position: relative; background: #fff; border: 1px solid var(--border-subtle); border-left: 4px solid #f0c419; border-radius: var(--radius); padding: 1rem 2.6rem 1rem 1.1rem; margin-bottom: 1.1rem; box-shadow: 0 6px 18px rgba(16, 40, 36, 0.06); animation: welcome-in 0.3s ease-out; }
+.welcome-back h2 { font-size: 1.3rem; color: #0d5f57; margin-bottom: 0.3rem; }
+.welcome-back p { color: var(--text-muted); font-size: 0.92rem; }
+.welcome-back ul { list-style: none; display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.5rem; }
+.welcome-back li { font-size: 0.93rem; }
+.welcome-back li a { font-weight: 600; color: #0d5f57; }
+.welcome-back li small { color: var(--text-soft); }
+.welcome-back .welcome-close { position: absolute; top: 0.6rem; right: 0.6rem; width: 32px; height: 32px; border: none; background: var(--chip-bg); border-radius: 50%; cursor: pointer; color: var(--text-muted); font-size: 1.1rem; }
+@keyframes welcome-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .welcome-back { animation: none; } }
+.prefs-list { list-style: none; display: flex; flex-direction: column; gap: 0.55rem; margin: 0.6rem 0; }
+.prefs-list .switch-line { font-size: 0.92rem; min-height: 32px; }
+
+/* ---------- Hors ligne ---------- */
+.offline-banner { position: fixed; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 120; max-width: min(92vw, 520px); background: #3b2f0b; color: #fff4d6; padding: 0.6rem 1rem; border-radius: 12px; font-size: 0.86rem; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); text-align: center; }
+.offline-banner.is-back { background: #0f5a3a; color: #dff7ea; }
+@media (min-width: 900px) { .offline-banner { bottom: 1.2rem; } }
+
+/* ---------- Accessibilite : focus clavier toujours visible ---------- */
+a:focus-visible, button:focus-visible, summary:focus-visible, [role="radio"]:focus-visible, [role="option"]:focus-visible,
+input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible, .nav-item:focus-visible, .bottom-item:focus-visible {
+  outline: 3px solid #f0c419; outline-offset: 2px; border-radius: 6px;
+}
+.skip-link { position: absolute; left: 0.8rem; top: -3rem; z-index: 200; background: #0d5f57; color: #fff; padding: 0.6rem 1rem; border-radius: 10px; font-weight: 600; transition: top 0.15s; }
+.skip-link:focus { top: 0.8rem; color: #fff; }
+.content:focus { outline: none; }
+/* Zones tactiles confortables sur mobile */
+@media (pointer: coarse) {
+  .btn.small, .chip-toggle, .btn-link { min-height: 40px; }
+  .btn-link { display: inline-flex; align-items: center; }
+}

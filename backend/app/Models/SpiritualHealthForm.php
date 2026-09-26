@@ -43,14 +43,21 @@ class SpiritualHealthForm extends Model
      */
     public function spiritualScore(): ?float
     {
+        return self::spiritualScoreOf($this->attributesToArray());
+    }
+
+    /** Meme calcul sur une ligne brute (rapports : evite de construire des milliers d'objets). */
+    public static function spiritualScoreOf(array|object $row): ?float
+    {
+        $row = (array) $row;
         $parts = [];
         foreach (['meditation', 'priere', 'jeune'] as $k) {
-            if ($this->{$k} !== null) {
-                $parts[] = min(20, (int) $this->{$k}) / 20 * 100;
+            if (($row[$k] ?? null) !== null) {
+                $parts[] = min(20, (int) $row[$k]) / 20 * 100;
             }
         }
         foreach (['sanctification_corps', 'sanctification_ame', 'sanctification_esprit'] as $k) {
-            $v = ['mal' => 0, 'moyen' => 50, 'bien' => 100][$this->{$k} ?? ''] ?? null;
+            $v = ['mal' => 0, 'moyen' => 50, 'bien' => 100][$row[$k] ?? ''] ?? null;
             if ($v !== null) {
                 $parts[] = $v;
             }
@@ -62,11 +69,17 @@ class SpiritualHealthForm extends Model
     /** Score de vie sociale (0-100) : situations financiere / familiale / conjugale renseignees. */
     public function socialScore(): ?float
     {
+        return self::socialScoreOf($this->attributesToArray());
+    }
+
+    public static function socialScoreOf(array|object $row): ?float
+    {
+        $row = (array) $row;
         $parts = array_values(array_filter([
-            $this->situation_financiere, $this->situation_familiale, $this->situation_conjugale,
+            $row['situation_financiere'] ?? null, $row['situation_familiale'] ?? null, $row['situation_conjugale'] ?? null,
         ], fn ($v) => $v !== null));
 
-        return $parts ? round(array_sum(array_map(fn ($v) => min(20, $v) / 20 * 100, $parts)) / count($parts), 1) : null;
+        return $parts ? round(array_sum(array_map(fn ($v) => min(20, (int) $v) / 20 * 100, $parts)) / count($parts), 1) : null;
     }
 
     public function user(): BelongsTo

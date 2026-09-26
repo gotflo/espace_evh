@@ -85,7 +85,7 @@ export default function Announcements() {
           </div>
           <div className="field">
             <label>Titre <span className="helper" style={{ display: 'inline' }}>(optionnel)</span></label>
-            <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. Culte special dimanche" />
+            <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. Culte spécial dimanche" />
           </div>
           <div className="field">
             <label>Message <span className="helper" style={{ display: 'inline' }}>(optionnel)</span></label>

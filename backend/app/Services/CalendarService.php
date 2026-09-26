@@ -160,11 +160,13 @@ class CalendarService
      */
     public static function weddings(Carbon $from, Carbon $to): array
     {
+        // Seulement les mois affiches (et non toute l'eglise).
         $profiles = Profile::where('is_completed', true)->where('marital_status', 'marie')
-            ->whereNotNull('wedding_day')->whereNotNull('wedding_month')
+            ->whereNotNull('wedding_day')->whereIn('wedding_month', self::monthsBetween($from, $to))
             ->get(['user_id', 'first_name', 'last_name', 'wedding_day', 'wedding_month', 'spouse_name']);
         $spouses = \App\Models\FamilyLink::where('relation', 'spouse')->where('status', 'confirmed')
             ->whereIn('user_id', $profiles->pluck('user_id'))->pluck('relative_user_id', 'user_id');
+        $partners = Profile::whereIn('user_id', $spouses->values()->filter())->get(['user_id', 'first_name', 'last_name'])->keyBy('user_id');
 
         $out = [];
         $seen = [];
@@ -185,7 +187,7 @@ class CalendarService
                     continue;
                 }
                 $seen[$coupleKey.$date] = true;
-                $partnerName = $partner ? $profiles->firstWhere('user_id', $partner)?->full_name : $p->spouse_name;
+                $partnerName = $partner ? $partners->get($partner)?->full_name : $p->spouse_name;
                 $names = array_values(array_filter([$p->full_name, $partnerName]));
                 $out[] = [
                     'key' => 'wedding-'.$coupleKey.'-'.$date,
@@ -213,7 +215,7 @@ class CalendarService
     public static function birthdays(Carbon $from, Carbon $to): array
     {
         $profiles = Profile::where('is_completed', true)
-            ->whereNotNull('birth_day')->whereNotNull('birth_month')
+            ->whereNotNull('birth_day')->whereIn('birth_month', self::monthsBetween($from, $to))
             ->get(['id', 'user_id', 'first_name', 'last_name', 'birth_day', 'birth_month', 'photo_path']);
 
         $byDate = [];
@@ -318,6 +320,21 @@ class CalendarService
     public static function exercisesFor(User $user): Builder
     {
         return Exercise::where('is_active', true)->visibleTo($user);
+    }
+
+    /**
+     * Numeros des mois (1-12) couverts par [from, to].
+     *
+     * @return array<int, int>
+     */
+    public static function monthsBetween(Carbon $from, Carbon $to): array
+    {
+        $months = [];
+        for ($m = $from->copy()->startOfMonth(); $m->lte($to) && count($months) < 12; $m->addMonth()) {
+            $months[(int) $m->month] = (int) $m->month;
+        }
+
+        return array_values($months);
     }
 
     /** « A », « A et B », « A, B et C » */

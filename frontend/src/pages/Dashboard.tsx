@@ -8,6 +8,8 @@ import { MyExercises } from '../components/MyExercises'
 import { AnnouncementsFeed } from '../components/AnnouncementsFeed'
 import { EventsFeed } from '../components/EventsFeed'
 import { ServiceSchedule } from '../components/ServiceSchedule'
+import { VerseBanner } from '../components/VerseBanner'
+import { WelcomeBack } from '../components/WelcomeBack'
 import { DashRequests } from '../components/DashRequests'
 import { FissReminder } from '../components/FissReminder'
 import { FissSummary } from '../components/FissSummary'
@@ -78,14 +80,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="verse-banner">
-        <span className="verse-label">Notre appel</span>
-        <p className="verse-text">
-          Prenez donc garde à vous-mêmes, et à tout le troupeau au sein duquel le Saint-Esprit
-          vous a établis évêques, pour paître l'Église de Dieu, qu'il s'est acquise par son propre sang.
-        </p>
-        <span className="verse-ref">Actes 20.28</span>
-      </div>
+      <WelcomeBack />
+      <VerseBanner />
 
       <PushSettings variant="prompt" />
       <FissReminder />

@@ -49,7 +49,7 @@ export default function Requests() {
   }
 
   return (
-    <AppLayout title="Demandes des fidèles" subtitle="Messages recus, a traiter">
+    <AppLayout title="Demandes des fidèles" subtitle="Messages reçus, à traiter">
       {error && <div className="alert alert-error">{error}</div>}
       {loading ? (
         <div className="feed"><SkeletonCard /><SkeletonCard /></div>
@@ -75,7 +75,7 @@ export default function Requests() {
               {replyFor === r.id ? (
                 <div className="req-reply-box">
                   <textarea className="input" rows={3} value={replyText} autoFocus
-                    onChange={(e) => setReplyText(e.target.value)} placeholder="Ecrivez votre réponse au fidèle..." />
+                    onChange={(e) => setReplyText(e.target.value)} placeholder="Écrivez votre réponse au fidèle…" />
                   <div className="req-reply-actions">
                     <button className="btn-link" onClick={() => setReplyFor(null)}>Annuler</button>
                     <button className="btn btn-primary small" disabled={busy || !replyText.trim()} onClick={() => sendReply(r.id)}>

@@ -80,7 +80,7 @@ export default function RolesAdmin() {
 
   const isSystem = editing !== 'new' && editing !== null && editing.is_system
 
-  const createBtn = <button className="btn btn-primary small" onClick={() => openEditor('new')}>+ Créer un role</button>
+  const createBtn = <button className="btn btn-primary small" onClick={() => openEditor('new')}>+ Créer un rôle</button>
 
   return (
     <AppLayout title="Rôles et permissions" subtitle="Definir qui peut faire quoi" actions={editing ? undefined : createBtn}>
@@ -90,7 +90,7 @@ export default function RolesAdmin() {
             <button key={r.id} className="role-card" onClick={() => openEditor(r)}>
               <div className="role-card-top">
                 <span className="role-card-name">{r.name}</span>
-                {r.is_system ? <span className="badge">Base</span> : <span className="badge badge-gold">Personnalise</span>}
+                {r.is_system ? <span className="badge">Base</span> : <span className="badge badge-gold">Personnalisé</span>}
               </div>
               {r.description && <p className="role-card-desc">{r.description}</p>}
               <div className="role-card-meta">
@@ -112,7 +112,7 @@ export default function RolesAdmin() {
 
           <div className="field">
             <label>Nom du rôle</label>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex. Coordinateur integration" />
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex. Coordinateur intégration" />
           </div>
           <div className="field">
             <label>Description</label>

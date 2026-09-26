@@ -34,7 +34,31 @@ function paths(node) {
     }
     return result
   }
+  // Adresse construite par une fonction locale (ex. url(page), membersUrl(1, true)) : on suit sa definition.
+  if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+    const body = localBuilder(node.getSourceFile(), node.expression.text)
+    if (body) return paths(body)
+  }
   throw new Error(`Expression URL à prendre en charge : ${node.getText()}`)
+}
+
+/** Corps (expression) d'une fonction flechee declaree dans le fichier, eventuellement dans useCallback(). */
+function localBuilder(source, name) {
+  let found
+  const visit = (n) => {
+    if (found) return
+    if (ts.isVariableDeclaration(n) && n.name.getText() === name && n.initializer) {
+      let init = n.initializer
+      if (ts.isCallExpression(init) && init.arguments[0]) init = init.arguments[0]
+      if (ts.isArrowFunction(init)) {
+        if (!ts.isBlock(init.body)) found = init.body
+        else init.body.statements.forEach((st) => { if (!found && ts.isReturnStatement(st) && st.expression) found = st.expression })
+      }
+    }
+    ts.forEachChild(n, visit)
+  }
+  visit(source)
+  return found
 }
 
 for (const file of files(join(root, 'src'))) {

@@ -36,8 +36,36 @@ class Notifier
         'profile' => 'Profil',
         'wedding' => 'Anniversaire de mariage',
         'activity' => 'Suivi',
+        'report' => 'Rapport',
         'system' => 'Information',
     ];
+
+    /**
+     * Categories que chaque membre peut couper en push (la notification reste dans la cloche).
+     * Les types absents de cette liste (FISS, reponses, famille, fonctions...) ne se coupent pas.
+     */
+    public const PREF_CATEGORIES = [
+        'services' => 'Rappels des cultes',
+        'events' => 'Événements et leurs rappels',
+        'announcements' => 'Annonces',
+        'exercises' => 'Exercices et leurs rappels',
+        'birthdays' => 'Anniversaires',
+        'followup' => 'Suivi des membres (responsables)',
+    ];
+
+    /** Categorie de preference d'une notification (null = essentielle, jamais coupee). */
+    public static function prefCategory(string $type, array $data = []): ?string
+    {
+        return match ($type) {
+            'event_reminder' => ($data['kind'] ?? null) === 'service' ? 'services' : 'events',
+            'event' => 'events',
+            'announcement' => 'announcements',
+            'task', 'task_reminder' => 'exercises',
+            'birthday', 'wedding' => 'birthdays',
+            'member', 'activity', 'report', 'request' => 'followup',
+            default => null,
+        };
+    }
 
     /**
      * @param  iterable<int>  $userIds
@@ -68,8 +96,23 @@ class Notifier
             ])->all());
         }
 
-        if (config('services.webpush.enabled')) {
-            self::push($ids->all(), [
+        // Push : sauf pour les membres qui ont coupe cette categorie.
+        $category = self::prefCategory($type, $data);
+        $pushIds = $ids;
+        if ($category) {
+            $muted = [];
+            foreach ($ids->chunk(500) as $chunk) {
+                foreach (DB::table('users')->whereIn('id', $chunk)->whereNotNull('notification_prefs')->pluck('notification_prefs', 'id') as $id => $prefs) {
+                    if ((json_decode((string) $prefs, true)[$category] ?? true) === false) {
+                        $muted[] = (int) $id;
+                    }
+                }
+            }
+            $pushIds = $ids->diff($muted)->values();
+        }
+
+        if (config('services.webpush.enabled') && $pushIds->isNotEmpty()) {
+            self::push($pushIds->all(), [
                 'priority' => $urgency,
                 'title' => $title,
                 'body' => $body ? mb_substr($body, 0, 240) : '',
