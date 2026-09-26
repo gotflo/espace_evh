@@ -36,17 +36,34 @@ function paths(node) {
   }
   // Adresse construite par une fonction locale (ex. url(page), membersUrl(1, true)) : on suit sa definition.
   if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
-    const body = localBuilder(node.getSourceFile(), node.expression.text)
+    const body = localBuilder(node.getSourceFile(), node.expression.text) ?? importedBuilder(node.getSourceFile(), node.expression.text)
     if (body) return paths(body)
   }
   throw new Error(`Expression URL à prendre en charge : ${node.getText()}`)
 }
 
-/** Corps (expression) d'une fonction flechee declaree dans le fichier, eventuellement dans useCallback(). */
+/** Meme recherche dans le fichier d'ou la fonction est importee (ex. utils/schedule.ts). */
+function importedBuilder(source, name) {
+  for (const st of source.statements) {
+    if (!ts.isImportDeclaration(st) || !st.importClause?.namedBindings || !ts.isNamedImports(st.importClause.namedBindings)) continue
+    if (!st.importClause.namedBindings.elements.some((e) => e.name.text === name)) continue
+    const base = resolve(dirname(source.fileName), st.moduleSpecifier.text)
+    for (const file of [base + '.ts', base + '.tsx']) {
+      try {
+        return localBuilder(ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true), name)
+      } catch { /* fichier suivant */ }
+    }
+  }
+}
+
+/** Corps (expression) d'une fonction flechee (eventuellement dans useCallback()) ou d'une fonction declaree dans le fichier. */
 function localBuilder(source, name) {
   let found
   const visit = (n) => {
     if (found) return
+    if (ts.isFunctionDeclaration(n) && n.name?.text === name && n.body) {
+      n.body.statements.forEach((st) => { if (!found && ts.isReturnStatement(st) && st.expression) found = st.expression })
+    }
     if (ts.isVariableDeclaration(n) && n.name.getText() === name && n.initializer) {
       let init = n.initializer
       if (ts.isCallExpression(init) && init.arguments[0]) init = init.arguments[0]

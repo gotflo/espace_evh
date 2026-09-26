@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext'
 import { AppLayout } from '../components/AppLayout'
 import { SkeletonCard } from '../components/Skeleton'
 import type { ServiceItem } from '../types'
+import { Icon } from '../components/Icon'
 
 /** Servir : le fidele choisit le(s) departement(s) ou il veut servir et les rejoint aussitot. */
 export default function Services() {
@@ -62,7 +63,7 @@ export default function Services() {
 
           <div className="toolbar serve-toolbar">
             <h3 className="section-label" style={{ margin: 0 }}>Services disponibles ({others.length})</h3>
-            <input className="input serve-search" placeholder="Rechercher un service…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input aria-label="Rechercher un service" className="input serve-search" placeholder="Rechercher un service…" value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
           <div className="serve-grid">
             {others.map((s) => <ServiceCard key={s.id} s={s} busy={busy === s.id} onJoin={() => setConfirmJoin(s)} onLeave={() => leave(s)} />)}
@@ -77,9 +78,9 @@ export default function Services() {
             <div className="panel-head"><h3>Servir dans {confirmJoin.name}</h3></div>
             <p className="event-desc">En vous inscrivant, vous intégrez ce département et commencez à y servir :</p>
             <ul className="notif-help">
-              <li>🤝 {confirmJoin.leader ? `${confirmJoin.leader}, responsable du service, est prévenu(e) pour vous accueillir` : 'Les responsables du service sont prévenus pour vous accueillir'}</li>
-              <li>📢 Vous recevez les annonces et les événements du service</li>
-              <li>📅 Ses répétitions et réunions apparaissent dans votre calendrier</li>
+              <li>{confirmJoin.leader ? `${confirmJoin.leader}, responsable du service, est prévenu(e) pour vous accueillir` : 'Les responsables du service sont prévenus pour vous accueillir'}</li>
+              <li>Vous recevez les annonces et les événements du service</li>
+              <li>Ses répétitions et réunions apparaissent dans votre calendrier</li>
             </ul>
             <div className="editor-actions mt">
               <button className="btn btn-primary" onClick={() => join(confirmJoin)}>Je m'inscris</button>
@@ -107,12 +108,12 @@ function ServiceCard({ s, busy, onJoin, onLeave }: { s: ServiceItem; busy: boole
       <div className="serve-meta">
         {s.leader && (
           <span className="serve-leader">
-            {s.leader_photo_url ? <img src={s.leader_photo_url} alt="" /> : <span aria-hidden>👤</span>}
+            {s.leader_photo_url ? <img src={s.leader_photo_url} alt="" /> : <Icon name="profile" size={20} />}
             Responsable : {s.leader}
           </span>
         )}
         {s.next_event && (
-          <span>📅 {s.next_event.title} · {new Date(s.next_event.starts_at).toLocaleDateString('fr-CA', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+          <span className="with-icon"><Icon name="calendar" size={14} />{s.next_event.title} · {new Date(s.next_event.starts_at).toLocaleDateString('fr-CA', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
         )}
         {s.joined && s.joined_at && <span>Depuis le {new Date(s.joined_at + 'T00:00').toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' })}</span>}
       </div>

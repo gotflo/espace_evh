@@ -71,7 +71,7 @@ class RobustnessTest extends TestCase
 
         $this->assertSame(60, $count);
         $this->assertSame(60, DB::table('user_notifications')->count());
-        Http::assertSentCount(60);
+        Http::assertSentCount(61); // 60 appareils + 1 nouvelle tentative pour l'echec 500
         $this->assertSame(57, PushSubscription::count(), 'les 3 appareils expires (410) sont supprimes');
         $this->assertSame(56, PushSubscription::whereNotNull('last_used_at')->count(), 'un echec 500 ne bloque pas les autres');
     }
@@ -98,6 +98,23 @@ class RobustnessTest extends TestCase
         $this->assertSame(1, $after['unread']);
         $this->assertNotSame($first['versions']['exercises'], $after['versions']['exercises']);
         $this->assertSame($first['versions']['announcements'], $after['versions']['announcements']);
+    }
+
+    public function test_contact_message_sent_twice_by_a_double_tap_is_recorded_once(): void
+    {
+        $member = $this->member('+14185550003');
+        Sanctum::actingAs($member);
+        $message = ['category' => 'priere', 'subject' => 'Prière', 'message' => 'Merci de prier pour ma famille.'];
+        $this->postJson('/api/me/requests', $message)->assertCreated();
+        $this->postJson('/api/me/requests', $message)->assertOk()->assertJsonPath('message', 'Demande envoyée.');
+        $this->assertSame(1, DB::table('member_requests')->where('user_id', $member->id)->count());
+
+        // Un autre message, ou le meme bien plus tard, reste une nouvelle demande.
+        $this->postJson('/api/me/requests', ['message' => 'Et pour mon travail.'] + $message)->assertCreated();
+        Carbon::setTestNow(now()->addMinutes(11));
+        $this->postJson('/api/me/requests', $message)->assertCreated();
+        $this->assertSame(3, DB::table('member_requests')->where('user_id', $member->id)->count());
+        Carbon::setTestNow();
     }
 
     public function test_simultaneous_duplicate_is_answered_cleanly_not_with_a_server_error(): void

@@ -36,6 +36,9 @@ class WebPush
     /** Envois simultanes : assez pour 500 membres en quelques secondes, sans saturer l'hebergement. */
     public const CONCURRENCY = 20;
 
+    /** Pause avant la nouvelle tentative d'un envoi en echec passager. */
+    public const RETRY_DELAY_MS = 500;
+
     /** En-tetes VAPID deja signes, par service push (valables 12 h, reutilises 1 h). */
     private array $vapidCache = [];
 
@@ -81,8 +84,9 @@ class WebPush
             return $stats;
         }
 
-        $responses = Http::pool(function (Pool $pool) use ($prepared, $ttl, $urgency) {
-            foreach ($prepared as $key => $p) {
+        $send = fn (array $keys) => Http::pool(function (Pool $pool) use ($prepared, $keys, $ttl, $urgency) {
+            foreach ($keys as $key) {
+                $p = $prepared[$key];
                 $pool->as($key)->timeout(8)->connectTimeout(4)
                     ->withHeaders([
                         'Authorization' => $p['auth'],
@@ -94,6 +98,21 @@ class WebPush
                     ->post($p['sub']->endpoint);
             }
         }, self::CONCURRENCY);
+        $responses = $send(array_keys($prepared));
+
+        // Echec passager (delai, service sature 429/5xx) : une seule nouvelle tentative, apres une
+        // courte pause. Les refus definitifs (400, 403, 404, 410...) ne sont pas renvoyes.
+        $transient = array_values(array_filter(array_map('strval', array_keys($prepared)), function ($key) use ($responses) {
+            $r = $responses[$key] ?? null;
+
+            return ! $r instanceof Response || $r->status() === 429 || $r->serverError();
+        }));
+        if ($transient) {
+            usleep(self::RETRY_DELAY_MS * 1000);
+            foreach ($send($transient) as $key => $r) {
+                $responses[$key] = $r;
+            }
+        }
 
         $ok = [];
         $gone = [];
@@ -101,6 +120,7 @@ class WebPush
             $response = $responses[$key] ?? null;
             if (! $response instanceof Response) {
                 $stats['failed']++;
+
                 continue;
             }
             // 404 / 410 : l'abonnement n'existe plus (appli desinstallee, permission retiree...).

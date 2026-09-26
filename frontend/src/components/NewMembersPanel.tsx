@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import { usePulse } from '../pulse'
 import type { NewMember, NewMemberCounts } from '../types'
 import { Skeleton } from './Skeleton'
+import { Icon } from './Icon'
 
 function ago(days: number | null): string {
   if (days === null) return ''
@@ -95,7 +96,7 @@ export function NewMembersPanel() {
         ))}
         {items && items.length === 0 && (
           <div className="empty-state compact">
-            <span aria-hidden>{filter === 'to_welcome' ? '🎉' : '👋'}</span>
+            <Icon name="members" size={28} />
             <p>{filter === 'to_welcome' ? 'Tous les nouveaux inscrits ont été accueillis.' : `Aucune inscription ces ${windowDays} derniers jours.`}</p>
           </div>
         )}

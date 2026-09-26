@@ -5,6 +5,7 @@ import { AppLayout } from '../../components/AppLayout'
 import { SkeletonCard } from '../../components/Skeleton'
 import { usePulse } from '../../pulse'
 import type { ValidationFissItem, ValidationsData, ValidationTribeItem } from '../../types'
+import { Icon } from '../../components/Icon'
 
 const SIDE_LABEL: Record<string, string> = { from: 'la tribu de départ', to: "la tribu d'arrivée", both: 'les deux tribus' }
 
@@ -19,7 +20,7 @@ function DecisionBox({ onDecide, busy }: { onDecide: (approve: boolean, comment:
   const [comment, setComment] = useState('')
   return refusing ? (
     <div className="decision-box">
-      <textarea className="input" rows={2} autoFocus value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Motif du refus (communiqué au membre)" />
+      <textarea className="input" rows={2} aria-label="Motif du refus" autoFocus value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Motif du refus (communiqué au membre)" />
       <div className="decision-actions">
         <button className="btn btn-ghost small" onClick={() => setRefusing(false)}>Retour</button>
         <button className="btn btn-danger small" disabled={busy || comment.trim().length < 3} onClick={() => onDecide(false, comment.trim())}>Confirmer le refus</button>
@@ -66,7 +67,7 @@ export default function Validations() {
         <div className="validation-grid"><SkeletonCard /><SkeletonCard /></div>
       ) : data.count === 0 ? (
         <div className="empty-state">
-          <span aria-hidden>✅</span>
+          <Icon name="validate" size={28} />
           <h3>Tout est à jour</h3>
           <p>Aucune demande de modification de FISS ni de changement de tribu en attente.</p>
         </div>
@@ -79,7 +80,7 @@ export default function Validations() {
                 {data.fiss.map((r) => (
                   <article key={r.id} className="validation-card">
                     <div className="validation-head">
-                      <span className="validation-icon" aria-hidden>🩺</span>
+                      <span className="validation-icon"><Icon name="fiss" size={20} /></span>
                       <div>
                         <button className="btn-link strong" onClick={() => navigate(`/admin/membres/${r.member.user_id}`)}>{r.member.name}</button>
                         <small>{r.member.tribe ?? 'Sans tribu'} · {ago(r.created_at)}</small>
@@ -103,7 +104,7 @@ export default function Validations() {
                 {data.tribes.map((r) => (
                   <article key={r.id} className="validation-card">
                     <div className="validation-head">
-                      <span className="validation-icon" aria-hidden>🔁</span>
+                      <span className="validation-icon"><Icon name="swap" size={20} /></span>
                       <div>
                         <button className="btn-link strong" onClick={() => navigate(`/admin/membres/${r.member.user_id}`)}>{r.member.name}</button>
                         <small>{ago(r.created_at)}</small>

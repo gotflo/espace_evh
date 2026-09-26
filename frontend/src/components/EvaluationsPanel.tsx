@@ -57,28 +57,28 @@ export function EvaluationsPanel({ userId, canManage = true }: { userId: string;
           <div className="field-row">
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Type</label>
-              <select className="select" value={type} onChange={(e) => setType(e.target.value)}>
+              <select aria-label="Type" className="select" value={type} onChange={(e) => setType(e.target.value)}>
                 {types.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
               </select>
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Note (/20)</label>
-              <input className="input" type="number" min="0" max="20" step="0.5" value={score} onChange={(e) => setScore(e.target.value)} />
+              <input aria-label="Note (/20)" className="input" type="number" min="0" max="20" step="0.5" value={score} onChange={(e) => setScore(e.target.value)} />
             </div>
           </div>
           <div className="field-row mt">
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Titre (optionnel)</label>
-              <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. Méditation du mois" />
+              <input aria-label="Titre (optionnel)" className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. Méditation du mois" />
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Date</label>
-              <input className="input" type="date" max={today()} value={date} onChange={(e) => setDate(e.target.value)} />
+              <input aria-label="Date" className="input" type="date" max={today()} value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
           </div>
           <div className="field mt" style={{ marginBottom: 0 }}>
             <label>Commentaire (optionnel)</label>
-            <input className="input" value={comment} onChange={(e) => setComment(e.target.value)} />
+            <input aria-label="Commentaire (optionnel)" className="input" value={comment} onChange={(e) => setComment(e.target.value)} />
           </div>
           <button className="btn btn-primary mt" disabled={busy || score === ''} onClick={add}>
             {busy ? <span className="spinner" /> : 'Enregistrer la note'}

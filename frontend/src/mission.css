@@ -483,3 +483,12 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible, .nav-it
   .btn.small, .chip-toggle, .btn-link { min-height: 40px; }
   .btn-link { display: inline-flex; align-items: center; }
 }
+
+/* Icones au trait (remplacent les emojis) */
+.with-icon { display: inline-flex; align-items: center; gap: 0.35rem; }
+.with-icon > svg { flex-shrink: 0; color: var(--text-soft); }
+.empty-state > svg { display: block; margin: 0 auto 0.5rem; color: var(--text-soft); opacity: 0.8; }
+.notif-icon > svg, .validation-icon > svg, .tribe-badge > svg, .push-prompt-icon > svg { color: var(--bg-start); }
+.fiss-reminder-icon > svg, .lock-icon > svg, .exercise-thumb-icon > svg, .crash-icon > svg { color: currentColor; opacity: 0.85; }
+.welcome-back li > svg { vertical-align: -3px; margin-right: 0.3rem; color: var(--text-soft); }
+.fiss-hist-state { font-size: 0.72rem; font-weight: 600; color: var(--text-soft); margin-left: 0.35rem; }

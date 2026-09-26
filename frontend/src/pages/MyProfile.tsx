@@ -8,6 +8,7 @@ import { CompletionCard } from '../components/profile/CompletionCard'
 import { FamilySection } from '../components/profile/FamilySection'
 import { TribeChange } from '../components/profile/TribeChange'
 import type { Department, Profile, ProfileCompletion, SpiritualProfileData, Tribe } from '../types'
+import { Icon } from '../components/Icon'
 
 const CIVILITY = [['dr', 'Dr'], ['reverend', 'Révérend'], ['pasteur', 'Pasteur'], ['m', 'M.'], ['mme', 'Mme'], ['mlle', 'Mlle']]
 const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
@@ -128,7 +129,7 @@ export default function MyProfile() {
       <section className="profile-hero">
         {photoPreview
           ? <img className="profile-hero-photo" src={photoPreview} alt="" />
-          : <span className="profile-hero-photo">{initials || '🙂'}</span>}
+          : <span className="profile-hero-photo">{initials || <Icon name="profile" size={28} />}</span>}
         <div className="profile-hero-info">
           <h2>{profile?.full_name || 'Mon profil'}</h2>
           <div className="profile-hero-meta">
@@ -156,7 +157,7 @@ export default function MyProfile() {
             <div className="photo-picker">
               {photoPreview
                 ? <img className="photo-preview" src={photoPreview} alt="" />
-                : <div className="photo-preview">{initials || '📷'}</div>}
+                : <div className="photo-preview">{initials || <Icon name="profile" size={24} />}</div>}
               <div>
                 <button type="button" className="btn btn-ghost small" onClick={() => fileRef.current?.click()}>Choisir une photo</button>
                 <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickPhoto} />
@@ -165,22 +166,22 @@ export default function MyProfile() {
             </div>
           </div>
           <div className="field-row">
-            <div className="field"><label>Prénoms</label><input className="input" value={firstName} onChange={(e) => setFirstName(e.target.value)} /></div>
-            <div className="field"><label>Nom</label><input className="input" value={lastName} onChange={(e) => setLastName(e.target.value)} /></div>
+            <div className="field"><label>Prénoms</label><input aria-label="Prénoms" className="input" value={firstName} onChange={(e) => setFirstName(e.target.value)} /></div>
+            <div className="field"><label>Nom</label><input aria-label="Nom" className="input" value={lastName} onChange={(e) => setLastName(e.target.value)} /></div>
           </div>
           <div className="field-row">
             <div className="field"><label>Anniversaire <span className="helper" style={{ display: 'inline' }}>(jour / mois)</span></label>
               <div className="field-row" style={{ gap: '0.5rem' }}>
-                <select className="select" value={birthDay} onChange={(e) => setBirthDay(e.target.value)}>
+                <select aria-label="Jour de naissance" className="select" value={birthDay} onChange={(e) => setBirthDay(e.target.value)}>
                   <option value="">Jour</option>{Array.from({ length: 31 }, (_, i) => i + 1).map((d) => <option key={d} value={d}>{d}</option>)}
                 </select>
-                <select className="select" value={birthMonth} onChange={(e) => setBirthMonth(e.target.value)}>
+                <select aria-label="Mois de naissance" className="select" value={birthMonth} onChange={(e) => setBirthMonth(e.target.value)}>
                   <option value="">Mois</option>{MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
                 </select>
               </div>
             </div>
             <div className="field"><label>Genre</label>
-              <select className="select" required value={gender} onChange={(e) => setGender(e.target.value)}>
+              <select aria-label="Genre" className="select" required value={gender} onChange={(e) => setGender(e.target.value)}>
                 <option value="" disabled hidden>Choisir</option><option value="homme">Homme</option><option value="femme">Femme</option>
               </select>
             </div>
@@ -189,7 +190,7 @@ export default function MyProfile() {
             <TribeChange currentTribe={profile.tribe} tribes={tribes} />
           ) : (
             <div className="field"><label>Tribu</label>
-              <select className="select" value={tribeId} onChange={(e) => setTribeId(e.target.value)}>
+              <select aria-label="Tribu" className="select" value={tribeId} onChange={(e) => setTribeId(e.target.value)}>
                 <option value="">Aucune</option>{tribes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
               <p className="helper">Choisissez avec soin : un changement ultérieur passe par une demande validée par les responsables.</p>
@@ -215,17 +216,17 @@ export default function MyProfile() {
       {tab === 'perso' && (
         <section className="panel form-panel">
           <div className="field"><label>Mon verset de l'année</label>
-            <input className="input" value={yearVerse} onChange={(e) => setYearVerse(e.target.value)} placeholder="Ex. Philippiens 4:13" />
+            <input aria-label="Mon verset de l'année" className="input" value={yearVerse} onChange={(e) => setYearVerse(e.target.value)} placeholder="Ex. Philippiens 4:13" />
           </div>
-          <div className="field"><label>E-mail</label><input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+          <div className="field"><label>E-mail</label><input aria-label="E-mail" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
           <div className="field-row">
             <div className="field"><label>Civilité</label>
-              <select className="select" value={civility} onChange={(e) => setCivility(e.target.value)}>
+              <select aria-label="Civilité" className="select" value={civility} onChange={(e) => setCivility(e.target.value)}>
                 <option value="">Non précisé</option>{CIVILITY.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </select>
             </div>
             <div className="field"><label>Taille de t-shirt</label>
-              <select className="select" value={tshirt} onChange={(e) => setTshirt(e.target.value)}>
+              <select aria-label="Taille de t-shirt" className="select" value={tshirt} onChange={(e) => setTshirt(e.target.value)}>
                 <option value="">Non précisé</option>{TSHIRT.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
@@ -240,19 +241,19 @@ export default function MyProfile() {
         <section className="panel form-panel">
           <div className="field-row">
             <div className="field"><label>Année de conversion</label>
-              <input className="input" type="number" min="1900" max={new Date().getFullYear()} value={sp.conversion_year ?? ''} onChange={(e) => setSpField('conversion_year', e.target.value ? Number(e.target.value) : null)} />
+              <input aria-label="Année de conversion" className="input" type="number" min="1900" max={new Date().getFullYear()} value={sp.conversion_year ?? ''} onChange={(e) => setSpField('conversion_year', e.target.value ? Number(e.target.value) : null)} />
             </div>
             <div className="field"><label>Passage biblique de ma conversion</label>
-              <input className="input" value={sp.conversion_verse ?? ''} onChange={(e) => setSpField('conversion_verse', e.target.value)} placeholder="Ex. Jean 3:16" />
+              <input aria-label="Passage biblique de ma conversion" className="input" value={sp.conversion_verse ?? ''} onChange={(e) => setSpField('conversion_verse', e.target.value)} placeholder="Ex. Jean 3:16" />
             </div>
           </div>
 
           <div className="field-row">
             <div className="field"><label>Date de baptême par immersion</label>
-              <input className="input" type="date" value={sp.baptism_immersion_date ?? ''} onChange={(e) => setSpField('baptism_immersion_date', e.target.value || null)} />
+              <input aria-label="Date de baptême par immersion" className="input" type="date" value={sp.baptism_immersion_date ?? ''} onChange={(e) => setSpField('baptism_immersion_date', e.target.value || null)} />
             </div>
             <div className="field"><label>Baptisé(e) du Saint-Esprit</label>
-              <select className="select" value={sp.baptism_holy_spirit ?? ''} onChange={(e) => setSpField('baptism_holy_spirit', e.target.value || null)}>
+              <select aria-label="Baptisé(e) du Saint-Esprit" className="select" value={sp.baptism_holy_spirit ?? ''} onChange={(e) => setSpField('baptism_holy_spirit', e.target.value || null)}>
                 <option value="">Non précisé</option>{HOLY_SPIRIT.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </select>
             </div>
@@ -267,7 +268,7 @@ export default function MyProfile() {
           </div>
           {sp.speaks_tongues === true && (
             <div className="field"><label>Depuis quelle année ?</label>
-              <input className="input" type="number" min="1900" max={new Date().getFullYear()} value={sp.tongues_since_year ?? ''} onChange={(e) => setSpField('tongues_since_year', e.target.value ? Number(e.target.value) : null)} />
+              <input aria-label="Depuis quelle année ?" className="input" type="number" min="1900" max={new Date().getFullYear()} value={sp.tongues_since_year ?? ''} onChange={(e) => setSpField('tongues_since_year', e.target.value ? Number(e.target.value) : null)} />
             </div>
           )}
 
@@ -280,7 +281,7 @@ export default function MyProfile() {
           </div>
 
           <div className="field"><label>Fréquence de prière et de méditation de la Parole</label>
-            <select className="select" value={sp.prayer_frequency ?? ''} onChange={(e) => setSpField('prayer_frequency', e.target.value || null)}>
+            <select aria-label="Fréquence de prière et de méditation de la Parole" className="select" value={sp.prayer_frequency ?? ''} onChange={(e) => setSpField('prayer_frequency', e.target.value || null)}>
               <option value="">Non précisé</option>{PRAYER_FREQ.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
           </div>
@@ -294,18 +295,18 @@ export default function MyProfile() {
           </div>
           {sp.gifts_known === true && (
             <div className="field"><label>Précisez vos dons</label>
-              <textarea className="input" rows={2} value={sp.gifts_detail ?? ''} onChange={(e) => setSpField('gifts_detail', e.target.value)} />
+              <textarea aria-label="Précisez vos dons" className="input" rows={2} value={sp.gifts_detail ?? ''} onChange={(e) => setSpField('gifts_detail', e.target.value)} />
             </div>
           )}
 
           <div className="field"><label>Dernier sujet pour lequel vous avez cherché l'exaucement</label>
-            <input className="input" value={sp.last_prayer_subject ?? ''} onChange={(e) => setSpField('last_prayer_subject', e.target.value)} placeholder="En une phrase" />
+            <input aria-label="Dernier sujet pour lequel vous avez cherché l'exaucement" className="input" value={sp.last_prayer_subject ?? ''} onChange={(e) => setSpField('last_prayer_subject', e.target.value)} placeholder="En une phrase" />
           </div>
           <div className="field"><label>Qu'aimez-vous faire avec joie et sans peine dans le Seigneur ?</label>
-            <textarea className="input" rows={2} value={sp.joyful_service ?? ''} onChange={(e) => setSpField('joyful_service', e.target.value)} />
+            <textarea aria-label="Qu'aimez-vous faire avec joie et sans peine dans le Seigneur ?" className="input" rows={2} value={sp.joyful_service ?? ''} onChange={(e) => setSpField('joyful_service', e.target.value)} />
           </div>
           <div className="field"><label>À quoi pensez-vous le plus, et pour quoi fournissez-vous le plus d'effort ?</label>
-            <textarea className="input" rows={2} value={sp.focus_effort ?? ''} onChange={(e) => setSpField('focus_effort', e.target.value)} />
+            <textarea aria-label="À quoi pensez-vous le plus, et pour quoi fournissez-vous le plus d'effort ?" className="input" rows={2} value={sp.focus_effort ?? ''} onChange={(e) => setSpField('focus_effort', e.target.value)} />
           </div>
 
           <button className="btn btn-primary" disabled={busy} onClick={saveSpiritual}>

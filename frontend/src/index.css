@@ -382,7 +382,7 @@ h1, h2, h3 { font-family: var(--font-serif); font-weight: 600; line-height: 1.15
      L'ecran de connexion garde le fond teal via :root. */
   --text: #17211f;
   --text-muted: #586863;
-  --text-soft: #8b9793;
+  --text-soft: #626e6b; /* contraste AA : 5,3:1 sur blanc, 4,7:1 sur les champs */
   --card-bg: #ffffff;
   --field-bg: #eef1f2;
   --border-subtle: #e4e8ea;

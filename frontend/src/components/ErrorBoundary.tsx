@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { isStaleBuildError, reloadOnce } from '../utils/reload'
+import { Icon } from './Icon'
 
 /**
  * Filet de securite de l'interface : une erreur d'affichage n'aboutit jamais a une page
@@ -22,7 +23,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
     return (
       <div className="screen">
         <div className="card crash-card" role="alert">
-          <div className="crash-icon" aria-hidden>🙏</div>
+          <div className="crash-icon"><Icon name="alert" size={36} /></div>
           <h2 className="section-title">Un petit souci d'affichage</h2>
           <p className="section-sub">
             {isStaleBuildError(this.state.error)

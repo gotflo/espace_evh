@@ -32,8 +32,56 @@ export class ApiError extends Error {
  */
 type Options = { method?: string; body?: unknown; auth?: boolean; toast?: string | false }
 
-export async function api<T = unknown>(path: string, opts: Options = {}): Promise<T> {
+// Lectures identiques lancees en meme temps (deux blocs d'un meme ecran qui lisent la meme
+// donnee) : une seule requete au serveur, le resultat est partage.
+const inflight = new Map<string, Promise<unknown>>()
+
+export function api<T = unknown>(path: string, opts: Options = {}): Promise<T> {
   const method = (opts.method ?? 'GET').toUpperCase()
+  if (method !== 'GET' || opts.body !== undefined) return send<T>(path, method, opts)
+  const key = `${opts.auth === false ? '' : auth.get() ?? ''} ${path}`
+  const pending = inflight.get(key)
+  if (pending) return pending as Promise<T>
+  const promise = send<T>(path, method, opts).finally(() => inflight.delete(key))
+  inflight.set(key, promise)
+  return promise
+}
+
+/**
+ * Plusieurs lectures d'un meme ecran en un seul appel (/me/home) : chaque chemin est mis
+ * « en cours » tout de suite, et les blocs qui le demandent ensuite recoivent la reponse
+ * groupee. Si le serveur ne connait pas cet appel ou omet un chemin, ce chemin est lu seul.
+ * A appeler pendant le premier rendu de l'ecran, avant les effets de ses blocs.
+ */
+export function prefetch(paths: string[]) {
+  const token = auth.get()
+  if (!token) return
+  const todo = paths.filter((p) => !inflight.has(`${token} ${p}`))
+  if (!todo.length) return
+  const query = todo.map((p) => `paths[]=${encodeURIComponent(p)}`).join('&')
+  const bundle = send<{ responses: Record<string, { status: number; body?: unknown }> }>(`/me/home?${query}`, 'GET', {})
+  for (const path of todo) {
+    const key = `${token} ${path}`
+    const promise = bundle
+      .then(
+        (r) => {
+          const one = r.responses?.[path]
+          return one?.status === 200 ? one.body : send(path, 'GET', {})
+        },
+        // Serveur sans /me/home (version precedente) : lectures une par une. Serveur sature ou
+        // injoignable : pas de repli (6 requetes de plus aggraveraient la file) ; chaque bloc
+        // affiche son etat d'erreur habituel.
+        (err) => {
+          if (err instanceof ApiError && (err.status === 404 || err.status === 422)) return send(path, 'GET', {})
+          throw err
+        },
+      )
+      .finally(() => inflight.delete(key))
+    inflight.set(key, promise)
+  }
+}
+
+async function send<T>(path: string, method: string, opts: Options): Promise<T> {
   const isAction = method !== 'GET' && opts.toast !== false
   try {
     const data = await request<T>(path, method, opts)
@@ -67,8 +115,10 @@ async function request<T>(path: string, method: string, opts: Options): Promise<
 
   // Lectures (GET) : jusqu'a 2 nouvelles tentatives si le reseau coupe ou si le serveur est
   // momentanement sature (502/503/504), avec une attente croissante et un peu d'aleatoire
-  // (tous les appareils ne reessaient pas a la meme seconde). Les ecritures ne sont jamais
-  // renvoyees automatiquement (pas de double enregistrement).
+  // (tous les appareils ne reessaient pas a la meme seconde). Pas de nouvelle tentative apres
+  // un delai depasse : le serveur traite encore la premiere demande, la renvoyer ne ferait
+  // qu'allonger la file (mesure lors du test de pic). Les ecritures ne sont jamais renvoyees
+  // automatiquement (pas de double enregistrement).
   const retries = method === 'GET' ? 2 : 0
   const timeoutMs = body instanceof FormData ? 90000 : 25000
   let res: Response | null = null
@@ -79,8 +129,8 @@ async function request<T>(path: string, method: string, opts: Options): Promise<
       res = await fetch(`/api${path}`, { method, headers, body: payload, signal: controller.signal })
     } catch (err) {
       res = null
-      if (attempt >= retries) {
-        const aborted = err instanceof DOMException && err.name === 'AbortError'
+      const aborted = err instanceof DOMException && err.name === 'AbortError'
+      if (attempt >= retries || aborted) {
         throw new ApiError(0, aborted ? 'Le serveur met trop de temps à répondre. Réessayez dans un instant.' : 'Connexion impossible. Vérifiez votre réseau puis réessayez.')
       }
     } finally {

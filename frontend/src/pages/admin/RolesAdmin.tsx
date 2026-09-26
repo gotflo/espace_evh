@@ -108,19 +108,19 @@ export default function RolesAdmin() {
           </div>
 
           {error && <div className="alert alert-error">{error}</div>}
-          {isSystem && <div className="alert alert-info">Rôle de base : vous pouvez ajuster ses permissions, mais pas sa portee ni le supprimer.</div>}
+          {isSystem && <div className="alert alert-info">Rôle de base : vous pouvez ajuster ses permissions, mais pas sa portée ni le supprimer.</div>}
 
           <div className="field">
             <label>Nom du rôle</label>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex. Coordinateur intégration" />
+            <input aria-label="Nom du rôle" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex. Coordinateur intégration" />
           </div>
           <div className="field">
             <label>Description</label>
-            <textarea className="input" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+            <textarea aria-label="Description" className="input" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
           <div className="field">
-            <label>Portee</label>
-            <select className="select" value={scopeKind} disabled={isSystem}
+            <label>Portée</label>
+            <select aria-label="Portée" className="select" value={scopeKind} disabled={isSystem}
               onChange={(e) => setScopeKind(e.target.value as ScopeKind)}>
               <option value="none">Sans portée (global)</option>
               <option value="tribe">Rattaché à une tribu</option>

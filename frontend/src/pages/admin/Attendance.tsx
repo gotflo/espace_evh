@@ -88,11 +88,11 @@ export default function Attendance() {
         <div className="attendance-controls">
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Date</label>
-            <input className="input" type="date" max={TODAY} value={date} onChange={(e) => setDate(e.target.value)} />
+            <input aria-label="Date" className="input" type="date" max={TODAY} value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Événement</label>
-            <select className="select" value={event} onChange={(e) => setEvent(e.target.value)}>
+            <select aria-label="Événement" className="select" value={event} onChange={(e) => setEvent(e.target.value)}>
               {EVENTS.map((ev) => <option key={ev} value={ev}>{ev}</option>)}
             </select>
           </div>
@@ -120,7 +120,7 @@ export default function Attendance() {
 
         {error && <div className="alert alert-error mt">{error}</div>}
 
-        <input className="input mt" type="search" placeholder="Rechercher un fidèle…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input aria-label="Rechercher un fidèle" className="input mt" type="search" placeholder="Rechercher un fidèle…" value={query} onChange={(e) => setQuery(e.target.value)} />
         {hidden > 0 && !q && (
           <p className="helper">{hidden} fidèle(s) inactif(s) masqué(s). Quelqu'un revient ? Tapez son nom pour l'ajouter : il redeviendra actif.</p>
         )}

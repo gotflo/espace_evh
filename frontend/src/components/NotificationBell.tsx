@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import { NOTIF_ICON, setUnread, timeAgo, useUnreadCount } from '../notifications'
 import { startPulse } from '../pulse'
 import type { AppNotification, NotificationPage } from '../types'
+import { Icon } from './Icon'
 
 export function NotificationBell() {
   const count = useUnreadCount()
@@ -72,7 +73,7 @@ export function NotificationBell() {
             {items === null && <p className="helper" style={{ padding: '0.8rem 1rem' }}>Chargement…</p>}
             {items?.map((n) => (
               <button key={n.id} className={`bell-item ${n.read ? '' : 'unread'}`} onClick={() => openItem(n)}>
-                <span className="notif-icon" aria-hidden>{NOTIF_ICON[n.type] ?? '🔔'}</span>
+                <span className="notif-icon"><Icon name={NOTIF_ICON[n.type] ?? 'bell'} size={16} /></span>
                 <span className="bell-item-text">
                   <span className="bell-item-title">{n.title}</span>
                   {n.body && <span className="bell-item-body">{n.body}</span>}
@@ -83,7 +84,7 @@ export function NotificationBell() {
             ))}
             {items?.length === 0 && (
               <div className="bell-empty">
-                <span aria-hidden>🔔</span>
+                <Icon name="bell" size={28} />
                 <p>Aucune notification pour l'instant.</p>
               </div>
             )}

@@ -5,6 +5,7 @@ import { AppLayout } from '../../components/AppLayout'
 import { AudiencePicker } from '../../components/AudiencePicker'
 import type { AudienceScope, ExerciseListItem, ExerciseStatus, ExerciseTracking } from '../../types'
 import { deadlineLabel } from '../../utils/exercises'
+import { Icon } from '../../components/Icon'
 
 const WRITTEN_TYPES = [
   { key: 'reflexion', label: 'Réflexion' },
@@ -72,7 +73,7 @@ function Tracking({ id, onBack }: { id: number; onBack: () => void }) {
             </button>
           ))}
         </div>
-        <input className="input" type="search" placeholder="Rechercher un fidèle…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input aria-label="Rechercher un fidèle" className="input" type="search" placeholder="Rechercher un fidèle…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
       {rows.length === 0 ? <p className="helper">Personne dans cette catégorie.</p> : (
@@ -93,7 +94,7 @@ function Tracking({ id, onBack }: { id: number; onBack: () => void }) {
                 <span className={`exercise-badge ${m.status}`}>{STATUS_LABEL[m.status]}</span>
               </button>
               {m.seek_count > 0 && (
-                <p className="tracking-flag">⏩ A avancé la vidéo {m.seek_count} fois ({duration(m.skipped_seconds)} sautées){m.percent >= 100 ? ', puis a tout regardé' : ''}.</p>
+                <p className="tracking-flag with-icon"><Icon name="forward" size={14} />A avancé la vidéo {m.seek_count} fois ({duration(m.skipped_seconds)} sautées){m.percent >= 100 ? ', puis a tout regardé' : ''}.</p>
               )}
               {open === m.user_id && (
                 <div className="tracking-more">
@@ -181,8 +182,8 @@ function NewExercise({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
       {error && <div className="alert alert-error">{error}</div>}
 
       <div className="seg" role="radiogroup" aria-label="Type d'exercice">
-        <button role="radio" aria-checked={kind === 'video'} className={kind === 'video' ? 'on' : ''} onClick={() => setKind('video')}>🎬 Vidéo YouTube</button>
-        <button role="radio" aria-checked={kind === 'written'} className={kind === 'written' ? 'on' : ''} onClick={() => setKind('written')}>📖 Exercice écrit</button>
+        <button role="radio" aria-checked={kind === 'video'} className={kind === 'video' ? 'on' : ''} onClick={() => setKind('video')}>Vidéo YouTube</button>
+        <button role="radio" aria-checked={kind === 'written'} className={kind === 'written' ? 'on' : ''} onClick={() => setKind('written')}>Exercice écrit</button>
       </div>
 
       {kind === 'video' && (
@@ -199,7 +200,7 @@ function NewExercise({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
                 {preview.author && <small>{preview.author}</small>}
                 {preview.embeddable
                   ? <small className="ok">✓ Lisible dans l'application</small>
-                  : <small className="warn">⚠ L'auteur interdit peut-être la lecture hors de YouTube, ou la vidéo est privée : vérifiez qu'elle se lance.</small>}
+                  : <small className="warn">L'auteur interdit peut-être la lecture hors de YouTube, ou la vidéo est privée : vérifiez qu'elle se lance.</small>}
               </div>
             </div>
           )}
@@ -216,7 +217,7 @@ function NewExercise({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
       {kind === 'written' && (
         <div className="field">
           <label>Type</label>
-          <select className="select" value={writtenType} onChange={(e) => setWrittenType(e.target.value)}>
+          <select aria-label="Type" className="select" value={writtenType} onChange={(e) => setWrittenType(e.target.value)}>
             {WRITTEN_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
           </select>
         </div>
@@ -292,12 +293,12 @@ export default function Exercises() {
       ) : exercises === null ? (
         <div className="exercise-rows">{[0, 1, 2].map((i) => <div key={i} className="skeleton skeleton-row" />)}</div>
       ) : exercises.length === 0 ? (
-        <div className="empty-state"><span aria-hidden>🎬</span><h3>Aucun exercice</h3><p>Publiez une vidéo YouTube ou un exercice écrit pour vos fidèles.</p></div>
+        <div className="empty-state"><Icon name="play" size={28} /><h3>Aucun exercice</h3><p>Publiez une vidéo YouTube ou un exercice écrit pour vos fidèles.</p></div>
       ) : (
         <div className="admin-exercises">
           {exercises.map((e) => (
             <article key={e.id} className={`admin-exercise ${e.is_closed ? 'is-closed' : ''}`}>
-              {e.video ? <img className="exercise-thumb" src={e.video.thumbnail} alt="" loading="lazy" /> : <span className="exercise-thumb exercise-thumb-icon" aria-hidden>📖</span>}
+              {e.video ? <img className="exercise-thumb" src={e.video.thumbnail} alt="" loading="lazy" /> : <span className="exercise-thumb exercise-thumb-icon"><Icon name="book" size={22} /></span>}
               <div className="admin-exercise-main">
                 <strong>{e.title}</strong>
                 <small>{e.type_label} · {e.target}</small>

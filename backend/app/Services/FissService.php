@@ -25,10 +25,16 @@ class FissService
     public static function create(User $member, array $data): SpiritualHealthForm
     {
         $period = now()->format('Y-m');
-        abort_if(SpiritualHealthForm::where('user_id', $member->id)->where('period', $period)->exists(), 409,
-            'Votre fiche de ce mois est déjà enregistrée. Pour la modifier, faites une demande de modification.');
 
+        // Verrou sur le membre : plusieurs envois simultanes (double appui, plusieurs appareils)
+        // passent l'un apres l'autre ; le premier enregistre, les suivants recoivent une reponse
+        // claire. Sans ce verrou, MySQL pouvait interrompre des envois (verrous croises sur
+        // l'index unique) et l'utilisateur voyait « service tres sollicite ».
         return DB::transaction(function () use ($member, $data, $period) {
+            User::whereKey($member->id)->lockForUpdate()->first();
+            abort_if(SpiritualHealthForm::where('user_id', $member->id)->where('period', $period)->exists(), 409,
+                'Votre fiche de ce mois est déjà enregistrée. Pour la modifier, faites une demande de modification.');
+
             $form = SpiritualHealthForm::create($data + [
                 'user_id' => $member->id,
                 'period' => $period,

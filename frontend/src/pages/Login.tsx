@@ -121,9 +121,14 @@ export default function Login() {
             <div className="field">
               <label htmlFor="code">Code à 6 chiffres</label>
               <input
-                id="code" className="input otp" inputMode="numeric" maxLength={6}
+                id="code" className="input otp" inputMode="numeric" maxLength={6} autoComplete="one-time-code"
                 placeholder="000000" value={code} autoFocus
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} required
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, '').slice(0, 6)
+                  setCode(digits)
+                  // Code complet (saisi ou propose par le telephone) : connexion sans appui supplementaire.
+                  if (digits.length === 6 && !busy) window.setTimeout(() => e.target.form?.requestSubmit(), 0)
+                }} required
               />
             </div>
 

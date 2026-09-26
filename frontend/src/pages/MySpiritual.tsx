@@ -83,18 +83,18 @@ export default function MySpiritual() {
             <div className="field-row">
               <div className="field" style={{ marginBottom: 0 }}>
                 <label>Type</label>
-                <select className="select" value={type} onChange={(e) => setType(e.target.value)}>
+                <select aria-label="Type" className="select" value={type} onChange={(e) => setType(e.target.value)}>
                   {data?.entry_types.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
                 </select>
               </div>
               <div className="field" style={{ marginBottom: 0 }}>
                 <label>Date</label>
-                <input className="input" type="date" max={today()} value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
+                <input aria-label="Date" className="input" type="date" max={today()} value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
               </div>
             </div>
             <div className="field mt">
               <label>Votre message (témoignage, prière, besoin...)</label>
-              <textarea className="input" rows={4} value={note} onChange={(e) => setNote(e.target.value)} />
+              <textarea aria-label="Votre message (témoignage, prière, besoin...)" className="input" rows={4} value={note} onChange={(e) => setNote(e.target.value)} />
             </div>
             <button className="btn btn-primary" disabled={busy || !note.trim()} onClick={addEntry}>
               {busy ? <span className="spinner" /> : 'Ajouter à mon journal'}

@@ -1,10 +1,14 @@
 <?php
 
+use App\Http\Middleware\EnsurePermission;
+use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\TriggerAutomation;
+use Illuminate\Database\LostConnectionDetector;
+use Illuminate\Database\QueryException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use Illuminate\Database\QueryException;
-use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -21,14 +25,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : '/connexion');
 
         $middleware->alias([
-            'permission' => \App\Http\Middleware\EnsurePermission::class,
+            'permission' => EnsurePermission::class,
         ]);
 
         // En-tetes de securite sur toutes les reponses.
-        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+        $middleware->append(SecurityHeaders::class);
 
         // Automatismes (rappels...) declenches aussi par l'activite, si le cron manque.
-        $middleware->appendToGroup('api', \App\Http\Middleware\TriggerAutomation::class);
+        $middleware->appendToGroup('api', TriggerAutomation::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
@@ -43,14 +47,21 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
-        // Base momentanement occupee (verrou, trop de connexions) : le client peut reessayer.
+        // Base momentanement occupee (verrou, trop de connexions) ou injoignable (redemarrage,
+        // maintenance de l'hebergeur) : reponse 503 claire, le client peut reessayer.
         $exceptions->render(function (QueryException $e, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
             $busy = in_array((string) $e->getCode(), ['40001', '1213', '1205', 'HY000'], true)
                 && preg_match('/deadlock|lock wait|database is locked|too many connections|max_user_connections/i', $e->getMessage());
-            if ($busy && $request->is('api/*')) {
+            $down = ! $busy && (new LostConnectionDetector)->causedByLostConnection($e);
+            if ($busy || $down) {
                 report($e);
 
-                return response()->json(['message' => 'Le service est très sollicité. Réessayez dans un instant.'], 503, ['Retry-After' => '3']);
+                return response()->json(['message' => $down
+                    ? 'Le service est momentanément indisponible. Réessayez dans un instant.'
+                    : 'Le service est très sollicité. Réessayez dans un instant.'], 503, ['Retry-After' => $down ? '5' : '3']);
             }
         });
 

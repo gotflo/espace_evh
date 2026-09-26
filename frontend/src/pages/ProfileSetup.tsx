@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext'
 import type { Department, Profile, Tribe } from '../types'
 import { Brand } from '../components/Brand'
 import { DepartmentPicker } from '../components/DepartmentPicker'
+import { Icon } from '../components/Icon'
 
 const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 
@@ -78,7 +79,7 @@ export default function ProfileSetup() {
             ← Retour au tableau de bord
           </button>
         )}
-        <Brand subtitle={profileCompleted ? 'Modifier mon profil' : 'Completer mon profil'} />
+        <Brand subtitle={profileCompleted ? 'Modifier mon profil' : 'Compléter mon profil'} />
 
         <h2 className="section-title">{profileCompleted ? 'Mon profil' : 'Bienvenue !'}</h2>
         <p className="section-sub">
@@ -93,7 +94,7 @@ export default function ProfileSetup() {
             <div className="photo-picker">
               {photoPreview
                 ? <img className="photo-preview" src={photoPreview} alt="" />
-                : <div className="photo-preview">{initials.toUpperCase() || '📷'}</div>}
+                : <div className="photo-preview">{initials.toUpperCase() || <Icon name="profile" size={24} />}</div>}
               <div>
                 <button type="button" className="btn btn-ghost small" onClick={() => fileRef.current?.click()}>
                   Choisir une photo
@@ -119,11 +120,11 @@ export default function ProfileSetup() {
             <div className="field">
               <label>Anniversaire <span className="helper" style={{ display: 'inline' }}>(jour et mois)</span></label>
               <div className="field-row" style={{ gap: '0.5rem' }}>
-                <select className="select" value={birthDay} onChange={(e) => setBirthDay(e.target.value)}>
+                <select className="select" aria-label="Jour de naissance" value={birthDay} onChange={(e) => setBirthDay(e.target.value)}>
                   <option value="">Jour</option>
                   {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => <option key={d} value={d}>{d}</option>)}
                 </select>
-                <select className="select" value={birthMonth} onChange={(e) => setBirthMonth(e.target.value)}>
+                <select className="select" aria-label="Mois de naissance" value={birthMonth} onChange={(e) => setBirthMonth(e.target.value)}>
                   <option value="">Mois</option>
                   {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
                 </select>

@@ -15,7 +15,7 @@ export function CompletionCard({ completion, onGo }: { completion: ProfileComple
         <text x="34" y="39" textAnchor="middle">{completion.percent}%</text>
       </svg>
       <div className="completion-body">
-        <strong>{done ? 'Profil complet 🎉' : 'Complétez votre profil'}</strong>
+        <strong>{done ? 'Profil complet' : 'Complétez votre profil'}</strong>
         {!done && <span>Ces informations aident vos responsables à mieux vous accompagner.</span>}
         <div className="completion-items">
           {completion.missing.map((m) => (

@@ -87,7 +87,7 @@ export default function Members() {
                 {tribes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             )}
-            <input
+            <input aria-label="Rechercher par nom ou téléphone"
               className="input search-input" type="search" placeholder="Rechercher par nom ou téléphone..."
               value={q} onChange={(e) => setQ(e.target.value)}
             />

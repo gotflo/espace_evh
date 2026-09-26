@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, prefetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { usePulse } from '../pulse'
 import { AppLayout } from '../components/AppLayout'
@@ -8,6 +8,7 @@ import { MyExercises } from '../components/MyExercises'
 import { AnnouncementsFeed } from '../components/AnnouncementsFeed'
 import { EventsFeed } from '../components/EventsFeed'
 import { ServiceSchedule } from '../components/ServiceSchedule'
+import { serviceSchedulePath } from '../utils/schedule'
 import { VerseBanner } from '../components/VerseBanner'
 import { WelcomeBack } from '../components/WelcomeBack'
 import { DashRequests } from '../components/DashRequests'
@@ -24,6 +25,9 @@ export default function Dashboard() {
   const canViewMembers = hasPermission('members.view_all') || hasPermission('members.view_scope')
   const canViewAll = hasPermission('members.view_all')
   const canRequests = hasPermission('requests.handle')
+
+  // Les lectures des blocs ci-dessous partent en un seul appel, avant leurs propres effets.
+  useState(() => prefetch(['/dashboard/verse', '/me/fiss', '/me/events?days=30', '/me/announcements', '/me/exercises', serviceSchedulePath()]))
 
   const [stats, setStats] = useState<Stats | null>(null)
   const [welcome, setWelcome] = useState(false)
@@ -71,8 +75,8 @@ export default function Dashboard() {
       {welcome && (
         <div className="welcome-banner" role="status">
           <div className="welcome-text">
-            <strong>Bienvenue dans ta famille spirituelle{profile?.first_name ? `, ${profile.first_name}` : ''} !</strong>
-            <span>Nous sommes heureux de t'accueillir dans l'espace Vases d'Honneur Chicoutimi.</span>
+            <strong>Bienvenue dans votre famille spirituelle{profile?.first_name ? `, ${profile.first_name}` : ''} !</strong>
+            <span>Nous sommes heureux de vous accueillir dans l'espace Vases d'Honneur Chicoutimi.</span>
           </div>
           <button className="welcome-close" onClick={() => setWelcome(false)} aria-label="Fermer">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
@@ -120,7 +124,7 @@ export default function Dashboard() {
           <div className="dash-main">
             <div className="dash-col dash-main-col">
               <NewMembersPanel />
-              <EventsFeed />
+              <EventsFeed limit={3} />
             </div>
             <div className="dash-col dash-side-col">
               <ServiceSchedule />
@@ -134,7 +138,7 @@ export default function Dashboard() {
       ) : (
         <div className="dash-main">
           <div className="dash-col dash-main-col">
-            <EventsFeed />
+            <EventsFeed limit={3} />
             <AnnouncementsFeed />
             <MyExercises />
           </div>

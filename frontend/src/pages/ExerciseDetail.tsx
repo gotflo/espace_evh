@@ -7,6 +7,7 @@ import { useAuth } from '../auth/AuthContext'
 import type { MyExercise } from '../types'
 import { deadlineLabel } from '../utils/exercises'
 import { clearDraft, readDraft, useDraft } from '../utils/drafts'
+import { Icon } from '../components/Icon'
 
 export default function ExerciseDetail() {
   const { id } = useParams()
@@ -49,7 +50,7 @@ export default function ExerciseDetail() {
   if (missing) {
     return (
       <AppLayout title="Exercice" actions={back}>
-        <div className="empty-state"><span aria-hidden>🔒</span><h3>Exercice introuvable</h3><p>Il a peut-être été supprimé ou ne vous est pas adressé.</p></div>
+        <div className="empty-state"><Icon name="lock" size={28} /><h3>Exercice introuvable</h3><p>Il a peut-être été supprimé ou ne vous est pas adressé.</p></div>
       </AppLayout>
     )
   }
@@ -62,7 +63,7 @@ export default function ExerciseDetail() {
     <AppLayout title={ex.title} subtitle={deadline ?? 'Sans date limite'} actions={back}>
       <div className="exercise-detail">
         <div className={`exercise-state state-${ex.is_closed && !ex.completed ? 'closed' : ex.status}`}>
-          {ex.completed ? '✅ Exercice terminé' : ex.is_closed ? '🔒 Exercice fermé' : ex.status === 'in_progress' ? '⏳ En cours' : '📌 À faire'}
+          {ex.completed ? 'Exercice terminé' : ex.is_closed ? 'Exercice fermé' : ex.status === 'in_progress' ? 'En cours' : 'À faire'}
           {deadline && <span>{deadline}</span>}
         </div>
 
@@ -95,7 +96,7 @@ export default function ExerciseDetail() {
             <div className="panel-head"><h3>Ma réponse</h3></div>
             {canRespond && editing ? (
               <>
-                <textarea className="input" rows={5} maxLength={5000} placeholder="Votre réponse…" value={text} onChange={(e) => setText(e.target.value)} />
+                <textarea aria-label="Votre réponse" className="input" rows={5} maxLength={5000} placeholder="Votre réponse…" value={text} onChange={(e) => setText(e.target.value)} />
                 <div className="row-actions mt-sm">
                   {ex.my_response && <button className="btn btn-ghost small" onClick={() => { setText(ex.my_response ?? ''); setEditing(false) }}>Annuler</button>}
                   <button className="btn btn-primary small" disabled={busy || !text.trim()} onClick={submit}>{busy ? <span className="spinner" /> : 'Envoyer ma réponse'}</button>

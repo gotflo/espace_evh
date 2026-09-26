@@ -50,27 +50,30 @@ class ActivityService
         $changes = ['inactivated' => [], 'reactivated' => []];
         User::whereHas('profile', fn ($p) => $p->where('is_completed', true))
             ->select(['id', 'last_login_at', 'last_seen_at', 'activity_status', 'created_at'])
+            // Une transaction par lot : une seule ecriture disque par lot de changements.
             ->chunkById(300, function ($users) use ($lastAttendance, $lastFiss, &$changes) {
-                foreach ($users as $user) {
-                    $dates = array_filter([
-                        $user->last_seen_at,
-                        $user->last_login_at,
-                        isset($lastAttendance[$user->id]) ? Carbon::parse($lastAttendance[$user->id]) : null,
-                        isset($lastFiss[$user->id]) ? Carbon::parse($lastFiss[$user->id]) : null,
-                        $user->created_at, // un nouvel inscrit n'est pas inactif des le depart
-                    ]);
-                    $last = $dates ? collect($dates)->max() : null;
-                    $status = User::activityFrom(null, $last);
-                    if ($status === $user->activity_status) {
-                        continue;
+                DB::transaction(function () use ($users, $lastAttendance, $lastFiss, &$changes) {
+                    foreach ($users as $user) {
+                        $dates = array_filter([
+                            $user->last_seen_at,
+                            $user->last_login_at,
+                            isset($lastAttendance[$user->id]) ? Carbon::parse($lastAttendance[$user->id]) : null,
+                            isset($lastFiss[$user->id]) ? Carbon::parse($lastFiss[$user->id]) : null,
+                            $user->created_at, // un nouvel inscrit n'est pas inactif des le depart
+                        ]);
+                        $last = $dates ? collect($dates)->max() : null;
+                        $status = User::activityFrom(null, $last);
+                        if ($status === $user->activity_status) {
+                            continue;
+                        }
+                        $previous = $user->activity_status;
+                        $user->forceFill(['activity_status' => $status, 'activity_changed_at' => now()])->saveQuietly();
+                        Audit::log($status === 'inactive' ? 'member.inactivated' : 'member.reactivated', $user, $user->id,
+                            ['activity_status' => $previous], ['activity_status' => $status],
+                            ['last_activity' => $last?->toDateString(), 'rule' => '3 mois sans connexion, FISS ni présence'], null);
+                        $changes[$status === 'inactive' ? 'inactivated' : 'reactivated'][] = $user->id;
                     }
-                    $previous = $user->activity_status;
-                    $user->forceFill(['activity_status' => $status, 'activity_changed_at' => now()])->saveQuietly();
-                    Audit::log($status === 'inactive' ? 'member.inactivated' : 'member.reactivated', $user, $user->id,
-                        ['activity_status' => $previous], ['activity_status' => $status],
-                        ['last_activity' => $last?->toDateString(), 'rule' => '3 mois sans connexion, FISS ni présence'], null);
-                    $changes[$status === 'inactive' ? 'inactivated' : 'reactivated'][] = $user->id;
-                }
+                });
             });
 
         return $changes;

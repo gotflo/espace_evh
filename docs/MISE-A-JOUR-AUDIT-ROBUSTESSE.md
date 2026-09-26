@@ -16,6 +16,13 @@ Voir l'audit complet : [`AUDIT-2026-09.md`](AUDIT-2026-09.md).
 - **Messages d'erreur en français** (ils affichaient parfois des codes comme « validation.min.string »).
 - **Accessibilité** : focus clavier visible partout, lien « Aller au contenu », zones tactiles agrandies.
 - Textes relus : accents corrigés partout.
+- **Connexion plus rapide** : le code reçu par SMS est proposé par le téléphone et validé sans appui.
+- **Accueil plus léger** : 4 appels au lieu de 10 à l'ouverture (tient mieux quand toute l'église ouvre
+  l'application au même moment).
+- **Doubles appuis** : un message Contact envoyé deux fois n'est enregistré qu'une fois ; deux responsables qui
+  valident un changement de tribu au même instant ne bloquent plus la demande (et celles déjà bloquées sont
+  terminées automatiquement).
+- Page inexistante ou réservée : un message l'explique au lieu d'un retour muet à l'accueil.
 
 ## Ce qui change techniquement
 
@@ -40,6 +47,7 @@ Voir l'audit complet : [`AUDIT-2026-09.md`](AUDIT-2026-09.md).
 app/Console/Commands/LoadTestUsers.php
 app/Http/Controllers/Api/Admin/VerseController.php
 app/Http/Controllers/Api/HealthController.php
+app/Http/Controllers/Api/MyHomeController.php     ← ouverture du tableau de bord en un appel
 app/Http/Controllers/Api/MyNotificationPrefsController.php
 app/Http/Controllers/Api/MyWelcomeController.php
 app/Models/DashboardVerse.php
@@ -56,19 +64,33 @@ app/Http/Controllers/Api/Admin/AuditLogController.php
 app/Http/Controllers/Api/Admin/MemberController.php
 app/Http/Controllers/Api/Admin/ReportController.php
 app/Http/Controllers/Api/AuthController.php
+app/Http/Controllers/Api/CalendarController.php
+app/Http/Controllers/Api/MyNotificationController.php
+app/Http/Controllers/Api/MyRequestController.php
+app/Http/Controllers/Api/MyServiceController.php
 app/Http/Middleware/SecurityHeaders.php
 app/Models/SpiritualHealthForm.php
 app/Models/User.php
+app/Services/ActivityService.php
 app/Services/CalendarService.php
+app/Services/FissService.php
 app/Services/Notifier.php
+app/Services/Push/WebPush.php
 app/Services/ReportService.php
+app/Services/TribeChangeService.php
+app/Support/Blessings.php
 app/Support/ProfileCompletion.php
 app/Support/Recipients.php
+bootstrap/app.php
 database/seeders/RolesAndPermissionsSeeder.php
 public/.htaccess                           ← important : à remplacer sur le serveur
 routes/api.php
 routes/web.php
 ```
+
+**Nouvelle classe** (`MyHomeController`) : si le dossier `vendor/` du serveur a été installé avec un chargement
+« figé » (`composer install --classmap-authoritative`), lancer `composer dump-autoload -o` après l'envoi.
+Avec une installation classique, rien à faire.
 (Tests, `phpunit.xml`, `.env.production.example` : dans le dépôt seulement.)
 
 ### Supprimés

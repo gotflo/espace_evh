@@ -4,6 +4,7 @@ import { useAuth } from './auth/AuthContext'
 import { InstallPrompt } from './components/InstallPrompt'
 import { PullToRefresh } from './components/PullToRefresh'
 import { Toaster } from './components/Toaster'
+import { toast } from './toast'
 import { api } from './api/client'
 import { syncPush } from './push'
 import { setUnread, getUnread } from './notifications'
@@ -42,6 +43,12 @@ function Loading() {
   return <div className="loading-screen"><span className="spinner" /></div>
 }
 
+/** Redirection expliquee : l'utilisateur sait pourquoi il n'est pas sur la page demandee. */
+function RedirectWithMessage({ to, message }: { to: string; message: string }) {
+  useEffect(() => { toast.info(message) }, [message])
+  return <Navigate to={to} replace />
+}
+
 /** Accueil : redirige selon l'etat de connexion. */
 function Home() {
   const { loading, isAuthenticated, profileCompleted } = useAuth()
@@ -61,7 +68,7 @@ function RequireAuth({ children, requireComplete = false, anyPermission }: {
   if (!isAuthenticated) return <Navigate to="/connexion" replace />
   if (requireComplete && !profileCompleted) return <Navigate to="/profil" replace />
   if (anyPermission && !anyPermission.some((p) => hasPermission(p))) {
-    return <Navigate to="/tableau-de-bord" replace />
+    return <RedirectWithMessage to="/tableau-de-bord" message="Cette page est réservée aux responsables concernés." />
   }
   return <>{children}</>
 }
@@ -152,7 +159,7 @@ export default function App() {
       <Route path="/admin/rapports" element={<RequireAuth requireComplete anyPermission={['reports.view']}><Reports /></RequireAuth>} />
       <Route path="/admin/versets" element={<RequireAuth requireComplete anyPermission={['content.manage']}><Verses /></RequireAuth>} />
       <Route path="/admin/journal" element={<RequireAuth requireComplete anyPermission={['audit.view']}><AuditLog /></RequireAuth>} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<RedirectWithMessage to="/" message="Cette page n'existe pas (ou plus). Retour à l'accueil." />} />
     </Routes>
     </Suspense>
     </>

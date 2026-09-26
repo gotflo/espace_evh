@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { MyExercise } from '../types'
 import { deadlineLabel } from '../utils/exercises'
+import { Icon } from './Icon'
 
 export function ExerciseRow({ ex }: { ex: MyExercise }) {
   const deadline = deadlineLabel(ex.closes_at, ex.is_closed)
@@ -8,7 +9,7 @@ export function ExerciseRow({ ex }: { ex: MyExercise }) {
     <Link to={`/exercices/${ex.id}`} className={`exercise-row ${ex.completed ? 'is-done' : ''} ${ex.is_closed ? 'is-closed' : ''}`}>
       {ex.video
         ? <img className="exercise-thumb" src={ex.video.thumbnail} alt="" loading="lazy" />
-        : <span className="exercise-thumb exercise-thumb-icon" aria-hidden>📖</span>}
+        : <span className="exercise-thumb exercise-thumb-icon"><Icon name="book" size={22} /></span>}
       <span className="exercise-row-main">
         <strong>{ex.title}</strong>
         <small>{ex.video ? (ex.requires_response ? 'Vidéo + réponse' : 'Vidéo à regarder') : 'Exercice à rendre'}{deadline ? ` · ${deadline}` : ''}</small>

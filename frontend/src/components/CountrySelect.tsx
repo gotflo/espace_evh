@@ -42,7 +42,7 @@ export function CountrySelect({ value, onChange }: { value: Country; onChange: (
 
       {open && (
         <div className="country-menu" role="listbox">
-          <input
+          <input aria-label="Rechercher un pays"
             className="input country-search" placeholder="Rechercher un pays..."
             value={query} onChange={(e) => setQuery(e.target.value)} autoFocus
           />

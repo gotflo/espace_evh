@@ -6,8 +6,9 @@
 //   2. Sur un ordinateur : k6 run -e BASE_URL=https://espace.vasesdhonneurchicoutimi.org scripts/load/k6-scenario.js
 //   3. Apres le test : php artisan app:load-test-users --delete
 //
+// Sans installer k6 : scripts/load/charge.mjs (Node) fait le meme test.
 // Chaque utilisateur virtuel se comporte comme un membre : il ouvre l'application
-// (profil, verset, evenements, notifications), puis l'application appelle le « pouls »
+// (les appels du tableau de bord), puis l'application appelle le « pouls »
 // toutes les ~45 s ; de temps en temps il ouvre le calendrier ou ses exercices.
 // Paliers : 10 -> 50 -> 100 -> 250 -> 500 utilisateurs simultanes, puis pic brutal et retour.
 import http from 'k6/http'
@@ -52,9 +53,16 @@ const get = (path, token, kind) => http.get(`${BASE}/api${path}`, {
 export default function () {
   const token = tokens[(__VU - 1) % tokens.length]
   if (__ITER === 0) {
-    // Ouverture de l'application
-    for (const path of ['/me', '/dashboard/verse', '/me/events?days=30', '/me/announcements', '/me/exercises']) {
-      check(get(path, token, 'page'), { 'ouverture 200': (r) => r.status === 200 })
+    // Ouverture de l'application : profil, lectures des blocs regroupees (/me/home) et pouls,
+    // en parallele comme le navigateur.
+    const day = new Date().toISOString().slice(0, 10)
+    const week = new Date(Date.now() + 6 * 86400000).toISOString().slice(0, 10)
+    const params = { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, tags: { kind: 'page' } }
+    const blocks = ['/dashboard/verse', '/me/fiss', '/me/events?days=30', '/me/announcements', '/me/exercises',
+      `/calendar?from=${day}&to=${week}&only=events`]
+    const paths = ['/me', '/me/home?' + blocks.map((p) => 'paths[]=' + encodeURIComponent(p)).join('&'), '/me/pulse']
+    for (const r of http.batch(paths.map((p) => ['GET', `${BASE}/api${p}`, null, params]))) {
+      check(r, { 'ouverture 200': (x) => x.status === 200 })
     }
   }
   check(get('/me/pulse', token, 'pulse'), { 'pouls 200': (r) => r.status === 200 })

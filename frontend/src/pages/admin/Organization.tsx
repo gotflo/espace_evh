@@ -98,7 +98,7 @@ function OrgSection({ title, singular, items, endpoint, canManage, showRehearsal
 
       {canManage && (
         <div className="org-add">
-          <input className="input" placeholder={`Nouveau ${singular}...`} value={name}
+          <input className="input" aria-label={`Nouveau ${singular}`} placeholder={`Nouveau ${singular}...`} value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') add() }} />
           <button className="btn btn-primary small" disabled={busy || !name.trim()} onClick={add}>Ajouter</button>
@@ -122,7 +122,7 @@ function OrgSection({ title, singular, items, endpoint, canManage, showRehearsal
                 disabled={!canManage || busy}
                 title="Suit la ponctualité aux répétitions (retards, absences)"
                 onClick={() => call(() => api(`/admin/${endpoint}/${it.id}`, { method: 'PUT', body: { tracks_rehearsal: !it.tracks_rehearsal } }))}>
-                {it.tracks_rehearsal ? '🎵 Répétitions' : 'Répétitions ?'}
+                {it.tracks_rehearsal ? 'Répétitions suivies' : 'Répétitions ?'}
               </button>
             )}
             <span className="org-count">{it.members_count} membre(s)</span>

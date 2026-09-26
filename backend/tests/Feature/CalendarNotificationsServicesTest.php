@@ -359,7 +359,7 @@ class CalendarNotificationsServicesTest extends TestCase
 
         $titles = UserNotification::where('user_id', $member->id)->pluck('title')->all();
         $this->assertContains('Demain : Prière du soir', $titles);
-        $this->assertContains('Joyeux anniversaire, Adams ! 🎂', $titles);
+        $this->assertContains('Joyeux anniversaire, Adams !', $titles);
         $this->assertContains('Rappel : « Lire Romains 8 »', $titles);
         $this->assertContains('Rappel : fiche de santé spirituelle de septembre 2026', $titles);
         $this->assertSame(1, collect($titles)->filter(fn ($t) => $t === 'Demain : Prière du soir')->count());

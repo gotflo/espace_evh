@@ -10,6 +10,8 @@ use App\Models\Profile;
 use App\Models\SpiritualHealthForm;
 use App\Models\Tribe;
 use App\Models\User;
+use App\Support\Like;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -58,7 +60,7 @@ class ReportService
         }
         $allowed = array_column($options['tribes'], 'id');
         if ($scope === 'mine') {
-            abort_unless($allowed, 403, "Aucune tribu ne vous est assignée.");
+            abort_unless($allowed, 403, 'Aucune tribu ne vous est assignée.');
 
             return ['key' => 'mine', 'label' => 'Mes tribus', 'tribe_ids' => $allowed];
         }
@@ -67,7 +69,7 @@ class ReportService
 
             return ['key' => $scope, 'label' => 'Tribu '.$name, 'tribe_ids' => [(int) $m[1]]];
         }
-        abort(403, "Cette tribu ne fait pas partie de votre périmètre.");
+        abort(403, 'Cette tribu ne fait pas partie de votre périmètre.');
     }
 
     /** Membres (profils completes) de la portee. */
@@ -86,7 +88,20 @@ class ReportService
         $months = max(1, min(12, $months));
         $slot = now()->format('YmdH').intdiv((int) now()->format('i'), 10);
 
-        return Cache::remember("report:{$resolved['key']}:{$months}:{$slot}", 600, fn () => self::compute($resolved, $months));
+        $key = "report:{$resolved['key']}:{$months}:{$slot}";
+        $cached = Cache::get($key);
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        // Un seul calcul a la fois pour un meme rapport : si plusieurs responsables l'ouvrent au
+        // meme instant, les autres attendent son resultat au lieu de tout recalculer en parallele
+        // (mesure : 10 demandes simultanees = 10 calculs, 18,5 s sur un coeur).
+        try {
+            return Cache::lock($key.':calcul', 60)->block(30, fn () => Cache::remember($key, 600, fn () => self::compute($resolved, $months)));
+        } catch (LockTimeoutException) {
+            return Cache::remember($key, 600, fn () => self::compute($resolved, $months));
+        }
     }
 
     private static function compute(array $scope, int $months): array
@@ -267,9 +282,9 @@ class ReportService
         $search = trim($search);
         if ($search !== '') {
             $query->where(function ($w) use ($search) {
-                \App\Support\Like::contains($w, 'first_name', $search);
-                \App\Support\Like::contains($w, 'last_name', $search, 'or');
-                $w->orWhereHas('user', fn ($u) => \App\Support\Like::contains($u, 'phone', $search));
+                Like::contains($w, 'first_name', $search);
+                Like::contains($w, 'last_name', $search, 'or');
+                $w->orWhereHas('user', fn ($u) => Like::contains($u, 'phone', $search));
             });
         }
         $total = (clone $query)->count();

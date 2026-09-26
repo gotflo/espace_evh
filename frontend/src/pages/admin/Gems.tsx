@@ -81,16 +81,16 @@ export default function Gems() {
             <button className="btn-link" onClick={() => setMode('list')}>Annuler</button>
           </div>
           <div className="field"><label>Nom du GEM</label>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex. GEM Bethel" />
+            <input aria-label="Nom du GEM" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex. GEM Bethel" />
           </div>
           <div className="field"><label>Tribu</label>
-            <select className="select" value={tribeId} onChange={(e) => setTribeId(e.target.value)}>
+            <select aria-label="Tribu" className="select" value={tribeId} onChange={(e) => setTribeId(e.target.value)}>
               <option value="">Choisir...</option>
               {tribes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
           <div className="field"><label>Garde (responsable du GEM)</label>
-            <select className="select" value={leaderId} disabled={!tribeId || candidates === null} onChange={(e) => setLeaderId(e.target.value)}>
+            <select aria-label="Garde (responsable du GEM)" className="select" value={leaderId} disabled={!tribeId || candidates === null} onChange={(e) => setLeaderId(e.target.value)}>
               <option value="">{!tribeId ? "Choisissez d'abord la tribu" : candidates === null ? 'Chargement…' : "Aucun pour l'instant"}</option>
               {candidates?.map((m) => (
                 <option key={m.user_id} value={m.user_id}>

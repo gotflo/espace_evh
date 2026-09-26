@@ -4,6 +4,7 @@ import { AppLayout } from '../../components/AppLayout'
 import { AudiencePicker } from '../../components/AudiencePicker'
 import { SkeletonCard } from '../../components/Skeleton'
 import type { AnnouncementAdminItem, AudienceScope } from '../../types'
+import { Icon } from '../../components/Icon'
 
 const CATEGORIES = [
   { key: 'info', label: 'Information' },
@@ -85,17 +86,17 @@ export default function Announcements() {
           </div>
           <div className="field">
             <label>Titre <span className="helper" style={{ display: 'inline' }}>(optionnel)</span></label>
-            <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. Culte spécial dimanche" />
+            <input aria-label="Titre" className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. Culte spécial dimanche" />
           </div>
           <div className="field">
             <label>Message <span className="helper" style={{ display: 'inline' }}>(optionnel)</span></label>
-            <textarea className="input" rows={4} value={body} onChange={(e) => setBody(e.target.value)} />
+            <textarea aria-label="Message" className="input" rows={4} value={body} onChange={(e) => setBody(e.target.value)} />
           </div>
           <div className="field">
             <label>Image <span className="helper" style={{ display: 'inline' }}>(optionnel , une annonce peut être juste une image)</span></label>
             <div className="image-picker">
               <button type="button" className="image-drop" onClick={() => fileRef.current?.click()}>
-                {imagePreview ? <img src={imagePreview} alt="" /> : '🖼️'}
+                {imagePreview ? <img src={imagePreview} alt="" /> : <Icon name="image" size={28} />}
               </button>
               <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickImage} />
               {image && <button className="btn-link" onClick={() => { setImage(null); setImagePreview(null) }}>Retirer l'image</button>}
@@ -103,7 +104,7 @@ export default function Announcements() {
           </div>
           <div className="field">
             <label>Catégorie</label>
-            <select className="select" value={category} onChange={(e) => setCategory(e.target.value)}>
+            <select aria-label="Catégorie" className="select" value={category} onChange={(e) => setCategory(e.target.value)}>
               {CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
           </div>

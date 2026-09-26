@@ -3,6 +3,7 @@ import { api, ApiError } from '../../api/client'
 import { AppLayout } from '../../components/AppLayout'
 import { SkeletonCard } from '../../components/Skeleton'
 import type { AdminRequest, RequestStatus } from '../../types'
+import { Icon } from '../../components/Icon'
 
 const NEXT: { key: RequestStatus; label: string }[] = [
   { key: 'nouvelle', label: 'Nouvelle' },
@@ -67,14 +68,14 @@ export default function Requests() {
 
               {r.reply && replyFor !== r.id && (
                 <div className="req-reply">
-                  <span className="req-reply-label">Votre reponse{r.replied_by ? ` , ${r.replied_by}` : ''}{r.replied_at ? ` · ${r.replied_at}` : ''}</span>
+                  <span className="req-reply-label">Votre réponse{r.replied_by ? ` , ${r.replied_by}` : ''}{r.replied_at ? ` · ${r.replied_at}` : ''}</span>
                   <p>{r.reply}</p>
                 </div>
               )}
 
               {replyFor === r.id ? (
                 <div className="req-reply-box">
-                  <textarea className="input" rows={3} value={replyText} autoFocus
+                  <textarea className="input" rows={3} aria-label="Votre réponse au fidèle" value={replyText} autoFocus
                     onChange={(e) => setReplyText(e.target.value)} placeholder="Écrivez votre réponse au fidèle…" />
                   <div className="req-reply-actions">
                     <button className="btn-link" onClick={() => setReplyFor(null)}>Annuler</button>
@@ -85,8 +86,8 @@ export default function Requests() {
                 </div>
               ) : (
                 <div className="req-actions">
-                  <button className="btn-link" onClick={() => openReply(r)}>{r.reply ? 'Modifier la réponse' : '✍️ Répondre'}</button>
-                  {r.sender_phone && <a className="btn-link" href={`tel:${r.sender_phone}`}>📞 {r.sender_phone}</a>}
+                  <button className="btn-link" onClick={() => openReply(r)}>{r.reply ? 'Modifier la réponse' : 'Répondre'}</button>
+                  {r.sender_phone && <a className="btn-link" href={`tel:${r.sender_phone}`}><Icon name="phone" size={14} /> {r.sender_phone}</a>}
                   <div className="req-status-btns">
                     {NEXT.map((s) => (
                       <button key={s.key} className={`status-btn ${r.status === s.key ? 'on' : ''}`}

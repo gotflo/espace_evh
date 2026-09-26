@@ -5,6 +5,7 @@ import { usePulse } from '../pulse'
 import type { EventOccurrence } from '../types'
 import { CAT_LABEL, longDay, optimisticRsvp, parseYmd, relativeDay, rsvpOccurrence, timeRange } from '../utils/events'
 import { Skeleton } from './Skeleton'
+import { Icon } from './Icon'
 
 /**
  * « Evenements a venir – Les 30 prochains jours » : visible par tous, regroupe par jour,
@@ -56,7 +57,7 @@ export function EventsFeed({ days = 30, limit = 8 }: { days?: number; limit?: nu
 
       {items?.length === 0 && (
         <div className="empty-state compact">
-          <span aria-hidden>📅</span>
+          <Icon name="calendar" size={28} />
           <p>Aucun événement prévu dans les {days} prochains jours.</p>
         </div>
       )}
@@ -86,7 +87,7 @@ export function EventsFeed({ days = 30, limit = 8 }: { days?: number; limit?: nu
                         </span>
                         <span className="upcoming-meta">
                           <span className={`cat-badge evt-${e.category}`}>{CAT_LABEL[e.category]}</span>
-                          {e.location && <span>📍 {e.location}</span>}
+                          {e.location && <span className="with-icon"><Icon name="pin" size={14} />{e.location}</span>}
                           {e.my_response === 'present' && <span className="going-tag">✓ Inscrit</span>}
                         </span>
                       </button>

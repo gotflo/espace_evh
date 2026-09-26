@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MemberRequest;
+use App\Models\User;
 use App\Services\Notifier;
 use App\Support\Recipients;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class MyRequestController extends Controller
 {
@@ -45,7 +47,19 @@ class MyRequestController extends Controller
         ]);
 
         $user = $request->user();
-        $req = MemberRequest::create($data + ['user_id' => $user->id, 'status' => 'nouvelle']);
+        // Double appui, reseau qui renvoie : le meme message envoye deux fois en quelques minutes
+        // n'est enregistre (et signale aux responsables) qu'une seule fois. Verrou sur le membre
+        // pour que deux envois simultanes ne passent pas tous les deux.
+        [$req, $created] = DB::transaction(function () use ($user, $data) {
+            User::whereKey($user->id)->lockForUpdate()->first();
+            $same = MemberRequest::where('user_id', $user->id)->where('category', $data['category'])
+                ->where('message', $data['message'])->where('created_at', '>=', now()->subMinutes(10))->latest('id')->first();
+
+            return $same ? [$same, false] : [MemberRequest::create($data + ['user_id' => $user->id, 'status' => 'nouvelle']), true];
+        });
+        if (! $created) {
+            return response()->json(['message' => 'Demande envoyée.', 'request' => $this->present($req)]);
+        }
 
         // Les responsables qui traitent les demandes de ce fidele sont prevenus.
         $name = $user->profile?->full_name ?: $user->phone;

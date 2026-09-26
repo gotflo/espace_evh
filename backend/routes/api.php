@@ -2,42 +2,46 @@
 
 use App\Http\Controllers\Api\Admin\AnnouncementController;
 use App\Http\Controllers\Api\Admin\AttendanceController;
+use App\Http\Controllers\Api\Admin\AudienceController;
+use App\Http\Controllers\Api\Admin\AuditLogController;
 use App\Http\Controllers\Api\Admin\EvaluationController;
 use App\Http\Controllers\Api\Admin\EventController;
 use App\Http\Controllers\Api\Admin\ExerciseController;
+use App\Http\Controllers\Api\Admin\FissController;
 use App\Http\Controllers\Api\Admin\GemController;
 use App\Http\Controllers\Api\Admin\MemberController;
+use App\Http\Controllers\Api\Admin\NewMemberController;
 use App\Http\Controllers\Api\Admin\OrgController;
+use App\Http\Controllers\Api\Admin\ReportController;
 use App\Http\Controllers\Api\Admin\RequestController;
 use App\Http\Controllers\Api\Admin\RoleController;
 use App\Http\Controllers\Api\Admin\SpiritualController;
 use App\Http\Controllers\Api\Admin\StatsController;
-use App\Http\Controllers\Api\Admin\AudienceController;
-use App\Http\Controllers\Api\Admin\AuditLogController;
-use App\Http\Controllers\Api\Admin\NewMemberController;
-use App\Http\Controllers\Api\Admin\ReportController;
 use App\Http\Controllers\Api\Admin\ValidationController;
 use App\Http\Controllers\Api\Admin\VerseController;
-use App\Http\Controllers\Api\MyFamilyController;
-use App\Http\Controllers\Api\MyTribeChangeController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CalendarController;
+use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\MyAnnouncementController;
 use App\Http\Controllers\Api\MyEvaluationController;
 use App\Http\Controllers\Api\MyEventController;
-use App\Http\Controllers\Api\MyFissController;
-use App\Http\Controllers\Api\MyOverviewController;
 use App\Http\Controllers\Api\MyExerciseController;
+use App\Http\Controllers\Api\MyFamilyController;
+use App\Http\Controllers\Api\MyFissController;
+use App\Http\Controllers\Api\MyHomeController;
 use App\Http\Controllers\Api\MyNotificationController;
 use App\Http\Controllers\Api\MyNotificationPrefsController;
-use App\Http\Controllers\Api\MyWelcomeController;
-use App\Http\Controllers\Api\PulseController;
-use App\Http\Controllers\Api\MyServiceController;
+use App\Http\Controllers\Api\MyOverviewController;
 use App\Http\Controllers\Api\MyRequestController;
+use App\Http\Controllers\Api\MyServiceController;
 use App\Http\Controllers\Api\MySpiritualController;
 use App\Http\Controllers\Api\MySpiritualProfileController;
+use App\Http\Controllers\Api\MyTribeChangeController;
+use App\Http\Controllers\Api\MyWelcomeController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\PulseController;
 use App\Http\Controllers\Api\ReferenceController;
+use App\Http\Middleware\TrackActivity;
 use Illuminate\Support\Facades\Route;
 
 // --- Authentification par telephone (OTP SMS) ---
@@ -50,10 +54,10 @@ Route::get('/calendar/feed/{token}.ics', [CalendarController::class, 'ics'])
     ->where('token', '[A-Za-z0-9]+')->middleware('throttle:30,1');
 
 // --- Etat de sante (surveillance externe), sans donnee sensible ---
-Route::get('/health', \App\Http\Controllers\Api\HealthController::class)->middleware('throttle:30,1');
+Route::get('/health', HealthController::class)->middleware('throttle:30,1');
 
 // --- Routes protegees (jeton Sanctum requis) ---
-Route::middleware(['auth:sanctum', 'throttle:150,1', \App\Http\Middleware\TrackActivity::class])->group(function () {
+Route::middleware(['auth:sanctum', 'throttle:150,1', TrackActivity::class])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
@@ -62,6 +66,9 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', \App\Http\Middleware\TrackA
     Route::post('/profile', [ProfileController::class, 'update']); // POST accepte pour l'upload de photo
 
     Route::get('/reference', [ReferenceController::class, 'index']);
+
+    // Tableau de bord : ses lectures regroupees en un seul appel.
+    Route::get('/me/home', MyHomeController::class);
 
     // --- Espace fidele : annonces / notifications ---
     Route::get('/me/announcements', [MyAnnouncementController::class, 'index']);
@@ -192,7 +199,7 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', \App\Http\Middleware\TrackA
         // Suivi spirituel (journal + etapes)
         Route::get('/members/{user}/spiritual', [SpiritualController::class, 'show'])
             ->middleware('permission:spiritual.view');
-        Route::get('/members/{user}/fiss', [App\Http\Controllers\Api\Admin\FissController::class, 'index'])
+        Route::get('/members/{user}/fiss', [FissController::class, 'index'])
             ->middleware('permission:spiritual.view');
         Route::middleware('permission:spiritual.record')->group(function () {
             Route::post('/members/{user}/spiritual/entries', [SpiritualController::class, 'storeEntry']);

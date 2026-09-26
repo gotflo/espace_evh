@@ -5,6 +5,7 @@ import { AppLayout } from '../../components/AppLayout'
 import { ColumnChart, HBarChart, LineChart, Meter, VIZ } from '../../components/charts'
 import { toast } from '../../toast'
 import type { ReportData, ReportMemberRow, ReportOptions } from '../../types'
+import { Icon } from '../../components/Icon'
 
 interface MembersPage { members: ReportMemberRow[]; total: number; has_more: boolean }
 
@@ -151,7 +152,7 @@ export default function Reports() {
   if (options && !options.church && options.tribes.length === 0) {
     return (
       <AppLayout title="Rapports">
-        <div className="empty-state"><span aria-hidden>📊</span><h3>Aucune tribu dans votre périmètre</h3><p>Les rapports sont disponibles pour les tribus qui vous sont assignées.</p></div>
+        <div className="empty-state"><Icon name="reports" size={28} /><h3>Aucune tribu dans votre périmètre</h3><p>Les rapports sont disponibles pour les tribus qui vous sont assignées.</p></div>
       </AppLayout>
     )
   }
@@ -176,7 +177,7 @@ export default function Reports() {
         </div>
         <button className="btn btn-primary small report-pdf" disabled={exporting || (tab === 'overview' ? !report : !rows)}
           onClick={tab === 'overview' ? exportReport : exportMembers}>
-          {exporting ? <span className="spinner" /> : '⬇ PDF'}
+          {exporting ? <span className="spinner" /> : <><Icon name="download" size={14} /> PDF</>}
         </button>
       </div>
 
@@ -253,7 +254,7 @@ export default function Reports() {
             )}
 
             <div className="report-lists mt">
-              <People title="FISS non remplie ce mois-ci" people={report.missing_fiss} empty="Tous les membres actifs ont rempli leur fiche. 🎉" />
+              <People title="FISS non remplie ce mois-ci" people={report.missing_fiss} empty="Tous les membres actifs ont rempli leur fiche." />
               <People title="Membres inactifs" people={report.inactive_members} empty="Aucun membre inactif." extra={(p: { since?: string | null }) => (p.since ? `depuis le ${p.since}` : undefined)} />
               <People title="Nouveaux membres" people={report.new_members_list} empty="Aucun nouveau membre sur la période." extra={(p: { date?: string }) => p.date} />
             </div>
@@ -270,12 +271,12 @@ export default function Reports() {
                 <button key={f.key} role="radio" aria-checked={filter === f.key} className={`chip-toggle ${filter === f.key ? 'on' : ''}`} onClick={() => setFilter(f.key)}>{f.label}</button>
               ))}
             </div>
-            <input className="input" type="search" placeholder="Rechercher…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input aria-label="Rechercher" className="input" type="search" placeholder="Rechercher…" value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
           {rows === null ? (
             <div className="member-cards">{[0, 1, 2, 3].map((i) => <div key={i} className="skeleton skeleton-row" />)}</div>
           ) : shown.length === 0 ? (
-            <div className="empty-state compact"><span aria-hidden>👥</span><p>Aucun membre pour ce filtre.</p></div>
+            <div className="empty-state compact"><Icon name="members" size={28} /><p>Aucun membre pour ce filtre.</p></div>
           ) : (
             <div className="member-cards">
               <p className="helper">{total > shown.length ? `${shown.length} sur ${total} membres` : `${total} membre(s)`}</p>
@@ -287,11 +288,11 @@ export default function Reports() {
                   </div>
                   <div className="member-card-meta">{[r.tribe, r.gem, r.phone].filter(Boolean).join(' · ')}</div>
                   <div className="member-card-stats">
-                    <span title="Complétion du profil">👤 {r.completion} %</span>
-                    <span title="Dernière FISS" className={r.fiss_current ? '' : 'warn'}>🩺 {r.fiss_current ? `ce mois ${pct(r.fiss_score)}` : r.last_fiss ? `dernière : ${r.last_fiss}` : 'aucune'}</span>
-                    <span title="Présences sur 3 mois">⛪ {r.attendance_3m}</span>
-                    <span title="Vertumètre">⭐ {r.vertumetre ?? '—'}</span>
-                    <span title="Dernière connexion">🕒 {r.last_seen ? new Date(r.last_seen).toLocaleDateString('fr-CA') : 'jamais'}</span>
+                    <span title="Complétion du profil">Profil {r.completion} %</span>
+                    <span title="Dernière FISS" className={r.fiss_current ? '' : 'warn'}>FISS {r.fiss_current ? `ce mois ${pct(r.fiss_score)}` : r.last_fiss ? `dernière : ${r.last_fiss}` : 'aucune'}</span>
+                    <span title="Présences sur 3 mois">Présences {r.attendance_3m}</span>
+                    <span title="Vertumètre">Vertumètre {r.vertumetre ?? '—'}</span>
+                    <span title="Dernière connexion">Vu le {r.last_seen ? new Date(r.last_seen).toLocaleDateString('fr-CA') : 'jamais'}</span>
                   </div>
                 </button>
               ))}
