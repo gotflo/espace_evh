@@ -41,6 +41,12 @@ class Notifier
     ];
 
     /**
+     * Au-dela de ce nombre de notifications dans l'heure, plus de push (sauf urgence) : le reste
+     * attend dans la cloche. Evite qu'une journee chargee fasse vibrer le telephone sans arret.
+     */
+    public const PUSH_HOURLY_LIMIT = 6;
+
+    /**
      * Categories que chaque membre peut couper en push (la notification reste dans la cloche).
      * Les types absents de cette liste (FISS, reponses, famille, fonctions...) ne se coupent pas.
      */
@@ -111,6 +117,19 @@ class Notifier
             $pushIds = $ids->diff($muted)->values();
         }
 
+        // Limitation (anti-spam) : au-dela de PUSH_HOURLY_LIMIT notifications dans l'heure pour une
+        // meme personne, les suivantes restent dans la cloche sans faire vibrer le telephone
+        // (sauf urgence). Le compte inclut celle qui vient d'etre enregistree.
+        if ($urgency !== 'high' && $pushIds->isNotEmpty()) {
+            $busy = [];
+            foreach ($pushIds->chunk(500) as $chunk) {
+                $busy = array_merge($busy, DB::table('user_notifications')->whereIn('user_id', $chunk)
+                    ->where('created_at', '>=', $now->copy()->subHour())
+                    ->groupBy('user_id')->havingRaw('count(*) > ?', [self::PUSH_HOURLY_LIMIT])->pluck('user_id')->all());
+            }
+            $pushIds = $pushIds->diff(array_map('intval', $busy))->values();
+        }
+
         if (config('services.webpush.enabled') && $pushIds->isNotEmpty()) {
             self::push($pushIds->all(), [
                 'priority' => $urgency,
@@ -162,10 +181,12 @@ class Notifier
             }
         };
 
-        // En console (cron, tests) on envoie directement ; en requete web, apres la reponse
-        // (le fidele n'attend pas), avec un delai d'execution suffisant pour une grande audience.
+        // En console (cron, tests) on envoie directement, mais apres la validation de la
+        // transaction en cours s'il y en a une (aucun appel reseau pendant un verrou, aucun push
+        // pour une notification annulee) ; en requete web, apres la reponse (le fidele n'attend
+        // pas), avec un delai d'execution suffisant pour une grande audience.
         if (app()->runningInConsole()) {
-            $job();
+            DB::afterCommit($job);
         } else {
             defer(function () use ($job) {
                 ignore_user_abort(true);

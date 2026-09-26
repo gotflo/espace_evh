@@ -78,11 +78,19 @@ class TribeChangeService
 
     public static function decide(User $approver, TribeChangeRequest $req, bool $approve, ?string $comment): TribeChangeRequest
     {
-        $req->load('approvals');
-        $sides = self::sidesFor($approver, $req);
-        abort_unless($sides, 403, 'Vous ne pouvez pas (ou plus) vous prononcer sur cette demande.');
+        // Verrou sur la demande : deux responsables qui valident au meme instant (ou un double
+        // clic) sont traites l'un apres l'autre ; le second voit la decision du premier. Sans ce
+        // verrou, chacun ne voyait que sa propre approbation et le changement n'etait jamais applique.
+        return DB::transaction(function () use ($approver, $req, $approve, $comment) {
+            $req = TribeChangeRequest::whereKey($req->id)->lockForUpdate()->firstOrFail();
+            $req->load('approvals');
+            $sides = self::sidesFor($approver, $req);
+            if (! $sides) {
+                abort_if($req->status !== 'pending', 409, 'Cette demande a déjà été traitée.');
+                abort_if($req->approvals->contains('approver_id', $approver->id), 409, 'Votre décision est déjà enregistrée.');
+                abort(403, 'Vous ne pouvez pas (ou plus) vous prononcer sur cette demande.');
+            }
 
-        return DB::transaction(function () use ($approver, $req, $approve, $comment, $sides) {
             foreach ($sides as $side) {
                 TribeChangeApproval::create([
                     'request_id' => $req->id, 'side' => $side, 'approver_id' => $approver->id,
@@ -115,6 +123,31 @@ class TribeChangeService
         abort_unless($req->status === 'pending', 409, 'Cette demande a déjà été traitée.');
         $req->forceFill(['status' => 'cancelled', 'completed_at' => now()])->save();
         Audit::log('tribe_change.cancelled', $req, $member->id);
+    }
+
+    /**
+     * Rattrapage (automatismes) : demandes restees « en attente » alors que tous les cotes ont
+     * approuve, cas produit par deux validations simultanees avant le verrou de decide().
+     */
+    public static function completeApproved(): int
+    {
+        $done = 0;
+        foreach (TribeChangeRequest::where('status', 'pending')->pluck('id') as $id) {
+            DB::transaction(function () use ($id, &$done) {
+                $req = TribeChangeRequest::whereKey($id)->lockForUpdate()->first();
+                if (! $req || $req->status !== 'pending') {
+                    return;
+                }
+                $req->load('approvals', 'fromTribe', 'toTribe', 'member.profile');
+                if ($req->approvals->contains('decision', 'rejected') || array_diff($req->requiredSides(), $req->approvedSides())) {
+                    return;
+                }
+                self::apply($req);
+                $done++;
+            });
+        }
+
+        return $done;
     }
 
     /** Toutes les validations obtenues : le membre change de tribu. */

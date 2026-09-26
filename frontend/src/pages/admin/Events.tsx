@@ -4,6 +4,7 @@ import { AppLayout } from '../../components/AppLayout'
 import { SkeletonCard } from '../../components/Skeleton'
 import { AudiencePicker } from '../../components/AudiencePicker'
 import type { AudienceScope, EventAdminItem, EventCategory, EventParticipants, Recurrence } from '../../types'
+import { Icon } from '../../components/Icon'
 
 const RECURRENCES: { key: Recurrence; label: string }[] = [
   { key: 'none', label: 'Une seule fois' },
@@ -136,7 +137,7 @@ export default function Events() {
             <h4 className="section-label">Presents ({participants.going.length})</h4>
             <div className="participant-list">
               {participants.going.map((p) => (
-                <span key={p.user_id} className="participant-chip">{p.name}{p.volunteer ? ' 🙋' : ''}</span>
+                <span key={p.user_id} className="participant-chip">{p.name}{p.volunteer ? ' (volontaire)' : ''}</span>
               ))}
               {participants.going.length === 0 && <p className="helper">Aucun inscrit pour l'instant.</p>}
             </div>
@@ -160,28 +161,28 @@ export default function Events() {
           </div>
           <div className="field">
             <label>Titre</label>
-            <input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Ex. Culte de la moisson" />
+            <input aria-label="Titre" className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Ex. Culte de la moisson" />
           </div>
           <div className="field-row">
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Catégorie</label>
-              <select className="select" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as EventCategory })}>
+              <select aria-label="Catégorie" className="select" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as EventCategory })}>
                 {CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
               </select>
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Lieu</label>
-              <input className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Ex. Temple principal" />
+              <input aria-label="Lieu" className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Ex. Temple principal" />
             </div>
           </div>
           <div className="field-row">
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Début</label>
-              <input className="input" type="datetime-local" value={form.starts_at} onChange={(e) => setForm({ ...form, starts_at: e.target.value })} />
+              <input aria-label="Début" className="input" type="datetime-local" value={form.starts_at} onChange={(e) => setForm({ ...form, starts_at: e.target.value })} />
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Fin (optionnel)</label>
-              <input className="input" type="datetime-local" value={form.ends_at} onChange={(e) => setForm({ ...form, ends_at: e.target.value })} />
+              <input aria-label="Fin (optionnel)" className="input" type="datetime-local" value={form.ends_at} onChange={(e) => setForm({ ...form, ends_at: e.target.value })} />
             </div>
           </div>
           <label className="rsvp-volunteer" style={{ marginBottom: '1rem' }}>
@@ -191,14 +192,14 @@ export default function Events() {
           <div className="field-row">
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Répétition</label>
-              <select className="select" value={form.recurrence} onChange={(e) => setForm({ ...form, recurrence: e.target.value as Recurrence })}>
+              <select aria-label="Répétition" className="select" value={form.recurrence} onChange={(e) => setForm({ ...form, recurrence: e.target.value as Recurrence })}>
                 {RECURRENCES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
               </select>
             </div>
             {form.recurrence !== 'none' && (
               <div className="field" style={{ marginBottom: 0 }}>
                 <label>Jusqu'au (optionnel)</label>
-                <input className="input" type="date" value={form.recurrence_until} min={form.starts_at.slice(0, 10)} onChange={(e) => setForm({ ...form, recurrence_until: e.target.value })} />
+                <input aria-label="Jusqu'au (optionnel)" className="input" type="date" value={form.recurrence_until} min={form.starts_at.slice(0, 10)} onChange={(e) => setForm({ ...form, recurrence_until: e.target.value })} />
               </div>
             )}
           </div>
@@ -209,7 +210,7 @@ export default function Events() {
           )}
           <div className="field">
             <label>Description (optionnel)</label>
-            <textarea className="input" rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            <textarea aria-label="Description (optionnel)" className="input" rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </div>
           <div className="field">
             <label>Image (optionnel)</label>
@@ -217,7 +218,7 @@ export default function Events() {
               <button type="button" className="image-drop" onClick={() => fileRef.current?.click()}>
                 {imagePreview
                   ? <img src={imagePreview} alt="" />
-                  : existingImage ? <img src={existingImage} alt="" /> : '🖼️'}
+                  : existingImage ? <img src={existingImage} alt="" /> : <Icon name="image" size={28} />}
               </button>
               <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickImage} />
               {image
@@ -272,14 +273,14 @@ export default function Events() {
             </div>
           </div>
           <h4 className="event-title">{e.title}</h4>
-          <p className="event-meta">🕒 {e.recurrence !== 'none' && e.next_occurrence ? `Prochaine : ${fmtDate(e.next_occurrence)}` : fmtDate(e.starts_at)}{e.location ? ` · 📍 ${e.location}` : ''}</p>
+          <p className="event-meta with-icon"><Icon name="clock" size={14} />{e.recurrence !== 'none' && e.next_occurrence ? `Prochaine : ${fmtDate(e.next_occurrence)}` : fmtDate(e.starts_at)}{e.location ? ` · ${e.location}` : ''}</p>
           {e.recurrence !== 'none' && (
             <p className="event-meta-soft">↻ {e.recurrence_label}{e.recurrence_until ? ` jusqu'au ${new Date(e.recurrence_until + 'T00:00').toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' })}` : ''}</p>
           )}
           <p className="event-meta-soft">{e.target}</p>
           {e.image_url && <img className="event-image" style={{ marginTop: '0.6rem', marginBottom: 0 }} src={e.image_url} alt={e.title} loading="lazy" />}
           <button className="event-participants-btn" onClick={() => openParticipants(e.id)}>
-            👥 {e.going_count} inscrit(s){e.volunteer_count > 0 ? ` · ${e.volunteer_count} volontaire(s)` : ''}
+            <Icon name="members" size={14} /> {e.going_count} inscrit(s){e.volunteer_count > 0 ? ` · ${e.volunteer_count} volontaire(s)` : ''}
           </button>
         </div>
       </article>

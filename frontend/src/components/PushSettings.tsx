@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { disablePush, enablePush, getPushState, PushError, type PushState } from '../push'
 import { toast } from '../toast'
+import { Icon } from './Icon'
 
 const DISMISS_KEY = 'evh_push_prompt_dismissed'
 
@@ -61,7 +62,7 @@ export function PushSettings({ variant = 'card' }: { variant?: 'card' | 'prompt'
     if (dismissed || state !== 'off') return null
     return (
       <div className="push-prompt" role="status">
-        <span className="push-prompt-icon" aria-hidden>🔔</span>
+        <span className="push-prompt-icon"><Icon name="bell" size={24} /></span>
         <div className="push-prompt-text">
           <strong>Ne manquez rien</strong>
           <span>Recevez les annonces, rappels d'événements et tâches directement sur votre téléphone.</span>
@@ -91,7 +92,7 @@ export function PushSettings({ variant = 'card' }: { variant?: 'card' | 'prompt'
       {state === 'denied' && (
         <p className="helper">
           Les notifications sont bloquées pour ce site. Autorisez-les dans les réglages du navigateur
-          (icône 🔒 à côté de l'adresse → Notifications → Autoriser), puis rechargez la page.
+          (cadenas à côté de l'adresse → Notifications → Autoriser), puis rechargez la page.
         </p>
       )}
       {state === 'off' && <p className="helper">Activez les notifications pour être prévenu même lorsque l'application est fermée.</p>}

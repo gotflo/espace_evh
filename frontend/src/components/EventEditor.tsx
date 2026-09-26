@@ -133,14 +133,14 @@ export function EventEditor({ date, event, onClose, onSaved }: {
 
         {canChurch && !editing && (
           <div className="seg" role="radiogroup" aria-label="Pour qui ?">
-            <button role="radio" aria-checked={church} className={church ? 'on' : ''} onClick={() => set('audience', 'church')}>⛪ Pour l'église</button>
-            <button role="radio" aria-checked={!church} className={!church ? 'on' : ''} onClick={() => set('audience', 'personal')}>🔒 Mon agenda</button>
+            <button role="radio" aria-checked={church} className={church ? 'on' : ''} onClick={() => set('audience', 'church')}>Pour l'église</button>
+            <button role="radio" aria-checked={!church} className={!church ? 'on' : ''} onClick={() => set('audience', 'personal')}>Mon agenda</button>
           </div>
         )}
-        {!church && <p className="helper editor-note">🔒 Visible par vous seul. Vous recevrez un rappel la veille et 1 h avant.</p>}
-        {editing && event?.recurring && <p className="helper editor-note">↻ Les changements s'appliquent à toute la série.</p>}
+        {!church && <p className="helper editor-note">Visible par vous seul. Vous recevrez un rappel la veille et 1 h avant.</p>}
+        {editing && event?.recurring && <p className="helper editor-note">Les changements s'appliquent à toute la série.</p>}
 
-        <input ref={titleRef} className="input editor-title" placeholder={church ? 'Titre (ex. Culte de louange)' : 'Titre (ex. Rendez-vous avec mon Garde)'}
+        <input ref={titleRef} aria-label="Titre" className="input editor-title" placeholder={church ? 'Titre (ex. Culte de louange)' : 'Titre (ex. Rendez-vous avec mon Garde)'}
           value={f.title} onChange={(e) => set('title', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') save() }} />
 
         <div className="cat-chips" role="radiogroup" aria-label="Catégorie">
@@ -154,7 +154,7 @@ export function EventEditor({ date, event, onClose, onSaved }: {
         <div className="editor-when">
           <div className="field">
             <label>Date</label>
-            <input className="input" type="date" value={f.date} onChange={(e) => {
+            <input aria-label="Date" className="input" type="date" value={f.date} onChange={(e) => {
               const d = e.target.value
               setF((p) => ({ ...p, date: d, endDate: p.endDate < d ? d : p.endDate }))
             }} />
@@ -163,7 +163,7 @@ export function EventEditor({ date, event, onClose, onSaved }: {
             <>
               <div className="field">
                 <label>Début</label>
-                <input className="input" type="time" step={300} value={f.start} onChange={(e) => {
+                <input aria-label="Début" className="input" type="time" step={300} value={f.start} onChange={(e) => {
                   const s = e.target.value
                   // La fin suit le debut (meme duree), comme dans les agendas modernes.
                   setF((p) => {
@@ -176,7 +176,7 @@ export function EventEditor({ date, event, onClose, onSaved }: {
               </div>
               <div className="field">
                 <label>Fin</label>
-                <input className="input" type="time" step={300} value={f.end} onChange={(e) => set('end', e.target.value)} />
+                <input aria-label="Fin" className="input" type="time" step={300} value={f.end} onChange={(e) => set('end', e.target.value)} />
               </div>
             </>
           )}
@@ -200,19 +200,19 @@ export function EventEditor({ date, event, onClose, onSaved }: {
         <div className="field-row">
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Répétition</label>
-            <select className="select" value={f.recurrence} onChange={(e) => set('recurrence', e.target.value as Recurrence)}>
+            <select aria-label="Répétition" className="select" value={f.recurrence} onChange={(e) => set('recurrence', e.target.value as Recurrence)}>
               {RECURRENCES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
             </select>
           </div>
           {f.recurrence !== 'none' ? (
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Jusqu'au (optionnel)</label>
-              <input className="input" type="date" min={f.date} value={f.until} onChange={(e) => set('until', e.target.value)} />
+              <input aria-label="Jusqu'au (optionnel)" className="input" type="date" min={f.date} value={f.until} onChange={(e) => set('until', e.target.value)} />
             </div>
           ) : (
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Lieu (optionnel)</label>
-              <input className="input" value={f.location} onChange={(e) => set('location', e.target.value)} placeholder="Ex. Temple principal" />
+              <input aria-label="Lieu (optionnel)" className="input" value={f.location} onChange={(e) => set('location', e.target.value)} placeholder="Ex. Temple principal" />
             </div>
           )}
         </div>
@@ -225,12 +225,12 @@ export function EventEditor({ date, event, onClose, onSaved }: {
         {f.recurrence !== 'none' && (
           <div className="field mt">
             <label>Lieu (optionnel)</label>
-            <input className="input" value={f.location} onChange={(e) => set('location', e.target.value)} placeholder="Ex. Temple principal" />
+            <input aria-label="Lieu (optionnel)" className="input" value={f.location} onChange={(e) => set('location', e.target.value)} placeholder="Ex. Temple principal" />
           </div>
         )}
         <div className="field mt">
           <label>Description (optionnel)</label>
-          <textarea className="input" rows={2} value={f.description} onChange={(e) => set('description', e.target.value)} />
+          <textarea aria-label="Description (optionnel)" className="input" rows={2} value={f.description} onChange={(e) => set('description', e.target.value)} />
         </div>
 
         {church && (

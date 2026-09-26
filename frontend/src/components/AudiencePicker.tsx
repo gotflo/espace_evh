@@ -54,9 +54,9 @@ export function AudiencePicker({ value, onChange }: { value: AudienceScope[]; on
       {opts.church && (
         <div className="seg small" role="radiogroup" aria-label="Portée">
           <button type="button" role="radio" aria-checked={church} className={church ? 'on' : ''}
-            onClick={() => onChange([{ type: 'church', id: null }])}>⛪ Toute l'église</button>
+            onClick={() => onChange([{ type: 'church', id: null }])}>Toute l'église</button>
           <button type="button" role="radio" aria-checked={!church} className={!church ? 'on' : ''}
-            onClick={() => onChange(church ? [] : value)}>🎯 Choisir des groupes</button>
+            onClick={() => onChange(church ? [] : value)}>Choisir des groupes</button>
         </div>
       )}
       {!church && !nothing && (

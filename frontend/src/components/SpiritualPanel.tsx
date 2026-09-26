@@ -69,13 +69,13 @@ export function SpiritualPanel({ userId, canRecord }: { userId: string; canRecor
       {canRecord && (
         <div className="journal-form">
           <div className="journal-form-row">
-            <select className="select" value={type} onChange={(e) => setType(e.target.value)}>
+            <select aria-label="Type d'événement" className="select" value={type} onChange={(e) => setType(e.target.value)}>
               <option value="">Type d'événement...</option>
               {data.entry_types.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
             </select>
-            <input className="input" type="date" max={TODAY} value={date} onChange={(e) => setDate(e.target.value)} />
+            <input className="input" type="date" aria-label="Date" max={TODAY} value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
-          <textarea className="input" rows={2} placeholder="Note (facultatif)" value={note} onChange={(e) => setNote(e.target.value)} />
+          <textarea aria-label="Note (facultatif)" className="input" rows={2} placeholder="Note (facultatif)" value={note} onChange={(e) => setNote(e.target.value)} />
           <button className="btn btn-primary small" disabled={busy || !type} onClick={addEntry}>
             {busy ? <span className="spinner" /> : 'Ajouter au journal'}
           </button>

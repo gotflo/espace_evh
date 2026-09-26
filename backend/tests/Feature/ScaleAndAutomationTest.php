@@ -91,6 +91,43 @@ class ScaleAndAutomationTest extends TestCase
         $this->assertSame(11, $this->getJson('/api/admin/reports/members?scope=church&filter=all&q=Fidele1')->json('total'));
     }
 
+    public function test_dashboard_schedule_asks_the_calendar_for_events_only(): void
+    {
+        $member = $this->member('+14186999007', $this->juda);
+        Profile::where('user_id', $member->id)->update(['birth_day' => 14, 'birth_month' => 10]);
+        $this->makeEvent(['title' => 'Culte', 'category' => 'culte', 'starts_at' => now()->setTime(19, 0)]);
+        Sanctum::actingAs($member);
+
+        $full = $this->getJson('/api/calendar?from=2026-10-14&to=2026-10-14')->assertOk()->json();
+        $this->assertNotEmpty($full['birthdays']);
+        $light = $this->getJson('/api/calendar?from=2026-10-14&to=2026-10-14&only=events')->assertOk()->json();
+        $this->assertSame([], $light['birthdays']);
+        $this->assertSame(array_column($full['events'], 'title'), array_column($light['events'], 'title'));
+        $this->getJson('/api/calendar?from=2026-10-14&to=2026-10-14&only=tout')->assertStatus(422);
+    }
+
+    public function test_dashboard_reads_are_grouped_in_one_call_with_the_same_answers(): void
+    {
+        $member = $this->member('+14186999008', $this->juda);
+        $this->makeEvent(['title' => 'Culte', 'category' => 'culte', 'starts_at' => now()->addDay()->setTime(19, 0)]);
+        $this->makeExercise(['title' => 'Lire Jacques 1', 'content' => '...', 'type' => 'lecture', 'is_active' => true]);
+        Sanctum::actingAs($member);
+
+        $paths = ['/dashboard/verse', '/me/fiss', '/me/events?days=30', '/me/announcements', '/me/exercises',
+            '/calendar?from=2026-10-14&to=2026-10-20&only=events'];
+        $home = $this->getJson('/api/me/home?'.http_build_query(['paths' => $paths]))->assertOk()->json('responses');
+        foreach ($paths as $path) {
+            $this->assertSame(200, $home[$path]['status'], $path);
+            $this->assertEquals($this->getJson('/api'.$path)->json(), $home[$path]['body'], $path);
+        }
+
+        // Seules les lectures prevues ; erreurs de parametres rendues pour chaque bloc.
+        $other = $this->getJson('/api/me/home?'.http_build_query(['paths' => ['/admin/members', '/calendar?from=x']]))->assertOk()->json('responses');
+        $this->assertSame(404, $other['/admin/members']['status']);
+        $this->assertSame(422, $other['/calendar?from=x']['status']);
+        $this->getJson('/api/me/home')->assertStatus(422);
+    }
+
     public function test_welcome_back_lists_what_happened_since_the_last_visit(): void
     {
         $member = $this->member('+14186999003', $this->juda);
@@ -125,6 +162,27 @@ class ScaleAndAutomationTest extends TestCase
         Notifier::send([$member->id], 'request_reply', 'Réponse à votre demande');
         Http::assertSentCount(2);
         $this->assertSame(3, UserNotification::where('user_id', $member->id)->count(), 'tout reste dans la cloche');
+    }
+
+    public function test_push_is_limited_per_hour_but_urgent_messages_and_the_bell_are_not(): void
+    {
+        $member = $this->member('+14186999009', $this->juda);
+        $device = WebPush::newKeyPair();
+        PushSubscription::create(['user_id' => $member->id, 'endpoint' => 'https://push.example/y', 'endpoint_hash' => hash('sha256', 'y'),
+            'public_key' => WebPush::b64uEncode($device['public_raw']), 'auth_token' => WebPush::b64uEncode(random_bytes(16))]);
+        Http::fake(['push.example/*' => Http::response('', 201)]);
+
+        for ($i = 1; $i <= 8; $i++) {
+            Notifier::send([$member->id], 'announcement', "Annonce {$i}");
+        }
+        Http::assertSentCount(Notifier::PUSH_HOURLY_LIMIT);
+        Notifier::send([$member->id], 'request_reply', 'Réponse urgente', null, null, [], 'high');
+        Http::assertSentCount(Notifier::PUSH_HOURLY_LIMIT + 1);
+        $this->assertSame(9, UserNotification::where('user_id', $member->id)->count(), 'tout reste dans la cloche');
+
+        Carbon::setTestNow(now()->addMinutes(61));
+        Notifier::send([$member->id], 'announcement', 'Annonce du lendemain');
+        Http::assertSentCount(Notifier::PUSH_HOURLY_LIMIT + 2);
     }
 
     public function test_health_reports_the_database_and_the_automations(): void

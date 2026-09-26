@@ -1,3 +1,4 @@
+import type { IconName } from './utils/icons'
 // Etat partage des notifications (compteur non lu) entre la cloche, la page
 // Notifications et la pastille de l'icone de l'application.
 import { useEffect, useState } from 'react'
@@ -41,27 +42,27 @@ export function timeAgo(iso: string | null): string {
   return d.toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })
 }
 
-/** Icone (emoji) par type de notification. */
-export const NOTIF_ICON: Record<string, string> = {
-  announcement: '📢',
-  event: '📅',
-  event_reminder: '⏰',
-  task: '📝',
-  task_reminder: '📝',
-  request: '💬',
-  request_reply: '✉️',
-  evaluation: '⭐',
-  role: '🎖️',
-  member: '👋',
-  service: '🙌',
-  birthday: '🎂',
-  fiss: '🩺',
-  fiss_request: '🩺',
-  tribe_change: '🔁',
-  family: '👨‍👩‍👧',
-  profile: '👤',
-  wedding: '💍',
-  activity: '🌱',
-  report: '📊',
-  system: '🔔',
+/** Icone (au trait, voir utils/icons.ts) par type de notification. */
+export const NOTIF_ICON: Record<string, IconName> = {
+  announcement: 'announce',
+  event: 'events',
+  event_reminder: 'clock',
+  task: 'fiss',
+  task_reminder: 'clock',
+  request: 'requests',
+  request_reply: 'mail',
+  evaluation: 'star',
+  role: 'roles',
+  member: 'members',
+  service: 'serve',
+  birthday: 'gift',
+  fiss: 'fiss',
+  fiss_request: 'fiss',
+  tribe_change: 'swap',
+  family: 'members',
+  profile: 'profile',
+  wedding: 'spiritual',
+  activity: 'reports',
+  report: 'reports',
+  system: 'bell',
 }

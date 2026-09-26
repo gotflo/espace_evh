@@ -82,7 +82,7 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Choisirâ€
             </div>
             <div className="ms-search">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-              <input ref={searchRef} value={query} onChange={(e) => { setQuery(e.target.value); setActive(0) }} onKeyDown={onKey}
+              <input ref={searchRef} aria-label={searchPlaceholder} value={query} onChange={(e) => { setQuery(e.target.value); setActive(0) }} onKeyDown={onKey}
                 placeholder={searchPlaceholder} aria-controls={listId} aria-autocomplete="list" />
               {value.length > 0 && <button type="button" className="btn-link" onClick={() => onChange([])}>Effacer</button>}
             </div>

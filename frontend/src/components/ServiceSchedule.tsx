@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import type { CalendarData, EventOccurrence } from '../types'
+import { serviceSchedulePath } from '../utils/schedule'
 
-const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 const time = (iso: string) => {
   const d = new Date(iso)
   return `${d.getHours()}h${String(d.getMinutes()).padStart(2, '0')}`
@@ -17,9 +17,7 @@ export function ServiceSchedule() {
   const [days, setDays] = useState<{ day: string; date: string; items: EventOccurrence[] }[] | null>(null)
 
   useEffect(() => {
-    const from = new Date()
-    const to = new Date(from.getTime() + 6 * 86400000)
-    api<CalendarData>(`/calendar?from=${ymd(from)}&to=${ymd(to)}`, { toast: false }).then((r) => {
+    api<CalendarData>(serviceSchedulePath(), { toast: false }).then((r) => {
       const byDay = new Map<string, EventOccurrence[]>()
       r.events.filter((e) => e.remind_all).sort((a, b) => a.starts_at.localeCompare(b.starts_at)).forEach((e) => {
         const l = byDay.get(e.occurs_on)

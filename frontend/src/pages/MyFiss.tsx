@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { clearDraft, readDraft, useDraft } from '../utils/drafts'
 import { api } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
 import { AppLayout } from '../components/AppLayout'
 import { SkeletonCard } from '../components/Skeleton'
 import { FissEvolution } from '../components/FissEvolution'
 import { FissDetail } from '../components/FissDetail'
 import type { FissData, FissForm, FissIndex } from '../types'
+import { Icon } from '../components/Icon'
 
 const SANCT = [['bien', 'Bien'], ['moyen', 'Moyen'], ['mal', 'Mal']]
 
@@ -25,7 +27,7 @@ function ScoreField({ label, hint, value, onChange }: { label: string; hint?: st
     <div className="fiss-field">
       <label>{label}{hint && <span className="helper" style={{ display: 'inline' }}> {hint}</span>}</label>
       <div className="fiss-score">
-        <input className="input" type="number" inputMode="numeric" min="0" max="20" value={value ?? ''}
+        <input className="input" type="number" inputMode="numeric" min="0" max="20" aria-label={`${label} (sur 20)`} value={value ?? ''}
           onChange={(e) => onChange(e.target.value === '' ? null : Math.max(0, Math.min(20, Number(e.target.value))))} />
         <span className="fiss-score-max">/20</span>
       </div>
@@ -70,7 +72,7 @@ function LockStatus({ f, max, onRequest, onCancel, onEdit }: {
   if (f.editable) {
     return (
       <div className="lock-card open">
-        <span className="lock-icon" aria-hidden>🔓</span>
+        <span className="lock-icon"><Icon name="unlock" size={20} /></span>
         <div className="lock-text">
           <strong>Modification autorisée</strong>
           <span>Votre patriarche a accepté : vous pouvez modifier cette fiche une fois, jusqu'au {fmtDate(f.can_edit_until)}.</span>
@@ -81,7 +83,7 @@ function LockStatus({ f, max, onRequest, onCancel, onEdit }: {
   }
   return (
     <div className="lock-card">
-      <span className="lock-icon" aria-hidden>🔒</span>
+      <span className="lock-icon"><Icon name="lock" size={20} /></span>
       <div className="lock-text">
         <strong>Fiche verrouillée</strong>
         {f.pending_request ? (
@@ -104,6 +106,9 @@ function LockStatus({ f, max, onRequest, onCancel, onEdit }: {
 }
 
 export default function MyFiss() {
+  const { profile } = useAuth()
+  // Question « situation conjugale » seulement pour les maries (ou si la situation n'est pas renseignee).
+  const married = !profile?.marital_status || profile.marital_status === 'marie'
   const [data, setData] = useState<FissData | null>(null)
   const [form, setForm] = useState<FissForm>(EMPTY)
   // null = nouvelle fiche du mois ; sinon fiche existante deverrouillee en cours de modification.
@@ -177,7 +182,7 @@ export default function MyFiss() {
         </div>
       )}
       {!data.filled && (
-        <p className="helper fiss-lock-hint">🔒 Une fois enregistrée, la fiche est verrouillée : vérifiez bien vos réponses. Une modification restera possible sur demande à votre patriarche.</p>
+        <p className="helper fiss-lock-hint">Une fois enregistrée, la fiche est verrouillée : vérifiez bien vos réponses. Une modification restera possible sur demande à votre patriarche.</p>
       )}
 
       {data.current && !editing && (
@@ -196,7 +201,7 @@ export default function MyFiss() {
 
       {editing && (
         <div className="lock-card open">
-          <span className="lock-icon" aria-hidden>✏️</span>
+          <span className="lock-icon"><Icon name="edit" size={20} /></span>
           <div className="lock-text">
             <strong>Modification de la fiche de {editing.period_label}</strong>
             <span>Après enregistrement, la fiche sera de nouveau verrouillée.</span>
@@ -223,10 +228,12 @@ export default function MyFiss() {
               <div className="panel-head"><h3>Vie sociale <span className="fiss-total">{vieSoc}/{form.situation_conjugale != null ? 60 : 40}</span></h3></div>
               <ScoreField label="Situation financière" value={form.situation_financiere} onChange={(v) => set('situation_financiere', v)} />
               <ScoreField label="Situation familiale" hint="(famille biologique)" value={form.situation_familiale} onChange={(v) => set('situation_familiale', v)} />
-              <ScoreField label="Situation conjugale" hint="(mariés uniquement)" value={form.situation_conjugale} onChange={(v) => set('situation_conjugale', v)} />
+              {(married || form.situation_conjugale != null) && (
+                <ScoreField label="Situation conjugale" hint="(mariés uniquement)" value={form.situation_conjugale} onChange={(v) => set('situation_conjugale', v)} />
+              )}
               <div className="fiss-field">
                 <label>Commentaire (optionnel)</label>
-                <textarea className="input" rows={3} value={form.comment ?? ''} onChange={(e) => set('comment', e.target.value)} />
+                <textarea aria-label="Commentaire (optionnel)" className="input" rows={3} value={form.comment ?? ''} onChange={(e) => set('comment', e.target.value)} />
               </div>
               <button className="btn btn-primary mt" disabled={busy} onClick={save}>
                 {busy ? <span className="spinner" /> : editing ? 'Enregistrer la modification' : 'Enregistrer ma fiche du mois'}
@@ -251,7 +258,7 @@ export default function MyFiss() {
             {data.history.map((h, i) => (
               <details key={h.id} className="fiss-admin-item">
                 <summary>
-                  <span className="fiss-hist-period">{h.period_label} {h.editable ? '🔓' : h.pending_request ? '⏳' : '🔒'}</span>
+                  <span className="fiss-hist-period">{h.period_label} <span className="fiss-hist-state">{h.editable ? 'modifiable' : h.pending_request ? 'demande en attente' : 'verrouillée'}</span></span>
                   <span className="fiss-hist-scores">
                     {h.spiritual_score != null ? `Vie spirituelle ${Math.round(h.spiritual_score)} %` : `Spirituelle ${h.vie_spirituelle_total}/60`}
                   </span>
@@ -282,7 +289,7 @@ export default function MyFiss() {
             </p>
             <div className="field mt">
               <label>Pourquoi souhaitez-vous la modifier ?</label>
-              <textarea className="input" rows={3} value={reason} autoFocus onChange={(e) => setReason(e.target.value)}
+              <textarea aria-label="Pourquoi souhaitez-vous la modifier ?" className="input" rows={3} value={reason} autoFocus onChange={(e) => setReason(e.target.value)}
                 placeholder="Ex. je me suis trompé dans la note de jeûne" />
             </div>
             <button className="btn btn-primary" disabled={busy || reason.trim().length < 5} onClick={sendRequest}>

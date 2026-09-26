@@ -36,7 +36,7 @@ class Blessings
     {
         [$text, $ref] = self::verse(self::BIRTHDAY_VERSES, $userId + (int) now()->format('Y'));
 
-        return "Toute la famille Vases d'Honneur Chicoutimi se réjouit avec toi en ce jour"
+        return "Toute la famille Vases d'Honneur Chicoutimi se réjouit avec vous en ce jour"
             .($firstName ? ", {$firstName}" : '')." ! Que cette nouvelle année soit remplie de la grâce et de la paix de Dieu.\n« {$text} » ({$ref})";
     }
 

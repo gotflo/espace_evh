@@ -316,17 +316,24 @@ contexte, IP, date. **Aucune route ne permet de modifier ou supprimer** une entr
 ## Tests et vérifications
 
 ```bash
-cd backend && php artisan test                 # tests de l'API (règles, permissions, automatismes, concurrence, injections)
+cd backend && php artisan test                 # tests de l'API (règles, permissions, automatismes, concurrence, injections, pannes)
 cd backend && php artisan test --group=benchmark   # mesures de volume 500 → 5 000 membres (quelques minutes)
+cd backend && DB_CONNECTION=mysql DB_DATABASE=evh_bench BENCH_SIZES=2,50,100,250,500,1000,2000,5000 php artisan test --group=benchmark   # idem sur MySQL
 cd frontend && npx tsc -b && npx eslint src    # types et qualité
 cd frontend && node scripts/check-api-routes.mjs <chemin/vers/php>   # chaque appel du front existe côté API
 cd frontend && node scripts/check-accents.mjs  # aucun texte affiché sans ses accents
 cd frontend && npm run build
 ```
 
-Test de charge réel (utilisateurs simultanés) : `scripts/load/k6-scenario.js`, à lancer sur une copie de test
-(ou pendant un créneau calme, avec accord) après `php artisan app:load-test-users 500` ; supprimer ensuite les
-comptes de test avec `php artisan app:load-test-users --delete`.
+Test de charge (utilisateurs simultanés), sur une copie de test, après `php artisan app:load-test-users 500` :
+
+```bash
+node scripts/load/charge.mjs --base https://copie-de-test --tokens load-test-tokens.txt --mode realiste   # aussi : pic, capacite, endurance
+```
+
+Sans installation (Node 18+) ; `scripts/load/k6-scenario.js` fait le même test avec k6. Supprimer ensuite les comptes
+de test : `php artisan app:load-test-users --delete` (`--force` sur un serveur en production). Marche à suivre
+complète : [`docs/A-FAIRE-DE-VOTRE-COTE.md`](docs/A-FAIRE-DE-VOTRE-COTE.md), étape 6.
 
 ## Déploiement
 
@@ -373,9 +380,11 @@ OPcache, cron disponible. Pas de Redis ni de worker permanent supposés : l'appl
 
 ## Limites connues
 
-- **Charge simultanée** : les volumes jusqu'à 5 000 membres sont mesurés (écrans constants en requêtes SQL,
-  voir `docs/AUDIT-2026-09.md`) ; la tenue à 500 utilisateurs *simultanés* dépend du forfait (1 cœur) et n'a pas été
-  mesurée sur le serveur réel (script k6 fourni).
+- **Charge simultanée** : mesurée sur un poste reproduisant le forfait (1 cœur, 40 processus PHP, MySQL,
+  5 500 membres) : 500 membres connectés au rythme réel, p95 262 ms, 0 erreur ; plafond d'environ 49 requêtes/s
+  sur un cœur ; 500 ouvertures dans les mêmes 5 secondes : 0,9 % d'erreurs et jusqu'à ~30 s d'attente pour les
+  derniers servis (voir `docs/AUDIT-2026-09.md` §9). À confirmer sur l'hébergement réel (Linux, plus rapide) avec
+  `scripts/load/charge.mjs`.
 - **Rapport « toute l'église » sur 12 mois** : calculé à la demande (≈ 2 s à 5 000 membres en local), puis en cache 10 min.
 - **Push sur iPhone** : uniquement avec l'application installée sur l'écran d'accueil (iOS 16.4+).
 - **SMS** : tant que `SMS_DRIVER=log`, aucun SMS n'est envoyé (phase de test).
@@ -384,6 +393,7 @@ OPcache, cron disponible. Pas de Redis ni de worker permanent supposés : l'appl
 ## Documentation complémentaire
 
 - [`docs/AUDIT-2026-09.md`](docs/AUDIT-2026-09.md) : audit complet (architecture, sécurité, performance, hébergement, mesures).
+- [`docs/A-FAIRE-DE-VOTRE-COTE.md`](docs/A-FAIRE-DE-VOTRE-COTE.md) : ce que l'équipe doit faire (mise en ligne, hPanel, surveillance, restauration, test de charge).
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) : modèle de données et choix techniques.
 - [`docs/IA-ARCHITECTURE.md`](docs/IA-ARCHITECTURE.md) : proposition d'architecture pour de futures fonctions d'IA (non implémentées).
 - `docs/MISE-A-JOUR-*.md` : procédures des mises à jour successives.

@@ -191,7 +191,7 @@ class MyNotificationController extends Controller
         abort_if(RateLimiter::tooManyAttempts($key, 5), 429, 'Patientez une minute avant un nouvel essai.');
         RateLimiter::hit($key, 60);
 
-        Notifier::send([$request->user()->id], 'system', 'Notifications activées ✅',
+        Notifier::send([$request->user()->id], 'system', 'Notifications activées',
             'Vous recevrez ici les annonces, rappels et tâches de Vases d\'Honneur.', '/notifications');
 
         return response()->json(['message' => 'Notification de test envoyée.']);

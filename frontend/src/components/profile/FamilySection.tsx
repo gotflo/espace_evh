@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import type { FamilyOverview, FamilyPerson } from '../../types'
+import { Icon } from '../Icon'
 
 const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 const MARITAL = [
@@ -23,7 +24,7 @@ function PersonSearch({ onPick, placeholder, excludeMarried }: { onPick: (p: Fam
 
   return (
     <div className="person-search">
-      <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} />
+      <input className="input" type="search" aria-label={placeholder} value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} />
       {results && (
         <ul className="person-results">
           {results.map((p) => {
@@ -117,7 +118,7 @@ export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, on
         <div className="family-incoming">
           {family.incoming.map((l) => (
             <div key={l.id} className="lock-card open">
-              <span className="lock-icon" aria-hidden>{l.relation === 'spouse' ? '💍' : '👨‍👧'}</span>
+              <span className="lock-icon"><Icon name={l.relation === 'spouse' ? 'spiritual' : 'members'} size={20} /></span>
               <div className="lock-text">
                 <strong>{l.from} vous a indiqué comme {l.relation === 'spouse' ? 'conjoint(e)' : 'son enfant'}</strong>
                 <span>Confirmez seulement s'il s'agit bien de vous.</span>
@@ -132,7 +133,7 @@ export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, on
       )}
 
       <div className="field"><label>Situation matrimoniale</label>
-        <select className="select" value={marital} onChange={(e) => onMarital(e.target.value)}>
+        <select aria-label="Situation matrimoniale" className="select" value={marital} onChange={(e) => onMarital(e.target.value)}>
           <option value="">Non précisé</option>{MARITAL.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
         </select>
       </div>
@@ -142,10 +143,10 @@ export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, on
           <div className="field">
             <label>Date de mariage <span className="helper" style={{ display: 'inline' }}>(ajoutée au calendrier)</span></label>
             <div className="field-row" style={{ gap: '0.5rem' }}>
-              <select className="select" value={weddingDay} onChange={(e) => onWedding(e.target.value, weddingMonth)}>
+              <select aria-label="Jour du mariage" className="select" value={weddingDay} onChange={(e) => onWedding(e.target.value, weddingMonth)}>
                 <option value="">Jour</option>{Array.from({ length: 31 }, (_, i) => i + 1).map((d) => <option key={d} value={d}>{d}</option>)}
               </select>
-              <select className="select" value={weddingMonth} onChange={(e) => onWedding(weddingDay, e.target.value)}>
+              <select aria-label="Mois du mariage" className="select" value={weddingMonth} onChange={(e) => onWedding(weddingDay, e.target.value)}>
                 <option value="">Mois</option>{MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
               </select>
             </div>
@@ -176,7 +177,7 @@ export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, on
               </div>
             ) : nameOnly ? (
               <div className="field-row">
-                <input className="input" value={spouseName} onChange={(e) => setSpouseName(e.target.value)} placeholder="Nom complet de votre conjoint(e)" />
+                <input className="input" aria-label="Nom complet de votre conjoint(e)" value={spouseName} onChange={(e) => setSpouseName(e.target.value)} placeholder="Nom complet de votre conjoint(e)" />
                 <div className="decision-actions">
                   <button type="button" className="btn btn-ghost small" onClick={() => setNameOnly(false)}>Retour</button>
                   <button type="button" className="btn btn-primary small" disabled={working || spouseName.trim().length < 3} onClick={saveName}>Enregistrer</button>
@@ -217,7 +218,7 @@ export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, on
         {hasChildren && (
           <>
             <div className="field"><label>Combien ?</label>
-              <select className="select" value={rows.length} onChange={(e) => setCount(Number(e.target.value))}>
+              <select aria-label="Nombre d'enfants" className="select" value={rows.length} onChange={(e) => setCount(Number(e.target.value))}>
                 {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </div>
@@ -225,12 +226,12 @@ export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, on
               {rows.map((r, i) => (
                 <div key={i} className="child-row">
                   <span className="child-index">{i + 1}</span>
-                  <input className="input" value={r.name} placeholder="Nom de l'enfant"
+                  <input aria-label="Nom de l'enfant" className="input" value={r.name} placeholder="Nom de l'enfant"
                     onChange={(e) => setRows((p) => p.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} />
-                  <input className="input child-year" type="number" inputMode="numeric" min={1900} max={year} value={r.birth_year} placeholder="Année"
+                  <input aria-label="Année de naissance de l'enfant" className="input child-year" type="number" inputMode="numeric" min={1900} max={year} value={r.birth_year} placeholder="Année"
                     onChange={(e) => setRows((p) => p.map((x, j) => j === i ? { ...x, birth_year: e.target.value } : x))} />
                   {r.user_id
-                    ? <button type="button" className="chip-toggle on" title="Lien avec son profil" onClick={() => setRows((p) => p.map((x, j) => j === i ? { ...x, user_id: null, linked: undefined } : x))}>🔗 {r.linked ?? 'Lié'} ×</button>
+                    ? <button type="button" className="chip-toggle on" title="Lien avec son profil" onClick={() => setRows((p) => p.map((x, j) => j === i ? { ...x, user_id: null, linked: undefined } : x))}><Icon name="link" size={14} /> {r.linked ?? 'Lié'} ×</button>
                     : <details className="child-link"><summary>Lier à un membre</summary>
                         <PersonSearch placeholder="Son nom dans l'application…" onPick={(p) => setRows((prev) => prev.map((x, j) => j === i ? { ...x, user_id: p.user_id, linked: p.full_name, name: x.name || p.full_name } : x))} />
                       </details>}

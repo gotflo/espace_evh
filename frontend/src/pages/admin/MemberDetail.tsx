@@ -10,6 +10,7 @@ import { EvaluationsPanel } from '../../components/EvaluationsPanel'
 import { MemberFissPanel } from '../../components/MemberFissPanel'
 import { MemberCompletion, MemberFamily, MemberFissHistory } from '../../components/MemberExtras'
 import type { Department, Gem, MemberDetailData, MemberListItem, RoleOption, Tribe } from '../../types'
+import { Icon } from '../../components/Icon'
 
 export default function MemberDetail() {
   const { id } = useParams()
@@ -132,7 +133,7 @@ export default function MemberDetail() {
       {error && <div className="alert alert-error">{error}</div>}
       {!manage && (
         <div className="readonly-banner" role="note">
-          <span aria-hidden>👁️</span>
+          <Icon name="eye" size={18} />
           <div>
             <strong>Consultation seule</strong>
             <span>Vous pouvez voir cette fiche mais pas la modifier.</span>
@@ -146,7 +147,7 @@ export default function MemberDetail() {
           <div className="member-hero">
             {p?.photo_url
               ? <img className="member-hero-photo" src={p.photo_url} alt="" />
-              : <div className="member-hero-photo">{initials || '🙂'}</div>}
+              : <div className="member-hero-photo">{initials || <Icon name="profile" size={28} />}</div>}
             <h2 className="member-hero-name">{p?.full_name || data.user.phone}</h2>
             <span className={`status-pill ${data.user.activity === 'active' ? 'on' : 'off'}`}>
               {data.user.activity === 'active' ? 'Actif' : 'Inactif'}
@@ -204,7 +205,7 @@ export default function MemberDetail() {
               <div className="field-row">
                 <div className="field" style={{ marginBottom: 0 }}>
                   <label>Ajouter un rôle</label>
-                  <select className="select" value={roleKey} onChange={(e) => { setRoleKey(e.target.value); setScopeId('') }}>
+                  <select aria-label="Ajouter un rôle" className="select" value={roleKey} onChange={(e) => { setRoleKey(e.target.value); setScopeId('') }}>
                     <option value="">Choisir un rôle...</option>
                     {roleOptions.map((r) => <option key={r.key} value={r.key}>{r.name}</option>)}
                   </select>
@@ -214,15 +215,15 @@ export default function MemberDetail() {
                     <label>{selectedRole!.scope_kind === 'tribe' ? 'Tribu' : selectedRole!.scope_kind === 'gem' ? 'GEM' : selectedRole!.scope_kind === 'member' ? 'Fidèle confié' : 'Département'}</label>
                     {selectedRole!.scope_kind === 'member' ? (
                       <>
-                        <input className="input" placeholder="Rechercher un fidèle…" value={memberQuery} onChange={(e) => setMemberQuery(e.target.value)} />
-                        <select className="select mt-sm" value={scopeId} onChange={(e) => setScopeId(e.target.value)} size={Math.min(6, Math.max(2, memberChoices.length + 1))}>
+                        <input aria-label="Rechercher un fidèle" className="input" placeholder="Rechercher un fidèle…" value={memberQuery} onChange={(e) => setMemberQuery(e.target.value)} />
+                        <select className="select mt-sm" aria-label="Fidèle confié" value={scopeId} onChange={(e) => setScopeId(e.target.value)} size={Math.min(6, Math.max(2, memberChoices.length + 1))}>
                           <option value="">{memberOptions === null ? 'Chargement…' : 'Choisir le fidèle…'}</option>
                           {memberChoices.map((m) => <option key={m.user_id} value={m.user_id}>{m.full_name}{m.tribe ? ` · ${m.tribe}` : ''}</option>)}
                         </select>
                         <p className="helper">{p?.first_name ?? 'Ce responsable'} pourra agir (suivi, notes, demandes) uniquement sur ce fidèle.</p>
                       </>
                     ) : (
-                    <select className="select" value={scopeId} onChange={(e) => setScopeId(e.target.value)}>
+                    <select className="select" aria-label={selectedRole!.scope_kind === 'tribe' ? 'Tribu' : selectedRole!.scope_kind === 'gem' ? 'GEM' : 'Département'} value={scopeId} onChange={(e) => setScopeId(e.target.value)}>
                       <option value="">Choisir...</option>
                       {(selectedRole!.scope_kind === 'tribe'
                         ? tribes
@@ -256,14 +257,14 @@ export default function MemberDetail() {
           <p className="section-sub">Assignez la tribu et les départements de ce membre.</p>
           <div className="field">
             <label>Tribu</label>
-            <select className="select" value={belongTribe} onChange={(e) => { setBelongTribe(e.target.value); setBelongGem('') }}>
+            <select aria-label="Tribu" className="select" value={belongTribe} onChange={(e) => { setBelongTribe(e.target.value); setBelongGem('') }}>
               <option value="">Aucune</option>
               {tribes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
           <div className="field">
             <label>GEM <span className="helper" style={{ display: 'inline' }}>(groupe dans la tribu)</span></label>
-            <select className="select" value={belongGem} onChange={(e) => setBelongGem(e.target.value)} disabled={!belongTribe}>
+            <select aria-label="GEM" className="select" value={belongGem} onChange={(e) => setBelongGem(e.target.value)} disabled={!belongTribe}>
               <option value="">Aucun</option>
               {gems.filter((g) => g.tribe_id === Number(belongTribe)).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>

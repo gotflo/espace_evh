@@ -8,16 +8,16 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 const WORDS = `
-activite activites acces annee annees apres arriere assiduite bapteme bientot cloture
+activite activites acces ameliorer annee annees apres arriere assiduite bapteme bientot cloture completer creer
 completee creee creees cree crees decembre deja departement departements derniere dernieres
 desactive desactivee detail details ecran ecrans ecrivez eglise element elements enregistre
 enregistree enregistrees equipe etape etapes etat etats etes evenement evenements evaluation
 evaluations fevrier fidele fideles genere generee identite integration interet journee journees
 memoriser meditation meditations mediter modifie modifiee modifies modifiees numero numeros
-parametres periode periodes personnalise ponctualite precedent precedente premiere presence
+parametres periode periodes personnalise portee ponctualite precedent precedente premiere presence
 presences prenom priere prieres probleme problemes publie publiee recu recue recus reessayez
 reference reglages regle regles reinitialiser repetition repetitions reponse reponses repondu
-reseau resultat resultats reussi reussie role roles seance seances securite selection
+repondre reseau resultat resultats reussi reussie role roles seance seances securite selection
 selectionne selectionner serie series special speciale succes supprime supprimee supprimes
 systeme telephone termine terminee tres verifiez video videos
 `.split(/\s+/).filter(Boolean)

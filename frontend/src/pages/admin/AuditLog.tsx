@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../../api/client'
 import { AppLayout } from '../../components/AppLayout'
 import type { AuditEntry } from '../../types'
+import { Icon } from '../../components/Icon'
 
 interface AuditResponse { logs: AuditEntry[]; has_more: boolean; actions: { key: string; label: string }[] }
 
@@ -98,7 +99,7 @@ export default function AuditLog() {
       {logs === null ? (
         <div className="audit-list">{[0, 1, 2, 3, 4].map((i) => <div key={i} className="skeleton skeleton-row" />)}</div>
       ) : logs.length === 0 ? (
-        <div className="empty-state compact"><span aria-hidden>🗂️</span><p>Aucune action enregistrée pour ces critères.</p></div>
+        <div className="empty-state compact"><Icon name="audit" size={28} /><p>Aucune action enregistrée pour ces critères.</p></div>
       ) : (
         <ul className="audit-list">
           {logs.map((l) => (

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError } from '../../api/client'
 import { AppLayout } from '../../components/AppLayout'
 import { VerseCard, type VerseContent } from '../../components/VerseBanner'
+import { Icon } from '../../components/Icon'
 
 type VerseState = 'draft' | 'scheduled' | 'live' | 'expired'
 
@@ -193,7 +194,7 @@ export default function Verses() {
       {verses === null ? (
         <div className="verse-list mt">{[0, 1].map((i) => <div key={i} className="skeleton skeleton-row" />)}</div>
       ) : verses.length === 0 ? (
-        <div className="empty-state mt"><span aria-hidden>📖</span><h3>Aucun texte</h3><p>Ajoutez un premier texte : il s'affichera sur le tableau de bord de tous les membres.</p></div>
+        <div className="empty-state mt"><Icon name="book" size={28} /><h3>Aucun texte</h3><p>Ajoutez un premier texte : il s'affichera sur le tableau de bord de tous les membres.</p></div>
       ) : (
         <ol className="verse-list mt">
           {verses.map((v, i) => (

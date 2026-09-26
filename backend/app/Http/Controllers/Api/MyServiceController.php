@@ -83,7 +83,7 @@ class MyServiceController extends Controller
             "{$name} vient de s'inscrire au service {$department->name}. Prenez contact pour l'accueillir.",
             "/admin/membres/{$user->id}",
         );
-        Notifier::send([$user->id], 'service', "Bienvenue au service {$department->name} 🙌",
+        Notifier::send([$user->id], 'service', "Bienvenue au service {$department->name}",
             'Votre inscription est enregistrée. Vous recevrez désormais les annonces et les événements de ce département.',
             '/servir');
 

@@ -8,6 +8,7 @@ import { SkeletonCard } from '../components/Skeleton'
 import { usePulse } from '../pulse'
 import { NOTIF_ICON, setUnread, timeAgo, useUnreadCount } from '../notifications'
 import type { AppNotification, NotificationPage } from '../types'
+import { Icon } from '../components/Icon'
 
 /** Regroupement : Aujourd'hui / Hier / Cette semaine / Plus ancien. */
 function bucket(iso: string | null): string {
@@ -103,7 +104,7 @@ export default function Notifications() {
             <div className="notif-list"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>
           ) : items.length === 0 ? (
             <div className="empty-state">
-              <span aria-hidden>🔔</span>
+              <Icon name="bell" size={28} />
               <h3>{filter === 'unread' ? 'Aucune notification non lue' : 'Aucune notification'}</h3>
               <p>Les annonces, rappels d'événements, tâches et réponses apparaîtront ici.</p>
             </div>
@@ -115,7 +116,7 @@ export default function Notifications() {
                   {g.list.map((n) => (
                     <article key={n.id} className={`notif-row ${n.read ? '' : 'unread'}`}>
                       <button className="notif-main" onClick={() => open(n)}>
-                        <span className="notif-icon lg" aria-hidden>{NOTIF_ICON[n.type] ?? '🔔'}</span>
+                        <span className="notif-icon lg"><Icon name={NOTIF_ICON[n.type] ?? 'bell'} size={18} /></span>
                         <span className="notif-text">
                           <span className="notif-title">{n.title}</span>
                           {n.body && <span className="notif-body">{n.body}</span>}
@@ -143,13 +144,13 @@ export default function Notifications() {
           <section className="panel">
             <div className="panel-head"><h3>Vous êtes prévenu pour</h3></div>
             <ul className="notif-help">
-              <li>📢 Les annonces qui vous concernent</li>
-              <li>📅 Les nouveaux événements, et un rappel la veille et 1 h avant</li>
-              <li>⛪ Les cultes : le programme la veille au soir et un rappel 30 min avant</li>
-              <li>📝 Les exercices à faire et leur date limite</li>
-              <li>🩺 Votre fiche FISS du mois</li>
-              <li>✉️ Les réponses à vos demandes</li>
-              <li>🎂 Votre anniversaire (et celui de vos fidèles si vous êtes responsable)</li>
+              <li>Les annonces qui vous concernent</li>
+              <li>Les nouveaux événements, et un rappel la veille et 1 h avant</li>
+              <li>Les cultes : le programme la veille au soir et un rappel 30 min avant</li>
+              <li>Les exercices à faire et leur date limite</li>
+              <li>Votre fiche FISS du mois</li>
+              <li>Les réponses à vos demandes</li>
+              <li>Votre anniversaire (et celui de vos fidèles si vous êtes responsable)</li>
             </ul>
           </section>
         </aside>

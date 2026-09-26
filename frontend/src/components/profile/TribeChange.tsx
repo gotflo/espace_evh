@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import type { MyTribeRequest, Tribe } from '../../types'
+import { Icon } from '../Icon'
 
 const STATUS: Record<string, string> = { pending: 'En attente', approved: 'Validée', rejected: 'Refusée', cancelled: 'Annulée' }
 
@@ -41,7 +42,7 @@ export function TribeChange({ currentTribe, tribes }: { currentTribe: Tribe | nu
       <label>Tribu</label>
       <div className="tribe-box">
         <div className="tribe-current">
-          <span className="tribe-badge" aria-hidden>🏕️</span>
+          <span className="tribe-badge"><Icon name="members" size={20} /></span>
           <strong>{currentTribe?.name ?? 'Aucune'}</strong>
         </div>
         {!pending && <button type="button" className="btn btn-ghost small" onClick={() => setOpen(true)}>Demander un changement</button>}
@@ -77,14 +78,14 @@ export function TribeChange({ currentTribe, tribes }: { currentTribe: Tribe | nu
             <div className="panel-head"><h3>Changer de tribu</h3><button className="btn-link" onClick={() => setOpen(false)}>Fermer</button></div>
             <div className="field">
               <label>Nouvelle tribu</label>
-              <select className="select" value={to} onChange={(e) => setTo(e.target.value)}>
+              <select aria-label="Nouvelle tribu" className="select" value={to} onChange={(e) => setTo(e.target.value)}>
                 <option value="">Choisir…</option>
                 {tribes.filter((t) => t.id !== currentTribe?.id).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
             <div className="field">
               <label>Motif</label>
-              <textarea className="input" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ex. déménagement, rapprochement familial…" />
+              <textarea aria-label="Motif" className="input" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ex. déménagement, rapprochement familial…" />
             </div>
             <p className="helper">Les responsables de {currentTribe?.name ?? 'votre tribu'} et de la nouvelle tribu seront prévenus.</p>
             <button className="btn btn-primary mt" disabled={busy || !to || reason.trim().length < 5} onClick={send}>

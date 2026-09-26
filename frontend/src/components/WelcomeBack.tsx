@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { previousVisit } from '../utils/visit'
+import { Icon } from './Icon'
 
 interface WhatsNew {
   since: string
@@ -43,7 +44,7 @@ export function WelcomeBack() {
   return (
     <section className="welcome-back" role="status" aria-label="Nouveautés depuis votre dernière visite">
       <button className="welcome-close" onClick={close} aria-label="Fermer">×</button>
-      <h2>Content de vous revoir{profile?.first_name ? `, ${profile.first_name}` : ''} 👋</h2>
+      <h2>Content de vous revoir{profile?.first_name ? `, ${profile.first_name}` : ''}</h2>
       {nothing ? (
         <p>Tout est à jour. Bonne visite !</p>
       ) : (
@@ -51,15 +52,15 @@ export function WelcomeBack() {
           <p>Depuis votre dernière visite :</p>
           <ul>
             {data.announcements.count > 0 && (
-              <li><span aria-hidden>📢</span> <Link to="/tableau-de-bord#annonces" onClick={close}>{data.announcements.count} annonce(s)</Link>
+              <li><Icon name="announce" size={16} /> <Link to="/tableau-de-bord#annonces" onClick={close}>{data.announcements.count} annonce(s)</Link>
                 {data.announcements.items[0] && <small> · {data.announcements.items[0].title}</small>}</li>
             )}
             {data.events.count > 0 && (
-              <li><span aria-hidden>📅</span> <Link to={`/calendrier?date=${data.events.items[0]?.date ?? ''}`} onClick={close}>{data.events.count} nouvel(s) événement(s) à venir</Link>
+              <li><Icon name="events" size={16} /> <Link to={`/calendrier?date=${data.events.items[0]?.date ?? ''}`} onClick={close}>{data.events.count} nouvel(s) événement(s) à venir</Link>
                 {data.events.items[0] && <small> · {data.events.items[0].title}, {day(data.events.items[0].date)}</small>}</li>
             )}
             {data.exercises.count > 0 && (
-              <li><span aria-hidden>🎬</span> <Link to={data.exercises.count === 1 ? `/exercices/${data.exercises.items[0].id}` : '/exercices'} onClick={close}>{data.exercises.count} exercice(s) pour vous</Link>
+              <li><Icon name="play" size={16} /> <Link to={data.exercises.count === 1 ? `/exercices/${data.exercises.items[0].id}` : '/exercices'} onClick={close}>{data.exercises.count} exercice(s) pour vous</Link>
                 {data.exercises.items[0] && <small> · {data.exercises.items[0].title}</small>}</li>
             )}
           </ul>

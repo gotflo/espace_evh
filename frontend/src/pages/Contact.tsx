@@ -53,18 +53,18 @@ export default function Contact() {
           <div className="panel-head"><h3>Nouvelle demande</h3></div>
           <div className="field">
             <label>Motif</label>
-            <select className="select" value={category} onChange={(e) => setCategory(e.target.value as RequestCategory)}>
+            <select aria-label="Motif" className="select" value={category} onChange={(e) => setCategory(e.target.value as RequestCategory)}>
               {CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
           </div>
           <div className="field">
             <label>Sujet <span className="helper" style={{ display: 'inline' }}>(optionnel)</span></label>
-            <input className="input" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Ex. Demande de rencontre" />
+            <input aria-label="Sujet" className="input" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Ex. Demande de rencontre" />
           </div>
           <div className="field">
             <label>Message</label>
-            <textarea className="input" rows={5} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Écrivez votre message…" />
-            {draft && message === draft.message && <p className="helper">✎ Brouillon retrouvé : votre message n’avait pas encore été envoyé.</p>}
+            <textarea aria-label="Message" className="input" rows={5} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Écrivez votre message…" />
+            {draft && message === draft.message && <p className="helper">Brouillon retrouvé : votre message n’avait pas encore été envoyé.</p>}
           </div>
           <button className="btn btn-primary" disabled={busy || !message.trim()} onClick={send}>
             {busy ? <span className="spinner" /> : 'Envoyer la demande'}

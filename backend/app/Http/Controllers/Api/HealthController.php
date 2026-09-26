@@ -46,7 +46,11 @@ class HealthController extends Controller
         $total = @disk_total_space(storage_path());
         $checks['disk'] = ['ok' => ! $free || ! $total || $free / $total > 0.05];
 
-        $last = Cache::get(AutomationTick::STATUS_KEY);
+        try {
+            $last = Cache::get(AutomationTick::STATUS_KEY);
+        } catch (\Throwable) {
+            $last = null;
+        }
         $minutes = isset($last['at']) ? (int) Carbon::parse($last['at'])->diffInMinutes(now(), true) : null;
         $failed = isset($last['steps']) ? count(array_filter($last['steps'], 'is_string')) : 0;
         $checks['automation'] = [

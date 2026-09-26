@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Console\Commands\AutomationTick;
 use App\Models\Department;
-use App\Models\Event;
 use App\Models\Gem;
 use App\Models\Role;
 use App\Models\Tribe;
@@ -29,7 +29,8 @@ use Tests\TestCase;
  * Chaque ecran est appele 10 fois (cache des rapports vide avant chaque appel) :
  * mediane et pire temps, nombre de requetes SQL. Resultats ecrits dans
  * storage/app/benchmarks/volume-AAAAMMJJ-HHMM.json. Temps mesures dans le processus
- * (SQLite en memoire, sans reseau) : a comparer entre tailles, pas avec la production.
+ * (sans reseau ; SQLite en memoire par defaut, MySQL avec DB_CONNECTION=mysql) : a comparer
+ * entre tailles, pas avec la production.
  */
 #[Group('benchmark')]
 class VolumeBenchmarkTest extends TestCase
@@ -183,7 +184,7 @@ class VolumeBenchmarkTest extends TestCase
             $t = hrtime(true);
             $this->grow($size);
             $build = round((hrtime(true) - $t) / 1e9, 1);
-            $member = User::whereHas('profile', fn ($q) => $q->where('first_name', 'Membre7'))->firstOrFail();
+            $member = User::whereHas('profile', fn ($q) => $q->where('first_name', 'Membre1'))->firstOrFail();
 
             $screens = [
                 'Pasteur · statistiques' => [$pastor, '/api/admin/stats'],
@@ -209,7 +210,7 @@ class VolumeBenchmarkTest extends TestCase
             $t = hrtime(true);
             $this->artisan('app:tick')->assertSuccessful();
             $this->results[$size]['Automatismes · passage complet (app:tick)'] = ['median' => round((hrtime(true) - $t) / 1e6, 1), 'worst' => null, 'queries' => null];
-            $this->results[$size]['_tick_steps'] = Cache::get(\App\Console\Commands\AutomationTick::STATUS_KEY)['steps'] ?? null;
+            $this->results[$size]['_tick_steps'] = Cache::get(AutomationTick::STATUS_KEY)['steps'] ?? null;
             $this->results[$size]['_build_seconds'] = $build;
             $this->results[$size]['_rows'] = [
                 'fiss' => DB::table('spiritual_health_forms')->count(),

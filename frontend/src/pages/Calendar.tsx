@@ -6,6 +6,7 @@ import { EventEditor } from '../components/EventEditor'
 import { usePulse } from '../pulse'
 import type { CalendarData, CalendarItem, EventOccurrence } from '../types'
 import { CAT_LABEL, hhmm, longDay, optimisticRsvp, parseYmd, rsvpOccurrence, timeRange, ymd } from '../utils/events'
+import { Icon } from '../components/Icon'
 
 type View = 'month' | 'week' | 'list'
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
@@ -58,22 +59,22 @@ function ChipContent({ item, details }: { item: CalendarItem; details: boolean }
   if (item.kind === 'event') {
     return (
       <>
-        {item.personal && <><span className="recur-icon" aria-label="Privé">🔒</span>{' '}</>}
+        {item.personal && <><span className="recur-icon" aria-label="Privé"><Icon name="lock" size={11} /></span>{' '}</>}
         {item.recurring && <><span className="recur-icon" aria-label="Récurrent">↻</span>{' '}</>}
         {!item.all_day && <><strong className="chip-time">{hhmm(item.starts_at)}</strong>{' '}</>}
         <span className="chip-title">{item.title}</span>
         {details && (item.location || (item.ends_at && !item.all_day)) && (
           <span className="chip-details">
             {item.ends_at && !item.all_day ? `jusqu'à ${hhmm(item.ends_at)}` : ''}
-            {item.location ? `${item.ends_at && !item.all_day ? ' · ' : ''}📍 ${item.location}` : ''}
+            {item.location ? `${item.ends_at && !item.all_day ? ' · ' : ''}${item.location}` : ''}
           </span>
         )}
       </>
     )
   }
-  if (item.kind === 'birthday') return <><span aria-hidden>🎂</span> <span className="chip-title">{item.title}</span></>
-  if (item.kind === 'wedding') return <><span aria-hidden>💍</span> <span className="chip-title">{item.title}</span></>
-  if (item.kind === 'task') return <><span aria-hidden>{item.done ? '✅' : '📝'}</span> <span className="chip-title">{item.title}</span></>
+  if (item.kind === 'birthday') return <><Icon name="gift" size={12} /> <span className="chip-title">{item.title}</span></>
+  if (item.kind === 'wedding') return <><Icon name="spiritual" size={12} /> <span className="chip-title">{item.title}</span></>
+  if (item.kind === 'task') return <><Icon name={item.done ? 'check' : 'fiss'} size={12} /> <span className="chip-title">{item.title}</span></>
   return <span className="chip-title">{item.title}</span>
 }
 
@@ -305,16 +306,16 @@ export default function Calendar() {
               {shareOpen && (
                 <div className="cal-share-menu">
                   <button className="cal-share-item" onClick={shareView}>
-                    🔗 {copied === 'view' ? 'Lien copié !' : 'Partager cette vue'}
+                    <Icon name="link" size={14} /> {copied === 'view' ? 'Lien copié !' : 'Partager cette vue'}
                   </button>
                   <div className="cal-share-sep">S'abonner (mise à jour automatique)</div>
                   {feed ? (
                     <>
-                      <a className="cal-share-item" href={`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcal ?? '')}`} target="_blank" rel="noreferrer">📆 Google Agenda</a>
-                      <a className="cal-share-item" href={webcal}>🍎 Calendrier iPhone / Mac</a>
-                      <a className="cal-share-item" href={`https://outlook.live.com/calendar/0/addfromweb?url=${encodeURIComponent(feed)}&name=${encodeURIComponent("Vases d'Honneur")}`} target="_blank" rel="noreferrer">📧 Outlook</a>
-                      <button className="cal-share-item" onClick={() => copy(feed, 'feed')}>📋 {copied === 'feed' ? 'Lien copié !' : "Copier le lien d'abonnement"}</button>
-                      <button className="cal-share-item soft" onClick={resetFeed}>↺ Générer un nouveau lien</button>
+                      <a className="cal-share-item" href={`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcal ?? '')}`} target="_blank" rel="noreferrer">Google Agenda</a>
+                      <a className="cal-share-item" href={webcal}>Calendrier iPhone / Mac</a>
+                      <a className="cal-share-item" href={`https://outlook.live.com/calendar/0/addfromweb?url=${encodeURIComponent(feed)}&name=${encodeURIComponent("Vases d'Honneur")}`} target="_blank" rel="noreferrer">Outlook</a>
+                      <button className="cal-share-item" onClick={() => copy(feed, 'feed')}>{copied === 'feed' ? 'Lien copié !' : "Copier le lien d'abonnement"}</button>
+                      <button className="cal-share-item soft" onClick={resetFeed}>Générer un nouveau lien</button>
                       <p className="cal-share-note">Ce lien est personnel : il affiche les événements qui vous concernent.</p>
                     </>
                   ) : <p className="cal-share-note">Préparation du lien…</p>}
@@ -357,7 +358,7 @@ export default function Calendar() {
         {view === 'list' && (
           <div className="cal-list">
             {!loading && listDays.length === 0 && (
-              <div className="empty-state"><span aria-hidden>📅</span><p>Rien de programmé pour {labelCap.toLowerCase()}.</p></div>
+              <div className="empty-state"><Icon name="calendar" size={28} /><p>Rien de programmé pour {labelCap.toLowerCase()}.</p></div>
             )}
             {listDays.map((d) => {
               const key = ymd(d)
@@ -396,7 +397,7 @@ export default function Calendar() {
         <div className="modal-overlay" onClick={() => setModal(null)}>
           <div className="modal-box cal-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <div className="panel-head">
-              <h3>{modal.kind === 'birthday' ? '🎂 Anniversaire' : modal.kind === 'wedding' ? '💍 Anniversaire de mariage' : modal.title}</h3>
+              <h3>{modal.kind === 'birthday' ? 'Anniversaire' : modal.kind === 'wedding' ? 'Anniversaire de mariage' : modal.title}</h3>
               <button className="btn-link" onClick={() => setModal(null)}>Fermer</button>
             </div>
             {modal.kind === 'event' && (
@@ -404,16 +405,16 @@ export default function Calendar() {
                 <div className="cal-modal-tags">
                   <span className={`cat-badge evt-${modal.category}`}>{CAT_LABEL[modal.category]}</span>
                   {modal.recurring && <span className="chip">↻ {modal.recurrence_label}</span>}
-                  {modal.personal && <span className="chip">🔒 Privé</span>}
+                  {modal.personal && <span className="chip">Privé</span>}
                 </div>
-                <p className="event-meta mt">🕒 {longDay(modal.occurs_on)} · {timeRange(modal)}</p>
-                {modal.location && <p className="event-meta">📍 {modal.location}</p>}
-                <p className="event-meta-soft">👥 {modal.target}</p>
+                <p className="event-meta mt with-icon"><Icon name="clock" size={14} />{longDay(modal.occurs_on)} · {timeRange(modal)}</p>
+                {modal.location && <p className="event-meta with-icon"><Icon name="pin" size={14} />{modal.location}</p>}
+                <p className="event-meta-soft with-icon"><Icon name="members" size={14} />{modal.target}</p>
                 {modal.description && <p className="event-desc">{modal.description}</p>}
                 {modal.image_url && <img className="event-image mt" src={modal.image_url} alt={modal.title} />}
                 {modal.can_edit && (
                   <div className="editor-actions mt">
-                    <button className="btn btn-ghost small" onClick={() => { setEditor({ event: modal }); setModal(null) }}>✏️ Modifier{modal.recurring ? ' la série' : ''}</button>
+                    <button className="btn btn-ghost small" onClick={() => { setEditor({ event: modal }); setModal(null) }}>Modifier{modal.recurring ? ' la série' : ''}</button>
                   </div>
                 )}
                 {modal.occurs_on >= today && !modal.personal && (
@@ -437,7 +438,7 @@ export default function Calendar() {
               <>
                 <p className="event-meta">{longDay(modal.date)}</p>
                 <ul className="cal-people">
-                  {modal.people.map((p) => <li key={p.user_id}>🎉 {p.name}</li>)}
+                  {modal.people.map((p) => <li key={p.user_id}>{p.name}</li>)}
                 </ul>
                 <p className="helper">Pensez à leur souhaiter une bonne fête !</p>
               </>
@@ -446,7 +447,7 @@ export default function Calendar() {
               <>
                 <p className="event-meta">{longDay(modal.date)}</p>
                 <ul className="cal-people">
-                  {modal.people.map((p) => <li key={p.user_id}>💍 {p.name}</li>)}
+                  {modal.people.map((p) => <li key={p.user_id}>{p.name}</li>)}
                 </ul>
                 <p className="helper">Une belle occasion de bénir ce couple !</p>
               </>
@@ -472,14 +473,14 @@ function AgendaList({ items, onOpen, details }: { items: CalendarItem[]; onOpen:
           <span className="agenda-text">
             <span className="agenda-title">
               {i.kind === 'event' && i.recurring && <span className="recur-icon">↻</span>}
-              {i.kind === 'birthday' && '🎂 '}
-              {i.kind === 'wedding' && '💍 '}
-              {i.kind === 'task' && (i.done ? '✅ ' : '📝 ')}
+              {i.kind === 'birthday' && <><Icon name="gift" size={12} /> </>}
+              {i.kind === 'wedding' && <><Icon name="spiritual" size={12} /> </>}
+              {i.kind === 'task' && <><Icon name={i.done ? 'check' : 'fiss'} size={12} /> </>}
               {i.title}
             </span>
             {i.kind === 'event' && (
               <span className="agenda-meta">
-                {CAT_LABEL[i.category]}{i.location ? ` · 📍 ${i.location}` : ''}{i.my_response === 'present' ? ' · ✓ Inscrit' : ''}
+                {CAT_LABEL[i.category]}{i.location ? ` · ${i.location}` : ''}{i.my_response === 'present' ? ' · ✓ Inscrit' : ''}
                 {details && i.description ? ` — ${i.description.slice(0, 120)}` : ''}
               </span>
             )}

@@ -15,12 +15,17 @@ use Illuminate\Support\Str;
 
 class CalendarController extends Controller
 {
-    /** Tout ce qui est programme entre deux dates (vue mois / semaine / liste). */
+    /**
+     * Tout ce qui est programme entre deux dates (vue mois / semaine / liste).
+     * only=events : seulement les evenements (encart « Nos rendez-vous » du tableau de bord),
+     * sans parcourir les anniversaires de toute l'eglise (appel le plus frequent a l'ouverture).
+     */
     public function index(Request $request): JsonResponse
     {
         $data = $request->validate([
             'from' => ['required', 'date_format:Y-m-d'],
             'to' => ['required', 'date_format:Y-m-d', 'after_or_equal:from'],
+            'only' => ['nullable', 'in:events'],
         ]);
         $from = Carbon::parse($data['from'])->startOfDay();
         $to = Carbon::parse($data['to'])->endOfDay();
@@ -28,15 +33,16 @@ class CalendarController extends Controller
 
         $user = $request->user();
         $occurrences = CalendarService::occurrences(CalendarService::eventsQuery($user), $from, $to);
+        $all = ($data['only'] ?? null) === null;
 
         return response()->json([
             'from' => $from->toDateString(),
             'to' => $to->toDateString(),
             'events' => CalendarService::presentOccurrences($user, $occurrences),
-            'birthdays' => CalendarService::birthdays($from, $to),
-            'weddings' => CalendarService::weddings($from, $to),
-            'holidays' => CalendarService::holidays($from, $to),
-            'tasks' => CalendarService::tasks($user, $from, $to),
+            'birthdays' => $all ? CalendarService::birthdays($from, $to) : [],
+            'weddings' => $all ? CalendarService::weddings($from, $to) : [],
+            'holidays' => $all ? CalendarService::holidays($from, $to) : [],
+            'tasks' => $all ? CalendarService::tasks($user, $from, $to) : [],
         ]);
     }
 

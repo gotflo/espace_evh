@@ -184,7 +184,8 @@ class PlatformRulesTest extends TestCase
         Sanctum::actingAs($from);
         $this->postJson("/api/admin/validations/tribe/{$req->id}", ['decision' => 'approved'])->assertOk();
         $this->assertSame($this->juda->id, Profile::where('user_id', $member->id)->value('tribe_id'), 'Pas encore : la nouvelle tribu doit valider');
-        $this->postJson("/api/admin/validations/tribe/{$req->id}", ['decision' => 'approved'])->assertForbidden(); // deja prononce
+        $this->postJson("/api/admin/validations/tribe/{$req->id}", ['decision' => 'approved'])->assertStatus(409)
+            ->assertJsonPath('message', 'Votre décision est déjà enregistrée.'); // double clic
 
         Sanctum::actingAs($to);
         $this->postJson("/api/admin/validations/tribe/{$req->id}", ['decision' => 'approved'])->assertOk()
@@ -198,6 +199,29 @@ class PlatformRulesTest extends TestCase
         $history = $this->getJson('/api/me/tribe-change')->assertOk()->json('requests.0');
         $this->assertSame('approved', $history['status']);
         $this->assertCount(2, $history['approvals']);
+    }
+
+    public function test_tribe_change_left_pending_with_every_approval_is_completed_by_the_automations(): void
+    {
+        $from = $this->give($this->member('+14185550535', $this->juda, 'PJuda'), 'patriarche', 'tribe', $this->juda->id);
+        $to = $this->give($this->member('+14185550536', $this->levi, 'PLevi'), 'patriarche', 'tribe', $this->levi->id);
+        $member = $this->member('+14185550537', $this->juda, 'Silas');
+        // Etat laisse par deux validations simultanees avant le verrou : tout approuve, demande en attente.
+        $req = TribeChangeRequest::create(['user_id' => $member->id, 'from_tribe_id' => $this->juda->id, 'to_tribe_id' => $this->levi->id,
+            'reason' => 'Déménagement', 'status' => 'pending']);
+        foreach ([['from', $from], ['to', $to]] as [$side, $approver]) {
+            $req->approvals()->create(['side' => $side, 'approver_id' => $approver->id, 'decision' => 'approved', 'decided_at' => now()]);
+        }
+        $half = TribeChangeRequest::create(['user_id' => $this->member('+14185550538', $this->juda)->id, 'from_tribe_id' => $this->juda->id,
+            'to_tribe_id' => $this->levi->id, 'reason' => 'Attente', 'status' => 'pending']);
+        $half->approvals()->create(['side' => 'from', 'approver_id' => $from->id, 'decision' => 'approved', 'decided_at' => now()]);
+
+        $this->artisan('app:tick', ['--only' => 'tribe-changes'])->assertSuccessful();
+        $this->assertSame('approved', $req->fresh()->status);
+        $this->assertSame($this->levi->id, Profile::where('user_id', $member->id)->value('tribe_id'));
+        $this->assertSame('pending', $half->fresh()->status, "il manque l'accord de la nouvelle tribu");
+        $this->artisan('app:tick', ['--only' => 'tribe-changes'])->assertSuccessful();
+        $this->assertSame(1, AuditLog::where('action', 'tribe.changed')->where('member_user_id', $member->id)->count());
     }
 
     public function test_tribe_change_refused_by_one_side_is_closed(): void
