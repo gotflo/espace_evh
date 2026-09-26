@@ -28,16 +28,20 @@ class TribeChangeService
         abort_unless($profile, 422, 'Complétez d\'abord votre profil.');
         abort_unless(Tribe::whereKey($toTribeId)->where('is_active', true)->exists(), 422, 'Tribu invalide.');
         abort_if((int) $profile->tribe_id === $toTribeId, 422, 'Vous faites déjà partie de cette tribu.');
-        abort_if(TribeChangeRequest::where('user_id', $member->id)->where('status', 'pending')->exists(), 409,
-            'Une demande de changement de tribu est déjà en cours.');
+        // Verrou sur le membre : une seule demande en cours, meme en cas d'envois simultanes.
+        $req = DB::transaction(function () use ($member, $profile, $toTribeId, $reason) {
+            User::whereKey($member->id)->lockForUpdate()->first();
+            abort_if(TribeChangeRequest::where('user_id', $member->id)->where('status', 'pending')->exists(), 409,
+                'Une demande de changement de tribu est déjà en cours.');
 
-        $req = TribeChangeRequest::create([
-            'user_id' => $member->id,
-            'from_tribe_id' => $profile->tribe_id,
-            'to_tribe_id' => $toTribeId,
-            'reason' => $reason,
-            'status' => 'pending',
-        ]);
+            return TribeChangeRequest::create([
+                'user_id' => $member->id,
+                'from_tribe_id' => $profile->tribe_id,
+                'to_tribe_id' => $toTribeId,
+                'reason' => $reason,
+                'status' => 'pending',
+            ]);
+        });
         $req->load('fromTribe', 'toTribe');
         Audit::log('tribe_change.requested', $req, $member->id, ['tribe_id' => $profile->tribe_id], ['tribe_id' => $toTribeId], ['reason' => $reason]);
 

@@ -3,6 +3,8 @@
 namespace App\Services\Push;
 
 use App\Models\PushSubscription;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -31,6 +33,12 @@ class WebPush
         return $this->keys()['public'];
     }
 
+    /** Envois simultanes : assez pour 500 membres en quelques secondes, sans saturer l'hebergement. */
+    public const CONCURRENCY = 20;
+
+    /** En-tetes VAPID deja signes, par service push (valables 12 h, reutilises 1 h). */
+    private array $vapidCache = [];
+
     /**
      * Envoie un message a un abonnement. Retourne false si l'abonnement est expire
      * (il est alors supprime) ou en cas d'echec.
@@ -39,44 +47,85 @@ class WebPush
      */
     public function send(PushSubscription $subscription, array $payload, int $ttl = 86400, string $urgency = 'normal'): bool
     {
-        try {
-            $body = $this->encrypt(
-                json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                $subscription->public_key,
-                $subscription->auth_token,
-            );
+        return $this->sendMany([$subscription], $payload, $ttl, $urgency)['sent'] === 1;
+    }
 
-            $response = Http::timeout(8)
-                ->withHeaders([
-                    'Authorization' => $this->vapidHeader($subscription->endpoint),
-                    'Content-Encoding' => 'aes128gcm',
-                    'TTL' => (string) $ttl,
-                    'Urgency' => $urgency,
-                ])
-                ->withBody($body, 'application/octet-stream')
-                ->post($subscription->endpoint);
-        } catch (\Throwable $e) {
-            Log::warning('Push : envoi impossible', ['error' => $e->getMessage()]);
+    /**
+     * Envoie le meme message a plusieurs abonnements, en parallele (CONCURRENCY a la fois).
+     * Chaque appareil recoit un message chiffre avec ses propres cles. Les abonnements
+     * expires (404/410) sont supprimes ; un echec n'interrompt jamais les autres envois.
+     *
+     * @param  iterable<PushSubscription>  $subscriptions
+     * @param  array<string, mixed>  $payload
+     * @return array{sent: int, expired: int, failed: int}
+     */
+    public function sendMany(iterable $subscriptions, array $payload, int $ttl = 86400, string $urgency = 'normal'): array
+    {
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $prepared = [];
+        $stats = ['sent' => 0, 'expired' => 0, 'failed' => 0];
 
-            return false;
+        foreach ($subscriptions as $sub) {
+            try {
+                $prepared[(string) $sub->id] = [
+                    'sub' => $sub,
+                    'body' => $this->encrypt($json, $sub->public_key, $sub->auth_token),
+                    'auth' => $this->vapidHeader($sub->endpoint),
+                ];
+            } catch (\Throwable $e) {
+                $stats['failed']++;
+                Log::warning('Push : abonnement illisible', ['subscription' => $sub->id, 'error' => $e->getMessage()]);
+            }
+        }
+        if (! $prepared) {
+            return $stats;
         }
 
-        // 404 / 410 : l'abonnement n'existe plus (appli desinstallee, permission retiree...).
-        if (in_array($response->status(), [404, 410], true)) {
-            $subscription->delete();
+        $responses = Http::pool(function (Pool $pool) use ($prepared, $ttl, $urgency) {
+            foreach ($prepared as $key => $p) {
+                $pool->as($key)->timeout(8)->connectTimeout(4)
+                    ->withHeaders([
+                        'Authorization' => $p['auth'],
+                        'Content-Encoding' => 'aes128gcm',
+                        'TTL' => (string) $ttl,
+                        'Urgency' => $urgency,
+                    ])
+                    ->withBody($p['body'], 'application/octet-stream')
+                    ->post($p['sub']->endpoint);
+            }
+        }, self::CONCURRENCY);
 
-            return false;
+        $ok = [];
+        $gone = [];
+        foreach ($prepared as $key => $p) {
+            $response = $responses[$key] ?? null;
+            if (! $response instanceof Response) {
+                $stats['failed']++;
+                continue;
+            }
+            // 404 / 410 : l'abonnement n'existe plus (appli desinstallee, permission retiree...).
+            if (in_array($response->status(), [404, 410], true)) {
+                $gone[] = $p['sub']->id;
+            } elseif ($response->successful()) {
+                $ok[] = $p['sub']->id;
+            } else {
+                $stats['failed']++;
+                Log::warning('Push : refuse par le service', ['status' => $response->status(), 'body' => mb_substr($response->body(), 0, 300)]);
+            }
+        }
+        if ($gone) {
+            PushSubscription::whereIn('id', $gone)->delete();
+        }
+        if ($ok) {
+            PushSubscription::whereIn('id', $ok)->update(['last_used_at' => now()]);
+        }
+        $stats['sent'] = count($ok);
+        $stats['expired'] = count($gone);
+        if ($stats['failed'] > 0) {
+            Log::warning('Push : envois en echec', $stats);
         }
 
-        if (! $response->successful()) {
-            Log::warning('Push : refuse par le service', ['status' => $response->status(), 'body' => mb_substr($response->body(), 0, 300)]);
-
-            return false;
-        }
-
-        $subscription->forceFill(['last_used_at' => now()])->save();
-
-        return true;
+        return $stats;
     }
 
     /** Chiffre le message pour l'appareil (aes128gcm, un seul enregistrement). */
@@ -116,6 +165,10 @@ class WebPush
     {
         $parts = parse_url($endpoint);
         $audience = $parts['scheme'].'://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '');
+        $cached = $this->vapidCache[$audience] ?? null;
+        if ($cached && $cached['at'] > time() - 3600) {
+            return $cached['header'];
+        }
 
         $header = self::b64uEncode(json_encode(['typ' => 'JWT', 'alg' => 'ES256']));
         $claims = self::b64uEncode(json_encode([
@@ -132,7 +185,10 @@ class WebPush
 
         $jwt = $signingInput.'.'.self::b64uEncode(self::derToRaw($der));
 
-        return 'vapid t='.$jwt.', k='.$keys['public'];
+        $header = 'vapid t='.$jwt.', k='.$keys['public'];
+        $this->vapidCache[$audience] = ['header' => $header, 'at' => time()];
+
+        return $header;
     }
 
     /** Contact exige par les services push (mailto: ou URL https). */

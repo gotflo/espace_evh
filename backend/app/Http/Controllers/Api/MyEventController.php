@@ -25,7 +25,9 @@ class MyEventController extends Controller
 
         $from = now();
         $to = now()->addDays($days)->endOfDay();
-        $occurrences = CalendarService::occurrences(CalendarService::eventsQuery($user), $from, $to)->take(60);
+        // Les rendez-vous reguliers (cultes) ont leur propre carte « Nos rendez-vous » et
+        // restent dans le calendrier : on ne les repete pas ici chaque semaine.
+        $occurrences = CalendarService::occurrences(CalendarService::eventsQuery($user)->where('remind_all', false), $from, $to)->take(60);
 
         return response()->json([
             'days' => $days,

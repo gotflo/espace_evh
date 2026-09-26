@@ -108,22 +108,27 @@ class Notifier
     {
         $job = function () use ($userIds, $payload, $urgency) {
             $webPush = app(WebPush::class);
-            PushSubscription::whereIn('user_id', $userIds)->chunkById(100, function ($subs) use ($webPush, $payload, $urgency) {
-                foreach ($subs as $sub) {
+            foreach (array_chunk($userIds, 500) as $ids) {
+                PushSubscription::whereIn('user_id', $ids)->chunkById(200, function ($subs) use ($webPush, $payload, $urgency) {
                     try {
-                        $webPush->send($sub, $payload, 86400, $urgency);
+                        $webPush->sendMany($subs, $payload, 86400, $urgency);
                     } catch (\Throwable $e) {
                         Log::warning('Push : erreur', ['error' => $e->getMessage()]);
                     }
-                }
-            });
+                });
+            }
         };
 
-        // En console (cron, tests) on envoie directement ; en requete web, apres la reponse.
+        // En console (cron, tests) on envoie directement ; en requete web, apres la reponse
+        // (le fidele n'attend pas), avec un delai d'execution suffisant pour une grande audience.
         if (app()->runningInConsole()) {
             $job();
         } else {
-            defer($job);
+            defer(function () use ($job) {
+                ignore_user_abort(true);
+                @set_time_limit(300);
+                $job();
+            });
         }
     }
 }

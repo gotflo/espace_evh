@@ -29,6 +29,9 @@ class CalendarNotificationsServicesTest extends TestCase
         parent::setUp();
         Carbon::setTestNow(Carbon::parse('2026-09-25 10:00:00'));
         Http::preventStrayRequests(); // aucun appel reseau reel (push)
+        // Ces tests portent sur des evenements precis : on retire le programme hebdomadaire
+        // des cultes cree par la migration (teste a part dans ServiceScheduleTest).
+        \App\Models\Event::where('remind_all', true)->delete();
     }
 
     protected function tearDown(): void
@@ -208,7 +211,7 @@ class CalendarNotificationsServicesTest extends TestCase
         ])->assertCreated();
         $this->postJson('/api/admin/exercises', [
             'title' => 'Méditer Psaume 23', 'content' => '...', 'type' => 'verset', 'scopes' => [['type' => 'church']], 'due_date' => '2026-09-30',
-        ])->assertOk();
+        ])->assertCreated();
 
         $types = UserNotification::where('user_id', $member->id)->pluck('type')->all();
         $this->assertEqualsCanonicalizing(['event', 'task'], $types);
@@ -348,7 +351,8 @@ class CalendarNotificationsServicesTest extends TestCase
         $going = $this->member('+14185550126');
         $event = $this->makeEvent(['title' => 'Prière du soir', 'category' => 'priere', 'starts_at' => '2026-09-26 09:00']);
         Event::whereKey($event->id)->update(['created_at' => now()->subDays(3)]);
-        $this->makeExercise(['title' => 'Lire Romains 8', 'content' => '...', 'type' => 'lecture', 'due_date' => '2026-09-26', 'is_active' => true]);
+        // Se ferme ce soir a 23 h 59 : rappel nominatif dans les dernieres 24 h.
+        $this->makeExercise(['title' => 'Lire Romains 8', 'content' => '...', 'type' => 'lecture', 'due_date' => '2026-09-25', 'is_active' => true]);
 
         $this->artisan('app:tick')->assertSuccessful();
         $this->artisan('app:tick')->assertSuccessful(); // idempotent
@@ -356,7 +360,7 @@ class CalendarNotificationsServicesTest extends TestCase
         $titles = UserNotification::where('user_id', $member->id)->pluck('title')->all();
         $this->assertContains('Demain : Prière du soir', $titles);
         $this->assertContains('Joyeux anniversaire, Adams ! 🎂', $titles);
-        $this->assertContains('À rendre demain : Lire Romains 8', $titles);
+        $this->assertContains('Rappel : « Lire Romains 8 »', $titles);
         $this->assertContains('Rappel : fiche de santé spirituelle de septembre 2026', $titles);
         $this->assertSame(1, collect($titles)->filter(fn ($t) => $t === 'Demain : Prière du soir')->count());
 

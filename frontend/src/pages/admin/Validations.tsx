@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../../api/client'
 import { AppLayout } from '../../components/AppLayout'
 import { SkeletonCard } from '../../components/Skeleton'
-import { useAutoRefresh } from '../../hooks/useAutoRefresh'
+import { usePulse } from '../../pulse'
 import type { ValidationFissItem, ValidationsData, ValidationTribeItem } from '../../types'
 
 const SIDE_LABEL: Record<string, string> = { from: 'la tribu de départ', to: "la tribu d'arrivée", both: 'les deux tribus' }
@@ -42,7 +42,7 @@ export default function Validations() {
     api<ValidationsData>('/admin/validations').then(setData).catch(() => setData({ fiss: [], tribes: [], count: 0 }))
   }, [])
   useEffect(() => { load() }, [load])
-  useAutoRefresh(load, 30000)
+  usePulse('validations', load)
 
   async function decideFiss(item: ValidationFissItem, approve: boolean, comment: string) {
     setBusy(`f${item.id}`)

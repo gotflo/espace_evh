@@ -22,6 +22,8 @@ class TriggerAutomation
 
         if (config('services.automation.auto_tick') && Cache::add('automation:tick-lock', now()->timestamp, 300)) {
             defer(function () {
+                ignore_user_abort(true);
+                @set_time_limit(300);
                 try {
                     Artisan::call('app:tick');
                 } catch (\Throwable $e) {

@@ -58,7 +58,7 @@ export function EventEditor({ date, event, onClose, onSaved }: {
         start: hm(start), end: end ? hm(end) : '', endDate: end ? ymd(end) : ymd(start),
         allDay: event.all_day, recurrence: event.recurrence, until: event.recurrence_until ?? '',
         location: event.location ?? '', description: event.description ?? '',
-        scopes: event.scopes,
+        scopes: event.scopes, remindAll: !!event.remind_all,
       }
     }
     const d = date ?? ymd(new Date())
@@ -67,7 +67,7 @@ export function EventEditor({ date, event, onClose, onSaved }: {
       audience: (canChurch ? 'church' : 'personal') as Audience,
       title: '', category: (canChurch ? 'culte' : 'autre') as EventCategory, date: d,
       start, end: addMinutes(start, 90), endDate: d, allDay: false, recurrence: 'none' as Recurrence, until: '',
-      location: '', description: '', scopes: [] as AudienceScope[],
+      location: '', description: '', scopes: [] as AudienceScope[], remindAll: false,
     }
   }, [event, date, canChurch])
 
@@ -100,6 +100,7 @@ export function EventEditor({ date, event, onClose, onSaved }: {
     }
     if (church) {
       body.scopes = f.scopes
+      body.remind_all = f.recurrence !== 'none' && f.remindAll
     }
     try {
       if (church && editing) await api(`/admin/events/${event!.event_id}`, { method: 'PUT', body })
@@ -215,6 +216,12 @@ export function EventEditor({ date, event, onClose, onSaved }: {
             </div>
           )}
         </div>
+        {f.recurrence !== 'none' && church && (
+          <label className="switch-line mt">
+            <input type="checkbox" checked={f.remindAll} onChange={(e) => set('remindAll', e.target.checked)} />
+            <span>Rendez-vous régulier (culte) : rappel à tous 30 min avant chaque occurrence, et programme envoyé la veille au soir</span>
+          </label>
+        )}
         {f.recurrence !== 'none' && (
           <div className="field mt">
             <label>Lieu (optionnel)</label>

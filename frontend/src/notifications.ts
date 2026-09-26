@@ -1,7 +1,6 @@
 // Etat partage des notifications (compteur non lu) entre la cloche, la page
 // Notifications et la pastille de l'icone de l'application.
 import { useEffect, useState } from 'react'
-import { api } from './api/client'
 
 type Listener = (count: number) => void
 let unread = 0
@@ -19,14 +18,6 @@ export function setUnread(count: number) {
 }
 
 export function getUnread(): number { return unread }
-
-export async function refreshUnread(): Promise<number> {
-  try {
-    const r = await api<{ count: number }>('/me/notifications/unread-count')
-    setUnread(r.count)
-  } catch { /* hors ligne */ }
-  return unread
-}
 
 export function useUnreadCount(): number {
   const [count, setCount] = useState(unread)

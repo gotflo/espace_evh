@@ -23,11 +23,12 @@
 9. [Calendrier et rappels](#calendrier-et-rappels)
 10. [Rapports et exports PDF](#rapports-et-exports-pdf)
 11. [Automatismes (tâches planifiées)](#automatismes-tâches-planifiées)
-12. [Journal d'audit](#journal-daudit)
-13. [Sécurité et confidentialité](#sécurité-et-confidentialité)
-14. [Tests et vérifications](#tests-et-vérifications)
-15. [Déploiement](#déploiement)
-16. [Documentation complémentaire](#documentation-complémentaire)
+12. [Tenue en charge](#tenue-en-charge)
+13. [Journal d'audit](#journal-daudit)
+14. [Sécurité et confidentialité](#sécurité-et-confidentialité)
+15. [Tests et vérifications](#tests-et-vérifications)
+16. [Déploiement](#déploiement)
+17. [Documentation complémentaire](#documentation-complémentaire)
 
 ## Fonctionnalités
 
@@ -39,6 +40,10 @@
 - **Ma vie spirituelle** : cartes interactives (FISS, Vertumètre, Assiduité, Ponctualité, Parcours) qui ouvrent le détail.
 - **Fiche de santé spirituelle (FISS)** mensuelle, **verrouillée après envoi** ; modification sur demande validée (2 demandes par fiche au maximum).
 - **Calendrier** (mois, semaine, liste) : événements, jours fériés, anniversaires, anniversaires de mariage, échéances.
+- **Horaires des cultes** (mercredi et dimanche) dans le calendrier et sur le tableau de bord, avec le programme
+  la veille au soir et un rappel 30 minutes avant chaque rendez-vous.
+- **Mes exercices** : vidéos YouTube lues dans l'application (reprise là où on s'est arrêté), lectures et méditations,
+  avec date limite et rappels nommant précisément l'exercice.
 - **Service** : inscription à un département en un clic.
 - **Changement de tribu** par demande, validée par les responsables des deux tribus.
 - Notifications dans l'application et **push** (téléphone, ordinateur), application installable (PWA).
@@ -50,7 +55,9 @@
 - **Validations** : demandes de modification de FISS et de changement de tribu (refus motivé obligatoire).
 - **Rapports** : indicateurs clés, courbes (vie spirituelle, FISS, assiduité, Vertumètre), nouveaux membres,
   comparaison des tribus, listes (FISS manquantes, inactifs, nouveaux), onglet Membres filtrable, **exports PDF**.
-- Présences, notes (Vertumètre), exercices, annonces et événements ciblés (une ou plusieurs tribus, GEM, départements).
+- Présences, notes (Vertumètre), annonces et événements ciblés (une ou plusieurs tribus, GEM, départements).
+- **Exercices vidéo** : un lien YouTube, des consignes, une réponse écrite facultative, une date et heure limites ;
+  fermeture automatique ; **suivi** par fidèle (pourcentage réellement regardé, avances rapides détectées, réponse).
 - **Journal d'audit** en lecture seule.
 
 ## Pile technique et architecture
@@ -154,7 +161,8 @@ Tables principales :
 | Suivi | `spiritual_health_forms` (FISS, `locked_at`), `fiss_edit_requests`, `evaluations`, `attendances`, `spiritual_entries` |
 | Demandes | `tribe_change_requests`, `tribe_change_approvals`, `member_requests` |
 | Famille | `family_links` (conjoint / enfant, statut `pending` / `confirmed` / `declined`) |
-| Publication | `announcements`, `events`, `exercises`, `publication_scopes` (portée multiple : église, tribus, GEM, départements) |
+| Publication | `announcements`, `events` (dont `remind_all` : rendez-vous réguliers), `exercises` (vidéo YouTube, `closes_at`), `publication_scopes` (portée multiple : église, tribus, GEM, départements) |
+| Exercices | `exercise_responses`, `exercise_video_views` (passages regardés, avances rapides, terminé) |
 | Notifications | `user_notifications` (priorité, lien), `push_subscriptions`, `notification_dispatches` (anti-doublon) |
 | Traçabilité | `audit_logs` (qui, quoi, avant/après, contexte, IP) |
 
@@ -240,9 +248,10 @@ Une seule commande idempotente, planifiée toutes les 5 minutes : `php artisan a
 | Étape (`--only=`) | Rôle |
 |-------------------|------|
 | `activity` | recalcul quotidien actif/inactif |
-| `event-reminders` | rappels la veille et 1 h avant |
+| `event-reminders` | rappels la veille et 1 h avant ; cultes : rappel à tous 30 min avant chaque rendez-vous |
+| `service-digest` | la veille dès 18 h : programme des cultes du lendemain, un seul message |
 | `birthdays`, `weddings` | vœux aux membres, récapitulatif aux responsables |
-| `tasks` | échéances d'exercices |
+| `tasks` | exercices non terminés : relance à J+2, la veille et 3 h avant la fermeture (8 h – 21 h) ; bilan à l'auteur à la fermeture |
 | `fiss` | rappels FISS, récapitulatif des FISS manquantes, reverrouillage des modifications expirées |
 | `profiles` | recalcul quotidien de la complétion, rappels de profil incomplet |
 | `followups` | relances des demandes sans réponse |
@@ -250,6 +259,23 @@ Une seule commande idempotente, planifiée toutes les 5 minutes : `php artisan a
 
 Cron recommandé (toutes les minutes) : `php artisan schedule:run`. Sans cron, l'application déclenche
 elle-même `app:tick` au plus toutes les 5 minutes quand quelqu'un l'utilise (`AUTO_TICK`).
+
+## Tenue en charge
+
+Conçue pour 200 à 500 membres connectés en même temps sur un hébergement mutualisé :
+
+- **Un seul appel léger** toutes les ~45 s par appareil (`/api/me/pulse`) : compteur de notifications et signature
+  des données ; chaque écran ne se recharge que si ce qui l'intéresse a changé. Rien n'est demandé quand
+  l'application est en arrière-plan ; les appareils sont décalés aléatoirement.
+- **Aucun écran ne ralentit quand l'église grandit** : le nombre de requêtes SQL de chaque écran est identique
+  avec 60 ou 400 membres (test automatique `LoadProfileTest`), aucun écran ne dépasse 1,5 s même sans cache.
+- **Push en parallèle** (lots de 20) : 500 appareils en quelques secondes, appareils expirés supprimés.
+- Écritures limitées : dernière utilisation des sessions toutes les 5 min, dernière activité toutes les 10 min.
+- **Doublons simultanés** (double clic, réseau qui renvoie) : contraintes d'unicité en base + verrous sur les règles
+  sensibles ; réponse 409 propre au lieu d'une erreur serveur ; base saturée : 503 avec nouvelle tentative.
+- **Jamais de page blanche** : écran de secours, rechargement automatique après une mise en ligne, nouvelles tentatives
+  automatiques des lectures, délai maximal par requête.
+- En production : `php artisan config:cache`, `route:cache`, `event:cache` et le cron (voir Déploiement).
 
 ## Journal d'audit
 
@@ -266,6 +292,19 @@ contexte, IP, date. **Aucune route ne permet de modifier ou supprimer** une entr
 - Données spirituelles et familiales visibles uniquement des responsables du périmètre ; PDF marqués « confidentiel ».
 - Les photos de l'écran de connexion ne montrent aucun visage identifiable.
 
+**Injections** (audit complet, tests `InjectionTest`) :
+
+- **SQL** : toutes les requêtes passent par Eloquent / le constructeur de requêtes avec paramètres liés ; aucun texte
+  saisi n'est concaténé dans du SQL ; les recherches neutralisent `%` et `_` (`App\Support\Like`).
+- **XSS** : React échappe tout texte affiché, aucun HTML brut n'est injecté ; **politique de sécurité du contenu (CSP)**
+  dans le build (scripts de l'application et du lecteur YouTube uniquement, aucune connexion vers un autre site).
+- **Liens** : les vidéos sont réduites à leur identifiant YouTube et relues depuis youtube-nocookie.com ; le lien d'une
+  notification push ne peut ouvrir qu'une page de l'application.
+- **Fichiers** : images uniquement (JPEG, PNG, WebP, GIF ; SVG refusé), taille limitée, nom aléatoire.
+- **Affectation de masse** : champs autorisés listés modèle par modèle ; un champ inconnu est ignoré.
+- **iCal** : aucun retour à la ligne brut dans le flux d'agenda (pas d'injection de lignes).
+- Aucune exécution de commande système ni désérialisation de données reçues.
+
 ## Tests et vérifications
 
 ```bash
@@ -277,11 +316,12 @@ cd frontend && npm run build
 
 ## Déploiement
 
-Procédure pas à pas de cette version (fichiers, migrations, variables, cron, retour arrière) :
-[`docs/MISE-A-JOUR-EVOLUTION-PLATEFORME.md`](docs/MISE-A-JOUR-EVOLUTION-PLATEFORME.md).
+Procédures pas à pas (fichiers, migrations, variables, cron, retour arrière) :
+- [`docs/MISE-A-JOUR-EVOLUTION-PLATEFORME.md`](docs/MISE-A-JOUR-EVOLUTION-PLATEFORME.md) : rapports, validations, périmètres, famille, audit ;
+- [`docs/MISE-A-JOUR-VIDEOS-CULTES-CHARGE.md`](docs/MISE-A-JOUR-VIDEOS-CULTES-CHARGE.md) : exercices vidéo, horaires des cultes, tenue en charge, sécurité.
 
 En résumé : sauvegarde de la base → envoi des fichiers `backend/` modifiés → `php artisan migrate --force`
-→ `php artisan config:clear && php artisan route:clear` → build React copié dans `public/` → vérifications.
+→ `php artisan config:cache && php artisan route:cache && php artisan event:cache` → build React copié dans `public/` → vérifications.
 Ne **pas** relancer le seeder des rôles en production (il écraserait les réglages faits depuis l'écran Rôles).
 
 ## Documentation complémentaire

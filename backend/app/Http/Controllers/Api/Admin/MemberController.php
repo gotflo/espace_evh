@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\FamilyService;
 use App\Support\Audit;
 use App\Support\GemRules;
+use App\Support\Like;
 use App\Support\MemberScope;
 use App\Support\ProfileCompletion;
 use Illuminate\Http\JsonResponse;
@@ -36,11 +37,11 @@ class MemberController extends Controller
         ]);
         MemberScope::scopeProfiles($query, $user);
 
-        if ($q = trim((string) $request->query('q'))) {
+        if ($q = mb_substr(trim((string) $request->query('q')), 0, 80)) {
             $query->where(function ($sub) use ($q) {
-                $sub->where('first_name', 'like', "%{$q}%")
-                    ->orWhere('last_name', 'like', "%{$q}%")
-                    ->orWhereHas('user', fn ($u) => $u->where('phone', 'like', "%{$q}%"));
+                Like::contains($sub, 'first_name', $q);
+                Like::contains($sub, 'last_name', $q, 'or');
+                $sub->orWhereHas('user', fn ($u) => Like::contains($u, 'phone', $q));
             });
         }
         if ($tribe = $request->query('tribe_id')) {

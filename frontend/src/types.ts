@@ -168,16 +168,53 @@ export interface RosterData {
   inactive_hidden: number
 }
 
+export interface ExerciseVideo { id: string; duration: number | null; thumbnail: string; url: string }
+
 export interface ExerciseListItem {
   id: number
   title: string
+  content: string
   type: string
   type_label: string
   target: string
   scopes: AudienceScope[]
+  video: ExerciseVideo | null
+  requires_response: boolean
   due_date: string | null
+  closes_at: string | null
+  is_closed: boolean
   responses_count: number
+  views_count: number
+  views_completed_count: number
   created_at: string
+}
+
+export type ExerciseStatus = 'todo' | 'in_progress' | 'done'
+
+export interface ExerciseTrackingRow {
+  user_id: number
+  name: string
+  tribe: string | null
+  active: boolean
+  status: ExerciseStatus
+  percent: number
+  watched_seconds: number
+  seek_count: number
+  skipped_seconds: number
+  max_rate: number | null
+  video_completed_at: string | null
+  last_activity: string | null
+  response: string | null
+  responded_at: string | null
+}
+
+export interface ExerciseTracking {
+  exercise: {
+    id: number; title: string; content: string; type_label: string; video: ExerciseVideo | null
+    requires_response: boolean; closes_at: string | null; is_closed: boolean; target: string
+  }
+  summary: { total: number; done: number; in_progress: number; todo: number; skipped: number }
+  members: ExerciseTrackingRow[]
 }
 
 export interface ExerciseResponseItem {
@@ -192,9 +229,20 @@ export interface MyExercise {
   title: string
   content: string
   type: string
+  video: ExerciseVideo | null
+  requires_response: boolean
   due_date: string | null
+  closes_at: string | null
+  is_closed: boolean
+  status: ExerciseStatus
+  percent: number
+  video_completed: boolean
+  seek_count: number
   my_response: string | null
   completed: boolean
+  created_at: string | null
+  /** Detail seulement : position de reprise (secondes) */
+  resume_at?: number
 }
 
 export type AnnouncementCategory = 'info' | 'important' | 'evenement'
@@ -236,6 +284,7 @@ export interface EventAdminItem {
   recurrence: Recurrence
   recurrence_label: string | null
   recurrence_until: string | null
+  remind_all?: boolean
   next_occurrence: string | null
   scopes: AudienceScope[]
   target: string
@@ -467,6 +516,8 @@ export interface EventOccurrence {
   recurrence_until: string | null
   series_starts_at: string
   series_ends_at: string | null
+  /** Rendez-vous regulier (culte) : rappel a toute l'audience */
+  remind_all?: boolean
   /** Agenda personnel (visible par soi seul) */
   personal: boolean
   /** Peut modifier / supprimer (auteur, ou responsable de la portee) */

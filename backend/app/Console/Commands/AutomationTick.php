@@ -12,6 +12,7 @@ use App\Models\SpiritualHealthForm;
 use App\Models\User;
 use App\Services\ActivityService;
 use App\Services\CalendarService;
+use App\Services\ExerciseProgress;
 use App\Services\FissService;
 use App\Services\Notifier;
 use App\Support\Audience;
@@ -31,7 +32,7 @@ use Illuminate\Support\Facades\DB;
  */
 class AutomationTick extends Command
 {
-    protected $signature = 'app:tick {--only= : activity | event-reminders | birthdays | weddings | tasks | fiss | profiles | followups | prune}';
+    protected $signature = 'app:tick {--only= : activity | event-reminders | service-digest | birthdays | weddings | tasks | fiss | profiles | followups | prune}';
 
     protected $description = 'Activité des membres, rappels, anniversaires, FISS, profils, relances et nettoyage.';
 
@@ -40,6 +41,7 @@ class AutomationTick extends Command
         $steps = [
             'activity' => fn () => $this->activity(),
             'event-reminders' => fn () => $this->eventReminders(),
+            'service-digest' => fn () => $this->serviceDigest(),
             'birthdays' => fn () => $this->birthdays(),
             'weddings' => fn () => $this->weddings(),
             'tasks' => fn () => $this->taskReminders(),
@@ -110,6 +112,14 @@ class AutomationTick extends Command
                 continue;
             }
             $date = $start->toDateString();
+            if ($event->remind_all && ! $event->is_personal) {
+                if ($minutes > self::SERVICE_LEAD_MINUTES || $event->all_day) {
+                    continue;
+                }
+                $sent += $this->serviceReminder($event, $start, $date);
+
+                continue;
+            }
             $kind = $minutes <= 90 && ! $event->all_day ? 'hour' : 'day';
 
             // Evenement quotidien : pas de rappel « veille » (ce serait tous les jours).
@@ -145,6 +155,77 @@ class AutomationTick extends Command
                 return Notifier::send($responses->where('response', 'present')->pluck('user_id')->all(), 'event_reminder',
                     "Bientôt : {$event->title}", 'Commence '.$time.$where, '/calendrier?date='.$date, $data, 'high');
             });
+        }
+
+        return $sent;
+    }
+
+    /** Rappel des rendez-vous reguliers (cultes) : minutes avant le debut. */
+    public const SERVICE_LEAD_MINUTES = 35;
+
+    /** Rappel ~30 min avant un rendez-vous « rappel a tous » : toute l'audience sauf les absents declares. */
+    private function serviceReminder(Event $event, Carbon $start, string $date): int
+    {
+        return $this->sendOnce("event:{$event->id}:{$date}:soon", function () use ($event, $start, $date) {
+            $absent = EventParticipation::where('event_id', $event->id)->where('occurs_on', $date)
+                ->where('response', 'absent')->pluck('user_id')->all();
+            $where = $event->location ? ' · '.$event->location : '';
+
+            return Notifier::send(array_diff(Audience::userIds($event->audienceList()), $absent), 'event_reminder',
+                'Bientôt : '.$event->title, 'Commence à '.$start->format('H\hi').$where,
+                '/calendrier?date='.$date, ['event_id' => $event->id, 'date' => $date], 'high');
+        });
+    }
+
+    /**
+     * Veille (a partir de 18 h) : un seul message recapitulant le programme du lendemain
+     * (ex. dimanche : priere, culte, Healing Time, Bloom Light) au lieu d'un rappel par
+     * rendez-vous. Les destinataires qui recoivent le meme programme sont regroupes.
+     */
+    private function serviceDigest(): int
+    {
+        $now = now();
+        if ($now->hour < 18) {
+            return 0;
+        }
+        $day = $now->copy()->addDay()->startOfDay();
+        $date = $day->toDateString();
+        $occurrences = CalendarService::occurrences(
+            Event::query()->where('remind_all', true)->where('is_personal', false)->with('scopes'),
+            $day, $day->copy()->endOfDay(),
+        )->sortBy(fn ($o) => $o['start']->timestamp)->values();
+        if ($occurrences->isEmpty()) {
+            return 0;
+        }
+
+        // Lignes du programme de chaque destinataire.
+        $lines = [];
+        foreach ($occurrences as $o) {
+            /** @var Event $event */
+            $event = $o['event'];
+            $absent = EventParticipation::where('event_id', $event->id)->where('occurs_on', $date)
+                ->where('response', 'absent')->pluck('user_id')->flip();
+            $label = ($event->all_day ? '' : $o['start']->format('H\hi').' ').$event->title;
+            foreach (Audience::userIds($event->audienceList()) as $userId) {
+                if (! isset($absent[$userId])) {
+                    $lines[$userId][] = $label;
+                }
+            }
+        }
+
+        $groups = [];
+        foreach ($lines as $userId => $items) {
+            $groups[implode("\n", $items)][] = $userId;
+        }
+
+        $weekday = $day->locale('fr')->isoFormat('dddd');
+        $sent = 0;
+        foreach ($groups as $program => $userIds) {
+            $items = explode("\n", $program);
+            $title = count($items) > 1 ? "Demain {$weekday} : programme du culte" : "Demain {$weekday} : {$items[0]}";
+            $sent += $this->sendOnce('service-digest:'.$date.':'.md5($program), fn () => Notifier::send(
+                $userIds, 'event_reminder', $title, count($items) > 1 ? implode(' · ', $items) : 'Nous vous attendons !',
+                '/calendrier?date='.$date, ['date' => $date]));
         }
 
         return $sent;
@@ -230,29 +311,77 @@ class AutomationTick extends Command
     }
 
     /** Taches (exercices) a rendre demain ou aujourd'hui, non faites (a partir de 9 h). */
+    /**
+     * Exercices : invitations nominatives a ceux qui ne l'ont pas termine (video regardee en
+     * entier et/ou reponse envoyee), en journee (8 h - 21 h) :
+     * - 2 jours apres la publication (s'il reste plus de 2 jours) ;
+     * - la veille de la fermeture (moins de 24 h) ;
+     * - dernier rappel moins de 3 h avant la fermeture.
+     * A la fermeture, l'auteur recoit le bilan. Un exercice ferme n'accepte plus rien.
+     */
     private function taskReminders(): int
     {
         $now = now();
-        if ($now->hour < 9) {
-            return 0;
-        }
         $sent = 0;
-        $dates = ['today' => $now->toDateString(), 'tomorrow' => $now->copy()->addDay()->toDateString()];
-        foreach ($dates as $when => $date) {
-            foreach (Exercise::where('is_active', true)->whereDate('due_date', $date)->with('scopes')->get() as $ex) {
-                $sent += $this->sendOnce("task:{$ex->id}:{$when}:{$date}", function () use ($ex, $when) {
-                    $done = ExerciseResponse::where('exercise_id', $ex->id)->pluck('user_id')->all();
-                    $recipients = array_diff(Audience::userIds($ex->audienceList()), $done, [$ex->created_by]);
+        $daytime = $now->hour >= 8 && $now->hour < 21;
 
-                    return Notifier::send($recipients, 'task_reminder',
-                        ($when === 'today' ? "À rendre aujourd'hui : " : 'À rendre demain : ').$ex->title,
-                        "Vous n'avez pas encore répondu à cet exercice.", '/tableau-de-bord#exercices',
-                        ['exercise_id' => $ex->id], $when === 'today' ? 'high' : 'normal');
+        if ($daytime) {
+            $open = Exercise::where('is_active', true)
+                ->where(fn ($q) => $q->whereNull('closes_at')->orWhere('closes_at', '>', $now))
+                ->where('created_at', '>=', $now->copy()->subDays(60))
+                ->with('scopes')->get();
+            foreach ($open as $ex) {
+                $hoursLeft = $ex->closes_at ? $now->diffInMinutes($ex->closes_at, false) / 60 : null;
+                $stage = match (true) {
+                    $hoursLeft !== null && $hoursLeft <= 3 => 'last',
+                    $hoursLeft !== null && $hoursLeft <= 24 => 'eve',
+                    $ex->created_at->lte($now->copy()->subDays(2)) && ($hoursLeft === null || $hoursLeft > 48) => 'nudge',
+                    default => null,
+                };
+                if (! $stage) {
+                    continue;
+                }
+                $sent += $this->sendOnce("task:{$ex->id}:{$stage}", function () use ($ex, $stage) {
+                    $recipients = array_diff(Audience::userIds($ex->audienceList()), ExerciseProgress::doneUserIds($ex), [(int) $ex->created_by]);
+                    [$title, $body] = $this->taskReminderText($ex, $stage);
+
+                    return Notifier::send($recipients, 'task_reminder', $title, $body, '/exercices/'.$ex->id,
+                        ['exercise_id' => $ex->id], $stage === 'last' ? 'high' : 'normal');
                 });
             }
         }
 
+        // Bilan a l'auteur des exercices fermes depuis moins de 3 jours.
+        $closed = Exercise::whereNotNull('closes_at')->whereBetween('closes_at', [$now->copy()->subDays(3), $now])
+            ->whereNotNull('created_by')->with('scopes')->get();
+        foreach ($closed as $ex) {
+            $sent += $this->sendOnce("task-closed:{$ex->id}", function () use ($ex) {
+                $audience = array_diff(Audience::userIds($ex->audienceList()), [(int) $ex->created_by]);
+                $done = count(array_intersect($audience, ExerciseProgress::doneUserIds($ex)));
+
+                return Notifier::send([(int) $ex->created_by], 'task', 'Exercice fermé : '.$ex->title,
+                    "{$done} fidèle(s) sur ".count($audience).' l\'ont terminé. Consultez le suivi détaillé.',
+                    '/admin/exercices?suivi='.$ex->id, ['exercise_id' => $ex->id]);
+            });
+        }
+
         return $sent;
+    }
+
+    /** @return array{0: string, 1: string} */
+    private function taskReminderText(Exercise $ex, string $stage): array
+    {
+        $what = $ex->isVideo()
+            ? ($ex->needsResponse() ? 'vidéo à regarder en entier, puis consigne à rendre' : 'vidéo à regarder en entier')
+            : 'exercice à rendre';
+        $deadline = $ex->closes_at?->locale('fr');
+        $when = $deadline ? ($deadline->isToday() ? "aujourd'hui à ".$deadline->format('H\\hi') : $deadline->isoFormat('dddd D MMMM [à] H[h]mm')) : null;
+
+        return match ($stage) {
+            'last' => ['Dernier rappel : « '.$ex->title.' »', ucfirst($what).". L'exercice se ferme {$when}."],
+            'eve' => ['Rappel : « '.$ex->title.' »', ucfirst($what).". Il se ferme {$when}."],
+            default => ['À faire : « '.$ex->title.' »', ucfirst($what).($when ? ", avant le {$when}." : '.')],
+        };
     }
 
     /**

@@ -66,7 +66,7 @@ class AuditLogController extends Controller
 
         $query = AuditLog::with('actor.profile:id,user_id,first_name,last_name', 'member.profile:id,user_id,first_name,last_name')->orderByDesc('id');
         if (! empty($data['action'])) {
-            $query->where('action', 'like', $data['action'].'%');
+            \App\Support\Like::where($query, 'action', \App\Support\Like::escape($data['action']).'%');
         }
         foreach (['member_id' => 'member_user_id', 'actor_id' => 'user_id'] as $param => $column) {
             if (! empty($data[$param])) {

@@ -4,7 +4,7 @@ import { api } from '../api/client'
 import { AppLayout } from '../components/AppLayout'
 import { PushSettings } from '../components/PushSettings'
 import { SkeletonCard } from '../components/Skeleton'
-import { useAutoRefresh } from '../hooks/useAutoRefresh'
+import { usePulse } from '../pulse'
 import { NOTIF_ICON, setUnread, timeAgo, useUnreadCount } from '../notifications'
 import type { AppNotification, NotificationPage } from '../types'
 
@@ -35,7 +35,7 @@ export default function Notifications() {
   }, [filter])
 
   useEffect(() => { setItems(null); load() }, [load])
-  useAutoRefresh(load, 30000)
+  usePulse('unread', load)
 
   async function more() {
     if (!items?.length) return

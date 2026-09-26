@@ -91,7 +91,10 @@ self.addEventListener('push', (event) => {
 // Clic sur une notification : ouvre (ou reutilise) l'application sur la bonne page.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const target = new URL(event.notification.data?.url || '/tableau-de-bord', self.location.origin).href
+  // Uniquement une page de l'application (jamais un site exterieur).
+  let target = new URL(event.notification.data?.url || '/tableau-de-bord', self.location.origin)
+  if (target.origin !== self.location.origin) target = new URL('/tableau-de-bord', self.location.origin)
+  target = target.href
 
   event.waitUntil((async () => {
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
