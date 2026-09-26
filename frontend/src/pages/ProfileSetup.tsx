@@ -20,7 +20,7 @@ export default function ProfileSetup() {
   const [lastName, setLastName] = useState(profile?.last_name ?? '')
   const [birthDay, setBirthDay] = useState(profile?.birth_day?.toString() ?? '')
   const [birthMonth, setBirthMonth] = useState(profile?.birth_month?.toString() ?? '')
-  const [gender, setGender] = useState(profile?.gender ?? '')
+  const [gender, setGender] = useState(profile?.gender === 'homme' || profile?.gender === 'femme' ? profile.gender : '')
   const [tribeId, setTribeId] = useState(profile?.tribe_id?.toString() ?? '')
   const [deptIds, setDeptIds] = useState<number[]>(profile?.departments?.map((d) => d.id) ?? [])
   const [photoFile, setPhotoFile] = useState<File | null>(null)
@@ -52,7 +52,7 @@ export default function ProfileSetup() {
       fd.append('last_name', lastName)
       if (birthDay) fd.append('birth_day', birthDay)
       if (birthMonth) fd.append('birth_month', birthMonth)
-      if (gender) fd.append('gender', gender)
+      fd.append('gender', gender)
       if (tribeId) fd.append('tribe_id', tribeId)
       deptIds.forEach((id) => fd.append('department_ids[]', String(id)))
       if (photoFile) fd.append('photo', photoFile)
@@ -131,11 +131,10 @@ export default function ProfileSetup() {
             </div>
             <div className="field">
               <label htmlFor="g">Genre</label>
-              <select id="g" className="select" value={gender} onChange={(e) => setGender(e.target.value)}>
-                <option value="">Non précisé</option>
+              <select id="g" className="select" required value={gender} onChange={(e) => setGender(e.target.value)}>
+                <option value="" disabled hidden>Choisir</option>
                 <option value="homme">Homme</option>
                 <option value="femme">Femme</option>
-                <option value="autre">Autre</option>
               </select>
             </div>
           </div>

@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Synchronise l'attribution d'un role de responsable a la portee d'une entite
- * (ex : nommer un GAD sur un GEM lui donne le role 'gad' scope 'gem' = gemId).
+ * (ex : nommer un Garde sur un GEM lui donne le role 'garde' scope 'gem' = gemId).
  * Le changement est pris en compte au prochain chargement du compte du responsable.
  */
 class LeaderRole

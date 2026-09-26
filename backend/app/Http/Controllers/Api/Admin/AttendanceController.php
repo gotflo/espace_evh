@@ -8,11 +8,17 @@ use App\Models\Profile;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class AttendanceController extends Controller
 {
-    /** Feuille de presence pour une date + un evenement : membres (dans la portee) + presents. */
+    /**
+     * Feuille de presence pour une date + un evenement : membres ACTIFS de la portee.
+     * Les inactifs sont masques ; ceux deja pointes ce jour-la restent affiches, et un inactif
+     * qui revient peut etre retrouve par une recherche (q) puis ajoute : le pointer le reactive.
+     */
     public function roster(Request $request): JsonResponse
     {
         $date = $request->query('date') ?: now()->toDateString();
@@ -20,25 +26,47 @@ class AttendanceController extends Controller
         $kind = $request->query('kind') === 'repetition' ? 'repetition' : 'culte';
 
         $profiles = $this->scopedProfiles($request->user());
-        $memberIds = $profiles->pluck('user_id');
-
         $records = Attendance::where('attended_on', $date)->where('event', $event)->where('kind', $kind)
-            ->whereIn('member_user_id', $memberIds)
+            ->whereIn('member_user_id', $profiles->pluck('user_id'))
             ->get()->keyBy('member_user_id');
+
+        [$active, $inactive] = $profiles->partition(fn (Profile $p) => $this->isActive($p) || isset($records[$p->user_id]));
+
+        // Recherche d'un fidele inactif revenu (au moins 2 lettres).
+        $q = mb_strtolower(trim((string) $request->query('q')));
+        if (mb_strlen($q) >= 2) {
+            return response()->json([
+                'matches' => $inactive->filter(fn (Profile $p) => str_contains(mb_strtolower($p->full_name), $q))
+                    ->take(10)->map(fn (Profile $p) => $this->row($p, $records))->values(),
+            ]);
+        }
 
         return response()->json([
             'date' => $date,
             'event' => $event,
             'kind' => $kind,
-            'members' => $profiles->map(fn (Profile $p) => [
-                'user_id' => $p->user_id,
-                'full_name' => $p->full_name ?: '(profil incomplet)',
-                'photo_url' => $p->photo_url,
-                'tribe' => $p->tribe?->name,
-                'present' => isset($records[$p->user_id]) && $records[$p->user_id]->status === 'present',
-                'status' => $records[$p->user_id]->status ?? null,
-            ])->values(),
+            'members' => $active->map(fn (Profile $p) => $this->row($p, $records))->values(),
+            'inactive_hidden' => $inactive->count(),
         ]);
+    }
+
+    /** @param Collection<int, Attendance> $records @return array<string, mixed> */
+    private function row(Profile $p, Collection $records): array
+    {
+        return [
+            'user_id' => $p->user_id,
+            'full_name' => $p->full_name ?: '(profil incomplet)',
+            'photo_url' => $p->photo_url,
+            'tribe' => $p->tribe?->name,
+            'present' => isset($records[$p->user_id]) && $records[$p->user_id]->status === 'present',
+            'status' => $records[$p->user_id]->status ?? null,
+        ];
+    }
+
+    /** Statut d'activite effectif (force manuellement, sinon statut stocke). */
+    private function isActive(Profile $p): bool
+    {
+        return $p->user?->activityStatus() === 'active';
     }
 
     /** Enregistrer la presence d'une session (remplace ce qui existait pour cette date + evenement). */
@@ -92,23 +120,19 @@ class AttendanceController extends Controller
 
         $present = $rows->where('status', 'present')->count();
 
-        return response()->json(['message' => "Session enregistrée ({$présent} présent(s))."]);
+        // Etre present (ou en retard) a une session est une activite : un membre inactif redevient actif.
+        User::whereIn('id', $rows->whereIn('status', ['present', 'retard'])->pluck('uid'))->where('activity_status', 'inactive')->get()
+            ->each(fn (User $u) => \App\Services\ActivityService::touch($u, false, 'attendance'));
+
+        return response()->json(['message' => "Session enregistrée ({$present} présent(s))."]);
     }
 
-    /** Profils visibles par l'utilisateur (toute l'eglise ou sa portee). */
-    private function scopedProfiles(User $user)
+    /** Membres dont l'utilisateur fait l'appel : toute l'eglise ou sa portee d'action (GEM, tribu, dept...). */
+    private function scopedProfiles(User $user): Collection
     {
-        $query = Profile::with(['tribe'])->has('user');
+        $query = Profile::with(['tribe', 'user:id,activity_status,activity_override'])->has('user');
 
-        if (! $user->hasPermission('members.view_all')) {
-            $tribeIds = $user->roles->where('pivot.scope_kind', 'tribe')->pluck('pivot.scope_id')->filter()->all();
-            $deptIds = $user->roles->where('pivot.scope_kind', 'department')->pluck('pivot.scope_id')->filter()->all();
-            $query->where(function ($sub) use ($tribeIds, $deptIds) {
-                $sub->whereIn('tribe_id', $tribeIds ?: [0])
-                    ->orWhereHas('departments', fn ($d) => $d->whereIn('departments.id', $deptIds ?: [0]));
-            });
-        }
-
-        return $query->orderBy('last_name')->orderBy('first_name')->get();
+        return \App\Support\MemberScope::manageableProfiles($query, $user)
+            ->orderBy('last_name')->orderBy('first_name')->get();
     }
 }

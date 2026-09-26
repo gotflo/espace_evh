@@ -6,7 +6,10 @@ import { MyGrades } from '../components/MyGrades'
 import { MyOverview } from '../components/MyOverview'
 import type { MySpiritualData } from '../types'
 
-function today() { return new Date().toISOString().slice(0, 10) }
+function today() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 export default function MySpiritual() {
   const [data, setData] = useState<MySpiritualData | null>(null)
@@ -60,7 +63,7 @@ export default function MySpiritual() {
         <div className="panel-grid"><SkeletonCard /><SkeletonCard /></div>
       ) : (
         <div className="panel-grid">
-          <section className="panel">
+          <section className="panel" id="mon-parcours">
             <div className="panel-head"><h3>Mon parcours</h3></div>
             <p className="helper" style={{ marginTop: 0, marginBottom: '0.8rem' }}>Cochez les étapes que vous avez franchies.</p>
             <div className="milestone-list">
@@ -90,7 +93,7 @@ export default function MySpiritual() {
               </div>
             </div>
             <div className="field mt">
-              <label>Votre message (temoignage, prière, besoin...)</label>
+              <label>Votre message (témoignage, prière, besoin...)</label>
               <textarea className="input" rows={4} value={note} onChange={(e) => setNote(e.target.value)} />
             </div>
             <button className="btn btn-primary" disabled={busy || !note.trim()} onClick={addEntry}>
@@ -114,7 +117,7 @@ export default function MySpiritual() {
                 {e.note && <p className="feed-body">{e.note}</p>}
               </article>
             ))}
-            {data && data.entries.length === 0 && <p className="helper">Votre journal est vide. Ajoutez votre premiere entrée.</p>}
+            {data && data.entries.length === 0 && <p className="helper">Votre journal est vide. Ajoutez votre première entrée.</p>}
           </div>
         </section>
       )}

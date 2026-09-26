@@ -45,4 +45,20 @@ return [
         ],
     ],
 
+
+    // Notifications push (Web Push / VAPID). Sans cles, elles sont generees automatiquement
+    // dans storage/app/webpush-vapid.json lors du premier usage.
+    'webpush' => [
+        'enabled' => env('WEBPUSH_ENABLED', true),
+        'public_key' => env('VAPID_PUBLIC_KEY'),
+        'private_key' => env('VAPID_PRIVATE_KEY'),
+        'subject' => env('VAPID_SUBJECT'),
+    ],
+
+    // Automatismes (rappels, anniversaires...) : declenches par le cron Laravel et, en secours,
+    // par l'activite de l'application (au plus toutes les 5 minutes).
+    'automation' => [
+        'auto_tick' => env('AUTO_TICK', true),
+    ],
+
 ];

@@ -4,7 +4,7 @@ import type { EvaluationItem } from '../types'
 
 function today() { return new Date().toISOString().slice(0, 10) }
 
-export function EvaluationsPanel({ userId }: { userId: string }) {
+export function EvaluationsPanel({ userId, canManage = true }: { userId: string; canManage?: boolean }) {
   const [items, setItems] = useState<EvaluationItem[]>([])
   const [types, setTypes] = useState<{ key: string; label: string }[]>([])
   const [average, setAverage] = useState<number | null>(null)
@@ -19,7 +19,7 @@ export function EvaluationsPanel({ userId }: { userId: string }) {
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(() => {
-    api<{ evaluations: EvaluationItem[]; average: number | null; types: { key: string; label: string }[] }>(`/admin/members/${userId}/évaluations`)
+    api<{ evaluations: EvaluationItem[]; average: number | null; types: { key: string; label: string }[] }>(`/admin/members/${userId}/evaluations`)
       .then((r) => { setItems(r.evaluations); setAverage(r.average); setTypes(r.types) })
       .catch(() => setItems([]))
   }, [userId])
@@ -28,7 +28,7 @@ export function EvaluationsPanel({ userId }: { userId: string }) {
   async function add() {
     setError(''); setBusy(true)
     try {
-      await api(`/admin/members/${userId}/évaluations`, {
+      await api(`/admin/members/${userId}/evaluations`, {
         method: 'POST',
         body: { type, title: title || null, score: Number(score), evaluated_on: date, comment: comment || null },
       })
@@ -40,19 +40,19 @@ export function EvaluationsPanel({ userId }: { userId: string }) {
 
   async function remove(id: number) {
     if (!confirm('Supprimer cette note ?')) return
-    try { await api(`/admin/évaluations/${id}`, { method: 'DELETE' }); load() }
+    try { await api(`/admin/evaluations/${id}`, { method: 'DELETE' }); load() }
     catch (err) { setError(err instanceof ApiError ? err.firstMessage : 'Erreur.') }
   }
 
   return (
     <section className="panel mt">
       <div className="panel-head">
-        <h3>Notes &amp; evaluations {average !== null && <span className="count-pill" style={{ background: '#0d5f57' }}>{average.toFixed(1)}/20</span>}</h3>
-        <button className="btn btn-primary small" onClick={() => setOpen((o) => !o)}>{open ? 'Fermer' : '+ Ajouter une note'}</button>
+        <h3>Notes &amp; évaluations {average !== null && <span className="count-pill" style={{ background: '#0d5f57' }}>{average.toFixed(1)}/20</span>}</h3>
+        {canManage && <button className="btn btn-primary small" onClick={() => setOpen((o) => !o)}>{open ? 'Fermer' : '+ Ajouter une note'}</button>}
       </div>
       {error && <div className="alert alert-error">{error}</div>}
 
-      {open && (
+      {open && canManage && (
         <div className="assign-box mb">
           <div className="field-row">
             <div className="field" style={{ marginBottom: 0 }}>
@@ -95,7 +95,7 @@ export function EvaluationsPanel({ userId }: { userId: string }) {
               <span className="grade-date">{e.evaluated_on}{e.author ? ` · ${e.author}` : ''}</span>
             </div>
             <span className="grade-score">{e.score}<small>/{e.max_score}</small></span>
-            <button className="org-del" onClick={() => remove(e.id)} aria-label="Supprimer">×</button>
+            {canManage && <button className="org-del" onClick={() => remove(e.id)} aria-label="Supprimer">×</button>}
           </div>
         ))}
         {items.length === 0 && <p className="helper">Aucune note pour l'instant.</p>}

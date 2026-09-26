@@ -8,7 +8,8 @@ import { DepartmentPicker } from '../../components/DepartmentPicker'
 import { SpiritualPanel } from '../../components/SpiritualPanel'
 import { EvaluationsPanel } from '../../components/EvaluationsPanel'
 import { MemberFissPanel } from '../../components/MemberFissPanel'
-import type { Department, Gem, MemberDetailData, RoleOption, Tribe } from '../../types'
+import { MemberCompletion, MemberFamily, MemberFissHistory } from '../../components/MemberExtras'
+import type { Department, Gem, MemberDetailData, MemberListItem, RoleOption, Tribe } from '../../types'
 
 export default function MemberDetail() {
   const { id } = useParams()
@@ -19,12 +20,15 @@ export default function MemberDetail() {
   const canViewSpiritual = hasPermission('spiritual.view')
   const canManageEval = hasPermission('evaluations.manage')
   const canRecordSpiritual = hasPermission('spiritual.record')
+  const canFissHistory = hasPermission('fiss.review') || hasPermission('audit.view')
 
   const [data, setData] = useState<MemberDetailData | null>(null)
   const [roleOptions, setRoleOptions] = useState<RoleOption[]>([])
   const [tribes, setTribes] = useState<Tribe[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [gems, setGems] = useState<Gem[]>([])
+  const [memberOptions, setMemberOptions] = useState<MemberListItem[] | null>(null)
+  const [memberQuery, setMemberQuery] = useState('')
 
   const [roleKey, setRoleKey] = useState('')
   const [scopeId, setScopeId] = useState('')
@@ -57,10 +61,21 @@ export default function MemberDetail() {
   const selectedRole = roleOptions.find((r) => r.key === roleKey)
   const needsScope = selectedRole && selectedRole.scope_kind !== 'none'
 
+  // Role « fidele precis » : liste des membres pour choisir le fidele confie.
+  useEffect(() => {
+    if (selectedRole?.scope_kind === 'member' && memberOptions === null) {
+      api<{ members: MemberListItem[] }>('/admin/members').then((r) => setMemberOptions(r.members)).catch(() => setMemberOptions([]))
+    }
+  }, [selectedRole, memberOptions])
+  const q = memberQuery.trim().toLowerCase()
+  const memberChoices = (memberOptions ?? [])
+    .filter((m) => String(m.user_id) !== id && (!q || m.full_name.toLowerCase().includes(q) || (m.phone ?? '').includes(q)))
+    .slice(0, 50)
+
   async function assign() {
     setError(''); setBusy(true)
     try {
-      await api(`/admin/members/${id}/rôles`, {
+      await api(`/admin/members/${id}/roles`, {
         method: 'POST',
         body: { role_key: roleKey, scope_id: needsScope ? Number(scopeId) : null },
       })
@@ -72,7 +87,7 @@ export default function MemberDetail() {
 
   async function removeRole(assignmentId: number) {
     setError('')
-    try { await api(`/admin/members/${id}/rôles/${assignmentId}`, { method: 'DELETE' }); load() }
+    try { await api(`/admin/members/${id}/roles/${assignmentId}`, { method: 'DELETE' }); load() }
     catch (err) { setError(err instanceof ApiError ? err.firstMessage : 'Erreur.') }
   }
 
@@ -105,11 +120,23 @@ export default function MemberDetail() {
 
   const p = data.profile
   const sp = data.spiritual_profile
+  // Consultation seule (ex. AP hors de ses tribus) : les actions sont masquees.
+  const manage = data.can_manage
+  const canEditHere = canEdit && manage
   const initials = ((p?.first_name?.[0] ?? '') + (p?.last_name?.[0] ?? '')).toUpperCase()
 
   return (
     <AppLayout title="Fiche membre" actions={back}>
       {error && <div className="alert alert-error">{error}</div>}
+      {!manage && (
+        <div className="readonly-banner" role="note">
+          <span aria-hidden>👁️</span>
+          <div>
+            <strong>Consultation seule</strong>
+            <span>Vous pouvez voir cette fiche mais pas la modifier.</span>
+          </div>
+        </div>
+      )}
 
       <div className="detail-grid">
         {/* Colonne infos */}
@@ -135,12 +162,12 @@ export default function MemberDetail() {
               <strong>{p?.departments && p.departments.length > 0 ? p.departments.map((d) => d.name).join(', ') : 'Aucun'}</strong>
             </div>
             {(p?.birth_day || p?.birth_month) && <div className="detail-line"><span>Anniversaire</span><strong>{p?.birth_day ?? '?'} / {p?.birth_month ?? '?'}</strong></div>}
-            {p?.marital_status && <div className="detail-line"><span>Situation</span><strong>{p.marital_status}</strong></div>}
             {p?.year_verse && <div className="detail-line"><span>Verset de l'année</span><strong>{p.year_verse}</strong></div>}
+            {data.led_departments.length > 0 && <div className="detail-line"><span>Responsable de</span><strong>{data.led_departments.map((d) => d.name).join(', ')}</strong></div>}
             <div className="detail-line"><span>Dernière activité</span><strong>{data.user.last_seen ?? 'Jamais vu'}</strong></div>
           </div>
 
-          {canEdit && (
+          {canEditHere && (
             <div className="mt">
               <span className="mini-label">Statut d'activité</span>
               <p className="helper" style={{ marginTop: 0, marginBottom: '0.6rem' }}>
@@ -162,7 +189,7 @@ export default function MemberDetail() {
           <div className="panel-head"><h3>Roles &amp; fonctions</h3></div>
           <div className="role-chips">
             {data.roles.map((r) => (
-              <span key={r.assignment_id} className={`rôle-chip ${r.key === 'super_admin' ? 'badge-gold' : ''}`}>
+              <span key={r.assignment_id} className={`role-chip ${r.key === 'super_admin' ? 'badge-gold' : ''}`}>
                 {r.name}{r.scope_name ? ` · ${r.scope_name}` : ''}
                 {canAssign && <button className="role-chip-x" onClick={() => removeRole(r.assignment_id)} aria-label="Retirer">×</button>}
               </span>
@@ -182,7 +209,17 @@ export default function MemberDetail() {
                 </div>
                 {needsScope && (
                   <div className="field" style={{ marginBottom: 0 }}>
-                    <label>{selectedRole!.scope_kind === 'tribe' ? 'Tribu' : selectedRole!.scope_kind === 'gem' ? 'GEM' : 'Département'}</label>
+                    <label>{selectedRole!.scope_kind === 'tribe' ? 'Tribu' : selectedRole!.scope_kind === 'gem' ? 'GEM' : selectedRole!.scope_kind === 'member' ? 'Fidèle confié' : 'Département'}</label>
+                    {selectedRole!.scope_kind === 'member' ? (
+                      <>
+                        <input className="input" placeholder="Rechercher un fidèle…" value={memberQuery} onChange={(e) => setMemberQuery(e.target.value)} />
+                        <select className="select mt-sm" value={scopeId} onChange={(e) => setScopeId(e.target.value)} size={Math.min(6, Math.max(2, memberChoices.length + 1))}>
+                          <option value="">{memberOptions === null ? 'Chargement…' : 'Choisir le fidèle…'}</option>
+                          {memberChoices.map((m) => <option key={m.user_id} value={m.user_id}>{m.full_name}{m.tribe ? ` · ${m.tribe}` : ''}</option>)}
+                        </select>
+                        <p className="helper">{p?.first_name ?? 'Ce responsable'} pourra agir (suivi, notes, demandes) uniquement sur ce fidèle.</p>
+                      </>
+                    ) : (
                     <select className="select" value={scopeId} onChange={(e) => setScopeId(e.target.value)}>
                       <option value="">Choisir...</option>
                       {(selectedRole!.scope_kind === 'tribe'
@@ -192,6 +229,7 @@ export default function MemberDetail() {
                           : departments)
                         .map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
                     </select>
+                    )}
                     {selectedRole!.scope_kind === 'gem' && !data.profile?.tribe_id && (
                       <p className="helper">Ce membre doit d'abord appartenir à une tribu.</p>
                     )}
@@ -206,7 +244,11 @@ export default function MemberDetail() {
         </section>
       </div>
 
-      {canEdit && (
+      {data.completion && <MemberCompletion completion={data.completion} />}
+      <MemberFamily family={data.family} maritalStatus={p?.marital_status}
+        wedding={p?.wedding_day && p?.wedding_month ? new Date(2000, p.wedding_month - 1, p.wedding_day).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long' }) : null} />
+
+      {canEditHere && (
         <section className="panel mt">
           <div className="panel-head"><h3>Appartenance</h3></div>
           <p className="section-sub">Assignez la tribu et les départements de ce membre.</p>
@@ -253,8 +295,9 @@ export default function MemberDetail() {
       )}
 
       {canViewSpiritual && id && <MemberFissPanel userId={id} />}
-      {canViewSpiritual && id && <SpiritualPanel userId={id} canRecord={canRecordSpiritual} />}
-      {canManageEval && id && <EvaluationsPanel userId={id} />}
+      {canFissHistory && id && <MemberFissHistory userId={id} />}
+      {canViewSpiritual && id && <SpiritualPanel userId={id} canRecord={canRecordSpiritual && manage} />}
+      {canManageEval && id && <EvaluationsPanel userId={id} canManage={manage} />}
     </AppLayout>
   )
 }

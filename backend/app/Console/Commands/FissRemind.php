@@ -2,9 +2,9 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Announcement;
 use App\Models\SpiritualHealthForm;
 use App\Models\User;
+use App\Services\Notifier;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
@@ -27,7 +27,7 @@ class FissRemind extends Command
 
         // Fideles (avec profil) qui n'ont PAS de fiche pour ce mois.
         $filled = SpiritualHealthForm::where('period', $period)->pluck('user_id');
-        $missing = User::whereHas('profile')->whereNotIn('id', $filled)->pluck('id');
+        $missing = User::whereHas('profile', fn ($p) => $p->where('is_completed', true))->whereNotIn('id', $filled)->pluck('id');
 
         if ($missing->isEmpty()) {
             $this->info("Aucun rappel a envoyer : toutes les fiches de {$monthLabel} sont remplies.");
@@ -40,16 +40,8 @@ class FissRemind extends Command
             ? "Le mois se termine bientôt. Merci de remplir votre fiche de santé spirituelle de {$monthLabel} dès aujourd'hui."
             : "Pensez à remplir votre fiche de santé spirituelle de {$monthLabel} avant la fin du mois.";
 
-        // Une seule annonce-rappel par mois : on la recree a chaque passage avec la liste a jour.
-        Announcement::where('title', $title)->delete();
-        $ann = Announcement::create([
-            'title' => $title,
-            'body' => $body,
-            'category' => 'important',
-            'target_type' => 'all',
-            'created_by' => null,
-        ]);
-        $ann->recipients()->attach($missing->all());
+        // Envoi manuel ; les rappels automatiques passent par app:tick (sans doublon).
+        Notifier::send($missing, 'fiss', $title, $body, '/ma-fiche', ['period' => $period], $type === 'urgent' ? 'high' : 'normal');
 
         $this->info("Rappel ({$type}) envoyé à {$missing->count()} fidèle(s) pour {$monthLabel}.");
 

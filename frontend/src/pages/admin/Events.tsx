@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { api, ApiError } from '../../api/client'
-import { getReference } from '../../api/reference'
 import { AppLayout } from '../../components/AppLayout'
 import { SkeletonCard } from '../../components/Skeleton'
-import { TargetField } from '../../components/TargetField'
-import type { Department, EventAdminItem, EventCategory, EventParticipants, Tribe } from '../../types'
+import { AudiencePicker } from '../../components/AudiencePicker'
+import type { AudienceScope, EventAdminItem, EventCategory, EventParticipants, Recurrence } from '../../types'
+
+const RECURRENCES: { key: Recurrence; label: string }[] = [
+  { key: 'none', label: 'Une seule fois' },
+  { key: 'daily', label: 'Chaque jour' },
+  { key: 'weekly', label: 'Chaque semaine' },
+  { key: 'biweekly', label: 'Toutes les 2 semaines' },
+  { key: 'monthly', label: 'Chaque mois' },
+]
 
 const CATEGORIES: { key: EventCategory; label: string }[] = [
   { key: 'culte', label: 'Culte' },
@@ -31,14 +38,13 @@ function toLocalInput(iso: string | null): string {
 const EMPTY = {
   id: 0, title: '', description: '', category: 'culte' as EventCategory,
   starts_at: '', ends_at: '', location: '',
-  target_type: 'all' as 'all' | 'tribe' | 'department', target_id: '',
+  all_day: false, recurrence: 'none' as Recurrence, recurrence_until: '',
+  scopes: [] as AudienceScope[],
 }
 
 export default function Events() {
   const [items, setItems] = useState<EventAdminItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [tribes, setTribes] = useState<Tribe[]>([])
-  const [departments, setDepartments] = useState<Department[]>([])
   const [mode, setMode] = useState<'list' | 'form'>('list')
   const [form, setForm] = useState({ ...EMPTY })
   const [image, setImage] = useState<File | null>(null)
@@ -62,7 +68,6 @@ export default function Events() {
   }, [])
   useEffect(() => { load() }, [load])
   useEffect(() => {
-    getReference().then((r) => { setTribes(r.tribes); setDepartments(r.departments) }).catch(() => {})
   }, [])
 
   function clearImage() { setImage(null); setImagePreview(null) }
@@ -71,7 +76,8 @@ export default function Events() {
     setForm({
       id: e.id, title: e.title, description: e.description ?? '', category: e.category,
       starts_at: toLocalInput(e.starts_at), ends_at: toLocalInput(e.ends_at), location: e.location ?? '',
-      target_type: e.target_type, target_id: e.target_id?.toString() ?? '',
+      all_day: e.all_day, recurrence: e.recurrence ?? 'none', recurrence_until: e.recurrence_until ?? '',
+      scopes: e.scopes,
     })
     clearImage(); setExistingImage(e.image_url); setError(''); setMode('form')
   }
@@ -90,8 +96,10 @@ export default function Events() {
     fd.append('starts_at', form.starts_at)
     if (form.ends_at) fd.append('ends_at', form.ends_at)
     if (form.location) fd.append('location', form.location)
-    fd.append('target_type', form.target_type)
-    if (form.target_type !== 'all') fd.append('target_id', form.target_id)
+    fd.append('all_day', form.all_day ? '1' : '0')
+    fd.append('recurrence', form.recurrence)
+    if (form.recurrence !== 'none' && form.recurrence_until) fd.append('recurrence_until', form.recurrence_until)
+    fd.append('scopes', JSON.stringify(form.scopes))
     if (image) fd.append('image', image)
     // Laravel : envoi multipart en POST + _method=PUT pour la modification.
     if (form.id) fd.append('_method', 'PUT')
@@ -168,7 +176,7 @@ export default function Events() {
           </div>
           <div className="field-row">
             <div className="field" style={{ marginBottom: 0 }}>
-              <label>Debut</label>
+              <label>Début</label>
               <input className="input" type="datetime-local" value={form.starts_at} onChange={(e) => setForm({ ...form, starts_at: e.target.value })} />
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
@@ -176,6 +184,29 @@ export default function Events() {
               <input className="input" type="datetime-local" value={form.ends_at} onChange={(e) => setForm({ ...form, ends_at: e.target.value })} />
             </div>
           </div>
+          <label className="rsvp-volunteer" style={{ marginBottom: '1rem' }}>
+            <input type="checkbox" checked={form.all_day} onChange={(e) => setForm({ ...form, all_day: e.target.checked })} />
+            Toute la journée
+          </label>
+          <div className="field-row">
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>Répétition</label>
+              <select className="select" value={form.recurrence} onChange={(e) => setForm({ ...form, recurrence: e.target.value as Recurrence })}>
+                {RECURRENCES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+              </select>
+            </div>
+            {form.recurrence !== 'none' && (
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>Jusqu'au (optionnel)</label>
+                <input className="input" type="date" value={form.recurrence_until} min={form.starts_at.slice(0, 10)} onChange={(e) => setForm({ ...form, recurrence_until: e.target.value })} />
+              </div>
+            )}
+          </div>
+          {form.recurrence !== 'none' && (
+            <p className="helper" style={{ marginTop: '-0.4rem', marginBottom: '1rem' }}>
+              L'événement apparaît automatiquement dans le calendrier à chaque occurrence{form.recurrence_until ? '' : ', sans date de fin'}. Les fidèles reçoivent un rappel la veille.
+            </p>
+          )}
           <div className="field">
             <label>Description (optionnel)</label>
             <textarea className="input" rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
@@ -194,11 +225,8 @@ export default function Events() {
                 : existingImage && <span className="helper">Image actuelle , choisir un fichier pour la remplacer.</span>}
             </div>
           </div>
-          <TargetField targetType={form.target_type} targetId={form.target_id}
-            onType={(t) => setForm({ ...form, target_type: t, target_id: '' })}
-            onId={(id) => setForm({ ...form, target_id: id })}
-            tribes={tribes} departments={departments} />
-          <button className="btn btn-primary mt" disabled={busy || !form.title.trim() || !form.starts_at || (form.target_type !== 'all' && !form.target_id)} onClick={save}>
+          <AudiencePicker value={form.scopes} onChange={(scopes) => setForm((f) => ({ ...f, scopes }))} />
+          <button className="btn btn-primary mt" disabled={busy || !form.title.trim() || !form.starts_at || form.scopes.length === 0} onClick={save}>
             {busy ? <span className="spinner" /> : form.id ? 'Enregistrer' : "Créer l'événement"}
           </button>
         </section>
@@ -208,14 +236,14 @@ export default function Events() {
         </div>
       ) : (
         <>
-          <h3 className="section-label">A venir</h3>
+          <h3 className="section-label">À venir</h3>
           <div className="event-grid">
             {upcoming.map((e) => <EventCard key={e.id} e={e} onEdit={openEdit} onDelete={remove} />)}
             {upcoming.length === 0 && <p className="helper">Aucun événement à venir.</p>}
           </div>
           {past.length > 0 && (
             <>
-              <h3 className="section-label" style={{ marginTop: '1.6rem' }}>Passes</h3>
+              <h3 className="section-label" style={{ marginTop: '1.6rem' }}>Passés</h3>
               <div className="event-grid">
                 {past.map((e) => <EventCard key={e.id} e={e} onEdit={openEdit} onDelete={remove} past />)}
               </div>
@@ -244,7 +272,10 @@ export default function Events() {
             </div>
           </div>
           <h4 className="event-title">{e.title}</h4>
-          <p className="event-meta">🕒 {fmtDate(e.starts_at)}{e.location ? ` · 📍 ${e.location}` : ''}</p>
+          <p className="event-meta">🕒 {e.recurrence !== 'none' && e.next_occurrence ? `Prochaine : ${fmtDate(e.next_occurrence)}` : fmtDate(e.starts_at)}{e.location ? ` · 📍 ${e.location}` : ''}</p>
+          {e.recurrence !== 'none' && (
+            <p className="event-meta-soft">↻ {e.recurrence_label}{e.recurrence_until ? ` jusqu'au ${new Date(e.recurrence_until + 'T00:00').toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' })}` : ''}</p>
+          )}
           <p className="event-meta-soft">{e.target}</p>
           {e.image_url && <img className="event-image" style={{ marginTop: '0.6rem', marginBottom: 0 }} src={e.image_url} alt={e.title} loading="lazy" />}
           <button className="event-participants-btn" onClick={() => openParticipants(e.id)}>

@@ -4,12 +4,13 @@ import { AppLayout } from '../../components/AppLayout'
 import type { ManagedRole, PermissionGroup } from '../../types'
 
 const SCOPE_LABEL: Record<string, string> = {
-  none: 'Sans portee',
+  none: 'Sans portée',
   tribe: 'Par tribu',
   gem: 'Par GEM',
   department: 'Par département',
+  member: 'Un fidèle précis',
 }
-type ScopeKind = 'none' | 'tribe' | 'gem' | 'department'
+type ScopeKind = 'none' | 'tribe' | 'gem' | 'department' | 'member'
 
 type Editing = ManagedRole | 'new' | null
 
@@ -57,7 +58,7 @@ export default function RolesAdmin() {
       if (editing === 'new') {
         await api('/admin/roles', { method: 'POST', body })
       } else if (editing) {
-        await api(`/admin/rôles/${editing.id}`, { method: 'PUT', body })
+        await api(`/admin/roles/${editing.id}`, { method: 'PUT', body })
       }
       setEditing(null); loadRoles()
     } catch (err) {
@@ -70,7 +71,7 @@ export default function RolesAdmin() {
     if (!confirm(`Supprimer le rôle "${editing.name}" ?`)) return
     setError('')
     try {
-      await api(`/admin/rôles/${editing.id}`, { method: 'DELETE' })
+      await api(`/admin/roles/${editing.id}`, { method: 'DELETE' })
       setEditing(null); loadRoles()
     } catch (err) {
       setError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
@@ -121,10 +122,11 @@ export default function RolesAdmin() {
             <label>Portee</label>
             <select className="select" value={scopeKind} disabled={isSystem}
               onChange={(e) => setScopeKind(e.target.value as ScopeKind)}>
-              <option value="none">Sans portee (global)</option>
+              <option value="none">Sans portée (global)</option>
               <option value="tribe">Rattaché à une tribu</option>
               <option value="gem">Rattaché à un GEM</option>
               <option value="department">Rattaché à un département</option>
+              <option value="member">Rattaché à un fidèle précis (agir sur ce fidèle)</option>
             </select>
           </div>
 

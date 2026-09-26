@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
-import { api, auth as tokenStore } from '../api/client'
+import { api, ApiError, auth as tokenStore } from '../api/client'
+import { forgetPushOnThisDevice } from '../push'
+import { setUnread } from '../notifications'
 import type { AuthPayload, Profile, User, UserRole } from '../types'
 
 interface AuthState {
@@ -42,14 +44,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     if (!tokenStore.get()) { setLoading(false); return }
-    try {
-      apply(await api<AuthPayload>('/me'))
-    } catch {
-      tokenStore.clear()
-      reset()
-    } finally {
-      setLoading(false)
+    // Seule une session refusee (401) deconnecte. Une coupure reseau ou une limite de
+    // requetes (429) est reessayee : le jeton est conserve.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        apply(await api<AuthPayload>('/me'))
+        break
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) { tokenStore.clear(); reset(); break }
+        if (attempt >= 2) { reset(); break }
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)))
+      }
     }
+    setLoading(false)
   }, [apply])
 
   useEffect(() => { refresh() }, [refresh])
@@ -60,7 +67,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const logout = async () => {
-    try { await api('/auth/logout', { method: 'POST' }) } catch { /* ignore */ }
+    // Cet appareil ne recoit plus les notifications de ce compte.
+    await forgetPushOnThisDevice()
+    setUnread(0)
+    try { await api('/auth/logout', { method: 'POST', toast: false }) } catch { /* ignore */ }
     tokenStore.clear()
     reset()
   }

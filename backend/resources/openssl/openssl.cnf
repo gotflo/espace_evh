@@ -1,0 +1,9 @@
+# Configuration OpenSSL minimale (generation de cles EC pour les notifications push).
+# Utilisee uniquement si la configuration systeme est introuvable (ex. PHP sous Windows).
+HOME = .
+
+[ req ]
+default_bits = 2048
+distinguished_name = req_distinguished_name
+
+[ req_distinguished_name ]

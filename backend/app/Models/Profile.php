@@ -11,8 +11,9 @@ class Profile extends Model
 {
     protected $fillable = [
         'user_id', 'matricule', 'first_name', 'last_name', 'birth_date', 'birth_day', 'birth_month', 'gender',
-        'email', 'facebook', 'marital_status', 'civility', 'children_count', 'tshirt_size', 'year_verse',
-        'photo_path', 'tribe_id', 'gem_id', 'joined_at', 'notes', 'is_completed',
+        'email', 'facebook', 'marital_status', 'spouse_name', 'wedding_day', 'wedding_month', 'has_children',
+        'civility', 'children_count', 'tshirt_size', 'year_verse', 'completion',
+        'photo_path', 'tribe_id', 'gem_id', 'joined_at', 'notes', 'is_completed', 'welcomed_at', 'welcomed_by',
     ];
 
     protected $casts = [
@@ -21,7 +22,12 @@ class Profile extends Model
         'birth_month' => 'integer',
         'joined_at' => 'date:Y-m-d',
         'children_count' => 'integer',
+        'wedding_day' => 'integer',
+        'wedding_month' => 'integer',
+        'has_children' => 'boolean',
+        'completion' => 'integer',
         'is_completed' => 'boolean',
+        'welcomed_at' => 'datetime',
     ];
 
     protected $appends = ['full_name', 'photo_url'];
@@ -41,9 +47,15 @@ class Profile extends Model
         return $this->belongsTo(Gem::class);
     }
 
+    /** Responsable qui a accueilli ce nouvel inscrit. */
+    public function welcomer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'welcomed_by');
+    }
+
     public function departments(): BelongsToMany
     {
-        return $this->belongsToMany(Department::class);
+        return $this->belongsToMany(Department::class)->withTimestamps();
     }
 
     public function getFullNameAttribute(): string

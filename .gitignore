@@ -26,3 +26,11 @@ backend/public/*
 
 # Archives de deploiement
 *.zip
+
+# Photos originales (lourdes, fichiers RAW) : seules les versions web optimisees
+# sont versionnees dans frontend/public/login/
+photo/
+
+# Copies de fichiers preparees pour un envoi sur l'hebergement (regenerees)
+deployment/
+

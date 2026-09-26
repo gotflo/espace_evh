@@ -3,22 +3,22 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Department extends Model
 {
-    protected $fillable = ['name', 'slug', 'description', 'leader_user_id', 'is_active', 'tracks_rehearsal'];
+    protected $fillable = ['name', 'slug', 'description', 'is_active', 'tracks_rehearsal'];
 
     protected $casts = ['is_active' => 'boolean', 'tracks_rehearsal' => 'boolean'];
 
-    public function leader(): BelongsTo
+    /** Responsables du departement (plusieurs possibles) : ils en ont la charge et les droits associes. */
+    public function leaders(): BelongsToMany
     {
-        return $this->belongsTo(User::class, 'leader_user_id');
+        return $this->belongsToMany(User::class, 'department_leaders')->withTimestamps();
     }
 
     public function members(): BelongsToMany
     {
-        return $this->belongsToMany(Profile::class);
+        return $this->belongsToMany(Profile::class)->withTimestamps();
     }
 }

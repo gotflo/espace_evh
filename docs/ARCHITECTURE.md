@@ -1,97 +1,85 @@
-# Plateforme « Mon compte » - Vases d'Honneur Chicoutimi
+# Architecture — Espace Vases d'Honneur Chicoutimi
 
-Document d'architecture (v1). Sert de référence avant développement.
-À valider par le pasteur / porteur du projet.
+Document de référence (v2). Complète le [README](../README.md) avec les choix de conception.
 
-## 1. Objectif
+## 1. Principes
 
-Un espace membre où chaque fidèle a un compte, se connecte par téléphone (code
-OTP), complète son profil, et voit un tableau de bord adapté à son rôle. Les
-responsables suivent la vie spirituelle des fidèles de leur tribu / département.
-La plateforme est modulable : rôles, tribus, départements et exercices se
-configurent depuis l'interface, sans toucher au code.
+- **Un seul domaine** : Laravel sert l'API (`/api`) et l'application React (SPA, PWA installable).
+- **Le serveur fait foi** : chaque droit est vérifié côté API (permission + périmètre). L'interface ne fait que
+  refléter ces droits ; masquer un bouton n'est jamais une protection.
+- **Hébergement mutualisé** (Hostinger) : pas de websockets ni de worker permanent. Rafraîchissement intelligent
+  côté client, automatismes idempotents lancés par cron (`schedule:run`) ou, à défaut, par l'application.
+- **Traçabilité** : toute action sensible écrit une entrée non modifiable dans `audit_logs`.
 
-## 2. Socle technique
+## 2. Modèle de données
 
-- Frontend : React (application déployée en statique sur Hostinger, sous-domaine).
-- Backend : Laravel (PHP 8) + MySQL, sur l'hébergement mutualisé Hostinger.
-- Auth : OTP par SMS au démarrage (fournisseur type Twilio). Bascule WhatsApp possible plus tard.
-- Stockage photos : disque Hostinger via Laravel.
-- Temps réel : rafraîchissement intelligent (websockets non dispo en mutualisé).
+### Identité
+- `users` : téléphone (unique), `activity_status` (`active`/`inactive`), `activity_changed_at`,
+  `activity_override` (forçage manuel), `last_seen_at`, `last_login_at`.
+- `profiles` (1–1) : identité, `tribe_id`, `gem_id`, date d'anniversaire (jour/mois), situation matrimoniale,
+  `spouse_name` (conjoint non inscrit), `wedding_day`/`wedding_month`, `has_children`, `completion` (0–100, stocké pour filtrer vite).
+- `spiritual_profiles` : conversion, baptêmes, dons, etc.
+- `family_links` : `user_id` → `relative_user_id` ou `relative_name` (non inscrit), `relation` (`spouse`/`child`), `status`
+  (`pending`/`confirmed`/`declined`), `birth_year` pour les enfants. Un lien conjugal n'existe que confirmé par les deux.
 
-## 3. Modèle de données (entités principales)
+### Organisation
+- `tribes` (12), `gems` (groupes rattachés à une tribu), `departments` (+ `tracks_rehearsal`).
+- `department_profile` : appartenance aux départements ; `department_leaders` : responsables (5 max par département).
 
-### Identité et profil
-- **users** : identité de connexion. `id`, `phone` (unique), `phone_verified_at`, `is_active`, timestamps.
-- **profiles** : 1 pour 1 avec user. `user_id`, `first_name`, `last_name`,
-  `birth_date`, `photo_path`, `gender`, `tribe_id` (nullable), `department_id`
-  (nullable), `joined_at`, `notes`.
+### Rôles
+- `roles` (`key`, `rank`, `scope_kind` : `none`/`tribe`/`gem`/`department`/`member`), `permissions`, `permission_role`.
+- `role_user` avec `scope_kind`/`scope_id` : un même rôle peut être attribué plusieurs fois avec des portées
+  différentes (ex. Assistant Pasteur sur plusieurs tribus).
+- Anti-escalade : on ne peut attribuer qu'un rôle de rang inférieur au sien.
 
-### Organisation de l'église (configurable par l'admin)
-- **tribes** (tribus) : `id`, `name`, `patriarch_user_id` (le patriarche), `description`.
-- **departments** (départements) : `id`, `name`, `leader_user_id` (le responsable), `description`.
+### Suivi
+- `spiritual_health_forms` (FISS mensuelle) : composantes notées, `submitted_at`, `locked_at`, `edit_count`.
+- `fiss_edit_requests` : motif, statut, décideur, `decision_comment`, `unlock_expires_at` (fenêtre de 7 jours), `used_at` ; 2 par fiche au maximum.
+- `evaluations` (Vertumètre), `attendances` (cultes et répétitions), `spiritual_entries`, `milestones`.
 
-### Rôles et permissions (le coeur de la modularité)
-- **roles** : `id`, `key`, `name`, `description`, `is_system`. Ex : super_admin,
-  gestionnaire, pasteur, assistant_pasteur, responsable, assistant_responsable,
-  gagneur_ame, patriarche, fidele.
-- **permissions** : `id`, `key`, `name`. Actions fines. Ex : `users.manage`,
-  `roles.assign`, `members.view_all`, `members.view_own_scope`,
-  `spiritual.record`, `exercises.create`, `exercises.assign`.
-- **role_permission** : quelles permissions dans quel rôle (pivot).
-- **role_user** : quels rôles pour quel fidèle, avec portée optionnelle
-  (`scope_tribe_id` / `scope_department_id`) pour les rôles limités à une tribu
-  ou un département. Ex : un patriarche a le rôle « patriarche » limité à SA tribu.
+### Demandes
+- `tribe_change_requests` + `tribe_change_approvals` (côté tribu d'origine / d'arrivée).
+- `member_requests` (demandes adressées aux responsables).
 
-### Suivi spirituel
-- **spiritual_entries** : journal du parcours. `id`, `member_user_id`,
-  `author_user_id` (qui a écrit), `type` (conversion, bapteme, priere, jeune,
-  visite, etc.), `date`, `note`.
-- **milestones** : étapes franchies. `member_user_id`, `milestone_key`
-  (baptise, rempli_esprit, etc.), `reached_at`.
+### Publication
+- `announcements`, `events` (récurrence, `is_personal`), `exercises`.
+- `publication_scopes` (polymorphe) : une publication peut viser l'église entière ou plusieurs tribus, GEM,
+  départements. Remplace les anciennes colonnes `target_type`/`target_id` (données migrées).
 
-### Activité (actif / inactif)
-- **attendances** : présence. `member_user_id`, `date`, `event`, `present`.
-- Statut actif = présence ou activité dans les N dernières semaines (calculé, paramétrable).
+### Notifications et audit
+- `user_notifications` (type, titre, corps, lien, `priority`, `read_at`), `push_subscriptions`.
+- `notification_dispatches` : clé unique par envoi automatique (idempotence).
+- `audit_logs` : `user_id` (auteur), `member_user_id`, `action`, `subject_type`/`subject_id`,
+  `old_values`/`new_values`/`context` (JSON), `ip`, `created_at`. Aucune route d'écriture.
 
-### Exercices spirituels
-- **exercises** : `id`, `title`, `content`, `type` (verset, quiz, reflexion),
-  `created_by`, `is_random`, `scheduled_at`, `scope` (global / tribu / département).
-- **exercise_assignments** : `exercise_id`, `assigned_to_user_id` ou groupe, `due_date`.
-- **exercise_responses** : `exercise_id`, `user_id`, `response`, `completed_at`.
+## 3. Périmètres
 
-## 4. Système de rôles (résumé)
+| Support | Rôle |
+|---------|------|
+| `MemberScope` | restreint toute requête de membres au périmètre de l'utilisateur (tribus, GEM, départements dirigés, fidèles accompagnés) |
+| `Audience` | options de publication autorisées et résolution des destinataires d'une publication |
+| `Recipients` | responsables d'un membre (patriarche → Assistant Pasteur → autorité pastorale) pour les notifications |
+| `ReportService::resolveScope` | portée d'un rapport (`church`, `mine`, `tribe:ID`) refusée si hors périmètre |
 
-Deux natures de rôles, gérées par le même mécanisme :
+`members.view_all` représente l'autorité pastorale (vision de toute l'église). L'Assistant Pasteur n'a **pas**
+cette permission : il ne voit que ses tribus assignées.
 
-1. Rôles de plateforme (droits d'accès) :
-   - **super_admin** (le pasteur) : tous les droits, assigne/retire n'importe quel rôle.
-   - **gestionnaire** : mêmes droits que le pasteur ou légèrement réduits (configurable).
+## 4. Services
 
-2. Rôles de fonction dans l'église (avec portée) :
-   - **patriarche** : voit et suit les fidèles de SA tribu.
-   - **responsable / assistant_responsable** : voient et suivent leur département.
-   - **assistant_pasteur, gagneur_ame** : droits intermédiaires à définir.
-   - **fidele** : voit et gère son propre espace.
+| Service | Responsabilité |
+|---------|----------------|
+| `Notifier` | notification in-app + push, priorité, anti-doublon, libération de la clé en cas d'échec |
+| `FissService` | verrouillage, demandes de modification, décisions, expiration, audit |
+| `TribeChangeService` | demandes, approbations des deux côtés, application du changement |
+| `FamilyService` | désignation/confirmation du conjoint, enfants, suggestions sans lien automatique |
+| `ActivityService` | calcul actif/inactif (3 mois), réactivation, trace |
+| `ReportService` | indicateurs, séries mensuelles, comparaison des tribus, listes (cache 10 min) |
+| `CalendarService` | occurrences d'événements, anniversaires, mariages, fériés, droits d'édition |
 
-Principe : un fidèle peut cumuler plusieurs rôles. Chaque rôle porte des
-permissions. Les permissions « voir les membres » existent en deux versions :
-toutes (`members.view_all`, pour pasteur/gestionnaire) ou limitées à sa portée
-(`members.view_own_scope`, pour patriarche/responsable). Le tableau de bord se
-compose selon les rôles et permissions de la personne connectée.
+## 5. Frontend
 
-## 5. Feuille de route par phases
-
-- Phase 0 : fondations. Projet Laravel + React, base MySQL, migrations, déploiement Hostinger, page de connexion vide.
-- Phase 1 : Auth OTP SMS + page « compléter mon profil » (nom, prénoms, date de naissance, photo, tribu, département).
-- Phase 2 : Rôles et permissions configurables, attribution des rôles par l'admin, tableaux de bord par rôle.
-- Phase 3 : Suivi spirituel (journal, milestones) + statut actif/inactif + listes exhaustives filtrables.
-- Phase 4 : Exercices spirituels (création, aléatoire, programmés, réponses).
-- Phase 5+ : améliorations, statistiques, notifications, etc.
-
-## 6. Ce que le porteur du projet doit fournir
-
-- Compte fournisseur SMS (ex : Twilio) pour l'OTP.
-- Accès MySQL Hostinger (identifiants base de données).
-- Sous-domaine dédié (ex : espace.vasesdhonneurchicoutimi.org), gratuit, à créer dans hPanel au moment du déploiement.
-- Validation de ce document (surtout la liste des rôles et leurs droits).
+- `api/client.ts` : jeton, erreurs lisibles, **toasts automatiques** sur les actions (POST/PUT/PATCH/DELETE).
+- Écrans chargés à la demande (`lazy`) ; pdfmake chargé uniquement lors d'un export.
+- Graphiques SVG maison (`components/charts.tsx`) : palette validée pour le daltonisme, tableau de données associé,
+  mêmes fonctions pour l'écran et le PDF.
+- Service worker : cache des fichiers `/assets/` (immuables), réception des push.

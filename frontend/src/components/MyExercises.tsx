@@ -60,7 +60,7 @@ export function MyExercises() {
   if (exercises.length === 0) return null
 
   return (
-    <section className="panel mt">
+    <section className="panel mt" id="exercices">
       <div className="panel-head"><h3>Mes exercices</h3></div>
       <div className="exercise-list">
         {exercises.map((ex) => <ExerciseCard key={ex.id} ex={ex} canRespond={canRespond} onDone={load} />)}
