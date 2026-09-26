@@ -6,6 +6,7 @@ import type { AuthPayload } from '../types'
 import { Brand } from '../components/Brand'
 import { DEFAULT_COUNTRY, type Country } from '../data/countries'
 import { CountrySelect } from '../components/CountrySelect'
+import { LoginBackdrop } from '../components/LoginBackdrop'
 import { AsYouType, isValidPhoneNumber, type CountryCode } from 'libphonenumber-js'
 
 type VerifyResponse = AuthPayload & { token: string; is_new_account?: boolean }
@@ -35,7 +36,7 @@ export default function Login() {
     setError(''); setInfo(''); setBusy(true)
     try {
       const res = await api<{ phone: string; message: string; dev_code?: string }>('/auth/request-otp', {
-        method: 'POST', body: { phone: national, country: country.iso }, auth: false,
+        method: 'POST', body: { phone: national, country: country.iso }, auth: false, toast: false,
       })
       setNormalizedPhone(res.phone)
       setStep('code')
@@ -58,7 +59,7 @@ export default function Login() {
     setError(''); setBusy(true)
     try {
       const res = await api<VerifyResponse>('/auth/verify-otp', {
-        method: 'POST', body: { phone: normalizedPhone, code }, auth: false,
+        method: 'POST', body: { phone: normalizedPhone, code }, auth: false, toast: false,
       })
       // Nouveau compte : on note le premier passage pour afficher le mot de bienvenue.
       if (res.is_new_account) {
@@ -74,8 +75,9 @@ export default function Login() {
   }
 
   return (
-    <div className="screen">
-      <div className="card">
+    <div className="screen login-screen">
+      <LoginBackdrop />
+      <div className="card login-card">
         <Brand subtitle="Espace membre" />
 
         {step === 'phone' && (

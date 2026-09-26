@@ -1,8 +1,12 @@
-import { lazy, Suspense, type ReactNode } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { lazy, Suspense, useEffect, type ReactNode } from 'react'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext'
 import { InstallPrompt } from './components/InstallPrompt'
 import { PullToRefresh } from './components/PullToRefresh'
+import { Toaster } from './components/Toaster'
+import { api } from './api/client'
+import { syncPush } from './push'
+import { refreshUnread, setUnread, getUnread } from './notifications'
 
 // Chargement a la demande : chaque page arrive dans son propre paquet,
 // le demarrage de l'application est donc beaucoup plus rapide.
@@ -23,6 +27,12 @@ const Contact = lazy(() => import('./pages/Contact'))
 const MySpiritual = lazy(() => import('./pages/MySpiritual'))
 const MyProfile = lazy(() => import('./pages/MyProfile'))
 const MyFiss = lazy(() => import('./pages/MyFiss'))
+const Calendar = lazy(() => import('./pages/Calendar'))
+const Services = lazy(() => import('./pages/Services'))
+const Notifications = lazy(() => import('./pages/Notifications'))
+const Validations = lazy(() => import('./pages/admin/Validations'))
+const Reports = lazy(() => import('./pages/admin/Reports'))
+const AuditLog = lazy(() => import('./pages/admin/AuditLog'))
 
 function Loading() {
   return <div className="loading-screen"><span className="spinner" /></div>
@@ -62,10 +72,52 @@ function PublicOnly({ children }: { children: ReactNode }) {
 
 const MEMBER_PERMS = ['members.view_all', 'members.view_scope']
 
+/**
+ * Effets globaux : re-synchronise l'abonnement push de l'appareil une fois connecte,
+ * et ouvre la bonne page quand on clique sur une notification (message du service worker).
+ */
+function PushBridge() {
+  const { isAuthenticated } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  // Lecture automatique : ouvrir la page visee par une notification la marque comme lue.
+  useEffect(() => {
+    if (!isAuthenticated || ['/', '/tableau-de-bord', '/connexion', '/profil'].includes(location.pathname)) return
+    const url = location.pathname + location.search
+    api<{ count: number }>('/me/notifications/read-url', { method: 'POST', body: { url }, toast: false })
+      .then((r) => { if (r.count > 0) setUnread(Math.max(0, getUnread() - r.count)) })
+      .catch(() => {})
+  }, [isAuthenticated, location.pathname, location.search])
+
+  useEffect(() => {
+    if (isAuthenticated) syncPush()
+  }, [isAuthenticated])
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'evh-navigate' && typeof e.data.url === 'string') {
+        const url = new URL(e.data.url, window.location.origin)
+        if (url.origin === window.location.origin) navigate(url.pathname + url.search + url.hash)
+        refreshUnread()
+      } else if (e.data?.type === 'evh-push-resubscribe') {
+        syncPush()
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [navigate])
+
+  return null
+}
+
 export default function App() {
   return (
     <>
     <PullToRefresh />
+    <PushBridge />
+    <Toaster />
     <InstallPrompt />
     <Suspense fallback={<Loading />}>
     <Routes>
@@ -77,6 +129,9 @@ export default function App() {
       <Route path="/ma-vie-spirituelle" element={<RequireAuth requireComplete><MySpiritual /></RequireAuth>} />
       <Route path="/ma-fiche" element={<RequireAuth requireComplete><MyFiss /></RequireAuth>} />
       <Route path="/contact" element={<RequireAuth requireComplete><Contact /></RequireAuth>} />
+      <Route path="/calendrier" element={<RequireAuth requireComplete><Calendar /></RequireAuth>} />
+      <Route path="/servir" element={<RequireAuth requireComplete><Services /></RequireAuth>} />
+      <Route path="/notifications" element={<RequireAuth requireComplete><Notifications /></RequireAuth>} />
       <Route path="/admin/membres" element={<RequireAuth requireComplete anyPermission={MEMBER_PERMS}><Members /></RequireAuth>} />
       <Route path="/admin/membres/:id" element={<RequireAuth requireComplete anyPermission={MEMBER_PERMS}><MemberDetail /></RequireAuth>} />
       <Route path="/admin/roles" element={<RequireAuth requireComplete anyPermission={['roles.manage']}><RolesAdmin /></RequireAuth>} />
@@ -87,6 +142,9 @@ export default function App() {
       <Route path="/admin/annonces" element={<RequireAuth requireComplete anyPermission={['announcements.publish']}><Announcements /></RequireAuth>} />
       <Route path="/admin/evenements" element={<RequireAuth requireComplete anyPermission={['events.manage']}><Events /></RequireAuth>} />
       <Route path="/admin/demandes" element={<RequireAuth requireComplete anyPermission={['requests.handle']}><Requests /></RequireAuth>} />
+      <Route path="/admin/validations" element={<RequireAuth requireComplete anyPermission={['fiss.review', 'tribes.transfer']}><Validations /></RequireAuth>} />
+      <Route path="/admin/rapports" element={<RequireAuth requireComplete anyPermission={['reports.view']}><Reports /></RequireAuth>} />
+      <Route path="/admin/journal" element={<RequireAuth requireComplete anyPermission={['audit.view']}><AuditLog /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
     </Suspense>

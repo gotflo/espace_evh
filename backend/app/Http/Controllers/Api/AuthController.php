@@ -82,6 +82,9 @@ class AuthController extends Controller
             'last_login_at' => Carbon::now(),
         ])->save();
 
+        // Une connexion est une activite : derniere connexion enregistree, membre inactif reactive.
+        \App\Services\ActivityService::touch($user, true, 'login');
+
         // Cree un profil vide s'il n'existe pas encore.
         $profile = Profile::firstOrCreate(['user_id' => $user->id]);
 
@@ -137,12 +140,22 @@ class AuthController extends Controller
     /** Charge et met en forme les informations du compte connecte. */
     private function authPayload(User $user): array
     {
-        $user->load('profile.tribe', 'profile.departments', 'roles.permissions');
+        $user->load('profile.tribe', 'profile.departments', 'roles.permissions', 'ledDepartments:id,name');
+
+        // Responsabilite de departement : affichee comme une fonction (ce n'est plus un role).
+        $leaderships = $user->ledDepartments->map(fn ($d) => [
+            'key' => 'department_leader',
+            'name' => 'Responsable de département',
+            'scope_kind' => 'department',
+            'scope_id' => $d->id,
+            'scope_name' => $d->name,
+        ]);
 
         return [
             'user' => $user->only(['id', 'phone']),
             'profile' => $user->profile,
             'profile_completed' => (bool) optional($user->profile)->is_completed,
+            'completion' => $user->profile ? \App\Support\ProfileCompletion::for($user->profile) : null,
             'is_super_admin' => $user->isSuperAdmin(),
             'roles' => $user->roles->map(fn ($r) => [
                 'key' => $r->key,
@@ -150,7 +163,7 @@ class AuthController extends Controller
                 'scope_kind' => $r->pivot->scope_kind,
                 'scope_id' => $r->pivot->scope_id,
                 'scope_name' => $this->scopeName($r->pivot->scope_kind, $r->pivot->scope_id),
-            ])->values(),
+            ])->concat($leaderships)->values(),
             'permissions' => $user->isSuperAdmin()
                 ? ['*']
                 : $user->permissionKeys()->values(),
@@ -166,6 +179,7 @@ class AuthController extends Controller
         return match ($kind) {
             'tribe' => Tribe::find($id)?->name,
             'gem' => \App\Models\Gem::find($id)?->name,
+            'member' => \App\Models\Profile::where('user_id', $id)->first()?->full_name,
             default => Department::find($id)?->name,
         };
     }

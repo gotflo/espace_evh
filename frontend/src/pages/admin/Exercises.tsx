@@ -1,21 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError } from '../../api/client'
-import { getReference } from '../../api/reference'
 import { AppLayout } from '../../components/AppLayout'
-import { TargetField } from '../../components/TargetField'
-import type { Department, ExerciseListItem, ExerciseResponseItem, Tribe } from '../../types'
+import { AudiencePicker } from '../../components/AudiencePicker'
+import type { AudienceScope, ExerciseListItem, ExerciseResponseItem } from '../../types'
 
 const TYPES = [
   { key: 'verset', label: 'Verset à méditer' },
   { key: 'quiz', label: 'Quiz' },
-  { key: 'reflexion', label: 'Reflexion' },
+  { key: 'reflexion', label: 'Réflexion' },
   { key: 'lecture', label: 'Lecture' },
 ]
 
 export default function Exercises() {
   const [exercises, setExercises] = useState<ExerciseListItem[]>([])
-  const [tribes, setTribes] = useState<Tribe[]>([])
-  const [departments, setDepartments] = useState<Department[]>([])
   const [mode, setMode] = useState<'list' | 'new'>('list')
   const [responses, setResponses] = useState<{ title: string; items: ExerciseResponseItem[] } | null>(null)
   const [error, setError] = useState('')
@@ -24,8 +21,7 @@ export default function Exercises() {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [type, setType] = useState('reflexion')
-  const [targetType, setTargetType] = useState<'all' | 'tribe' | 'department'>('all')
-  const [targetId, setTargetId] = useState('')
+  const [scopes, setScopes] = useState<AudienceScope[]>([])
   const [dueDate, setDueDate] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -33,9 +29,6 @@ export default function Exercises() {
     api<{ exercises: ExerciseListItem[] }>('/admin/exercises').then((r) => setExercises(r.exercises)).catch(() => setExercises([]))
   }, [])
   useEffect(() => { load() }, [load])
-  useEffect(() => {
-    getReference().then((r) => { setTribes(r.tribes); setDepartments(r.departments) }).catch(() => {})
-  }, [])
 
   async function create() {
     setError(''); setBusy(true)
@@ -43,12 +36,11 @@ export default function Exercises() {
       await api('/admin/exercises', {
         method: 'POST',
         body: {
-          title, content, type, target_type: targetType,
-          target_id: targetType === 'all' ? null : Number(targetId),
+          title, content, type, scopes,
           due_date: dueDate || null,
         },
       })
-      setTitle(''); setContent(''); setType('reflexion'); setTargetType('all'); setTargetId(''); setDueDate('')
+      setTitle(''); setContent(''); setType('reflexion'); setScopes([]); setDueDate('')
       setMode('list'); load()
     } catch (err) {
       setError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
@@ -123,8 +115,8 @@ export default function Exercises() {
               <input className="input" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
           </div>
-          <TargetField targetType={targetType} targetId={targetId} onType={setTargetType} onId={setTargetId} tribes={tribes} departments={departments} />
-          <button className="btn btn-primary mt" disabled={busy || !title.trim() || !content.trim() || (targetType !== 'all' && !targetId)} onClick={create}>
+          <AudiencePicker value={scopes} onChange={setScopes} />
+          <button className="btn btn-primary mt" disabled={busy || !title.trim() || !content.trim() || scopes.length === 0} onClick={create}>
             {busy ? <span className="spinner" /> : "Publier l'exercice"}
           </button>
         </section>

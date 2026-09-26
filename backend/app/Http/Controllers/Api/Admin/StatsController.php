@@ -4,11 +4,9 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Profile;
-use App\Models\User;
 use App\Support\MemberScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 
 class StatsController extends Controller
 {
@@ -19,7 +17,7 @@ class StatsController extends Controller
         $viewAll = $user->hasPermission('members.view_all');
 
         if (! $viewAll && ! $user->hasPermission('members.view_scope')) {
-            abort(403, 'Accès refuse.');
+            abort(403, 'Accès refusé.');
         }
 
         $scope = fn ($query) => MemberScope::scopeProfiles($query, $user);
@@ -27,14 +25,11 @@ class StatsController extends Controller
         $total = $scope(Profile::query())->count();
         $completed = $scope(Profile::query())->where('is_completed', true)->count();
 
-        // Actifs = statut d'activite calcule (presence/connexion recente) ou force actif.
-        $active = $scope(Profile::query())
-            ->with(['user' => fn ($q) => $q->withMax('attendances as last_attendance_date', 'attended_on')])
-            ->get()
-            ->filter(function (Profile $p) {
-                $u = $p->user;
-                return $u && User::activityFrom($u->activity_override, $this->lastSeen($u)) === 'active';
-            })->count();
+        // Actifs : statut force manuellement, sinon statut stocke (mis a jour chaque jour).
+        $active = $scope(Profile::query())->whereHas('user', fn ($u) => $u->where(fn ($w) => $w->where('activity_override', 'active')
+            ->orWhere(fn ($x) => $x->whereNull('activity_override')->where('activity_status', 'active'))))->count();
+        $incomplete = $scope(Profile::query())->where('is_completed', true)->where('completion', '<', 100)->count();
+        $fissFilled = $scope(Profile::query())->whereIn('user_id', \App\Models\SpiritualHealthForm::where('period', now()->format('Y-m'))->select('user_id'))->count();
 
         // Repartition par tribu (limitee aux tribus visibles).
         $byTribe = $scope(Profile::query())
@@ -46,33 +41,23 @@ class StatsController extends Controller
             ->map(fn ($row) => ['name' => $row->tribe?->name ?? '-', 'total' => (int) $row->total])
             ->sortByDesc('total')->values();
 
-        // Derniers inscrits.
-        $recent = $scope(Profile::query())
-            ->with('user:id,phone')
-            ->latest()->take(5)->get()
-            ->map(fn (Profile $p) => [
-                'user_id' => $p->user_id,
-                'full_name' => $p->full_name ?: '(profil incomplet)',
-                'photo_url' => $p->photo_url,
-            ]);
+        // Nouveaux inscrits (30 derniers jours) : d'abord ceux qui restent a accueillir.
+        $recent = NewMemberController::recentQuery($user)
+            ->reorder()->orderByRaw('CASE WHEN welcomed_at IS NULL THEN 0 ELSE 1 END')->orderByDesc('profiles.created_at')
+            ->limit(6)->get()
+            ->map(fn (Profile $p) => NewMemberController::present($p))->values();
 
         return response()->json([
             'total' => $total,
             'active' => $active,
             'inactive' => $total - $active,
             'completed' => $completed,
+            'incomplete_profiles' => $incomplete,
+            'fiss_filled' => $fissFilled,
+            'fiss_rate' => $completed ? round($fissFilled / $completed * 100) : null,
             'by_tribe' => $byTribe,
             'recent' => $recent,
+            'new_members' => NewMemberController::counts($user),
         ]);
-    }
-
-    private function lastSeen(User $u): ?Carbon
-    {
-        $dates = array_filter([
-            $u->last_attendance_date ? Carbon::parse($u->last_attendance_date) : null,
-            $u->last_login_at,
-        ]);
-
-        return empty($dates) ? null : collect($dates)->max();
     }
 }

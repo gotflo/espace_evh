@@ -19,6 +19,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // En-tetes de securite sur toutes les reponses.
         $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+
+        // Automatismes (rappels...) declenches aussi par l'activite, si le cron manque.
+        $middleware->appendToGroup('api', \App\Http\Middleware\TriggerAutomation::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

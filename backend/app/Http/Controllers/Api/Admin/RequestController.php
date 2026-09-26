@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\MyRequestController;
 use App\Models\MemberRequest;
+use App\Services\Notifier;
 use App\Support\MemberScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,7 +17,7 @@ class RequestController extends Controller
     {
         $user = $request->user();
         $scoped = MemberScope::isScoped($user);
-        $visibleIds = $scoped ? MemberScope::visibleUserIds($user) : null;
+        $visibleIds = $scoped ? MemberScope::manageableUserIds($user) : null;
 
         $base = MemberRequest::query();
         if ($scoped) {
@@ -52,7 +53,7 @@ class RequestController extends Controller
     /** Repondre a une demande (le responsable ecrit une reponse au fidele). */
     public function reply(Request $request, MemberRequest $memberRequest): JsonResponse
     {
-        abort_unless($request->user()->canViewMember($memberRequest->sender), 403, 'Hors de votre portee.');
+        abort_unless($request->user()->canManageMember($memberRequest->sender), 403, 'Hors de votre portée.');
         $data = $request->validate(['reply' => ['required', 'string', 'max:3000']]);
 
         $memberRequest->update([
@@ -63,6 +64,9 @@ class RequestController extends Controller
             'handled_by' => $memberRequest->handled_by ?? $request->user()->id,
         ]);
 
+        Notifier::send([$memberRequest->user_id], 'request_reply', 'Réponse à votre demande',
+            mb_substr($data['reply'], 0, 200), '/contact', ['request_id' => $memberRequest->id]);
+
         return response()->json(['message' => 'Réponse envoyée.']);
     }
 
@@ -72,7 +76,7 @@ class RequestController extends Controller
         $user = $request->user();
         $q = MemberRequest::where('status', 'nouvelle');
         if (MemberScope::isScoped($user)) {
-            $q->whereIn('user_id', MemberScope::visibleUserIds($user) ?: [0]);
+            $q->whereIn('user_id', MemberScope::manageableUserIds($user) ?: [0]);
         }
 
         return response()->json(['count' => $q->count()]);
@@ -81,16 +85,22 @@ class RequestController extends Controller
     /** Changer le statut d'une demande. */
     public function updateStatus(Request $request, MemberRequest $memberRequest): JsonResponse
     {
-        abort_unless($request->user()->canViewMember($memberRequest->sender), 403, 'Hors de votre portee.');
+        abort_unless($request->user()->canManageMember($memberRequest->sender), 403, 'Hors de votre portée.');
         $data = $request->validate([
             'status' => ['required', 'in:'.implode(',', array_keys(MyRequestController::STATUS))],
         ]);
 
+        $previous = $memberRequest->status;
         $memberRequest->update([
             'status' => $data['status'],
             'handled_by' => $data['status'] === 'nouvelle' ? null : $request->user()->id,
             'handled_at' => $data['status'] === 'traitee' ? now() : null,
         ]);
+
+        if ($data['status'] === 'traitee' && $previous !== 'traitee') {
+            Notifier::send([$memberRequest->user_id], 'request_reply', 'Votre demande a été traitée',
+                $memberRequest->subject ?: mb_substr($memberRequest->message, 0, 120), '/contact', ['request_id' => $memberRequest->id]);
+        }
 
         return response()->json(['message' => 'Statut mis à jour.']);
     }

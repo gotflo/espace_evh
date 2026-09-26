@@ -3,30 +3,35 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Department;
 use App\Models\Exercise;
-use App\Models\Tribe;
+use App\Services\Notifier;
+use App\Support\Audience;
+use App\Support\Audit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ExerciseController extends Controller
 {
-    public const TYPES = ['verset' => 'Verset à méditer', 'quiz' => 'Quiz', 'reflexion' => 'Reflexion', 'lecture' => 'Lecture'];
+    public const TYPES = ['verset' => 'Verset à méditer', 'quiz' => 'Quiz', 'reflexion' => 'Réflexion', 'lecture' => 'Lecture'];
 
-    /** Liste des exercices, avec le nombre de reponses. */
-    public function index(): JsonResponse
+    /** Exercices que l'utilisateur peut gerer (les siens ou ceux de sa portee), avec le nombre de reponses. */
+    public function index(Request $request): JsonResponse
     {
-        $exercises = Exercise::withCount('responses')->with('creator.profile')->latest()->get()
+        $user = $request->user();
+        $exercises = Exercise::withCount('responses')->with('creator.profile', 'scopes')->latest()->limit(200)->get()
+            ->filter(fn (Exercise $e) => Audience::canManage($user, $e->created_by, $e->audienceList()))
             ->map(fn (Exercise $e) => [
                 'id' => $e->id,
                 'title' => $e->title,
                 'type' => $e->type,
                 'type_label' => self::TYPES[$e->type] ?? $e->type,
-                'target' => $this->targetLabel($e),
+                'target' => $e->audienceLabel(),
+                'scopes' => $e->audienceList(),
                 'due_date' => $e->due_date?->toDateString(),
                 'responses_count' => $e->responses_count,
                 'created_at' => $e->created_at->toDateString(),
-            ]);
+            ])->values();
 
         return response()->json(['exercises' => $exercises, 'types' => $this->typeList()]);
     }
@@ -37,46 +42,42 @@ class ExerciseController extends Controller
             'title' => ['required', 'string', 'max:120'],
             'content' => ['required', 'string', 'max:5000'],
             'type' => ['required', 'in:'.implode(',', array_keys(self::TYPES))],
-            'target_type' => ['required', 'in:all,tribe,department,gem'],
-            'target_id' => ['nullable', 'integer'],
             'due_date' => ['nullable', 'date', 'after_or_equal:today'],
         ]);
+        $author = $request->user();
+        $scopes = Audience::resolve($author, Audience::fromRequest($request));
 
-        // Un responsable restreint ne peut cibler que sa propre portee (GEM / tribu / dept).
-        [$targetType, $targetId] = \App\Support\MemberScope::isScoped($request->user())
-            ? \App\Support\MemberScope::primaryScope($request->user())
-            : [$data['target_type'], $data['target_type'] === 'all' ? null : $data['target_id']];
+        $exercise = DB::transaction(function () use ($data, $author, $scopes) {
+            $exercise = Exercise::create($data + ['created_by' => $author->id]);
+            $exercise->syncScopes($scopes);
+            Audit::log('exercise.created', $exercise, null, [], ['title' => $exercise->title, 'scopes' => $scopes]);
 
-        if ($targetType === 'tribe' && ! Tribe::whereKey($targetId)->exists()) {
-            abort(422, 'Tribu invalide.');
-        }
-        if ($targetType === 'department' && ! Department::whereKey($targetId)->exists()) {
-            abort(422, 'Département invalide.');
-        }
+            return $exercise;
+        });
 
-        Exercise::create([
-            'title' => $data['title'],
-            'content' => $data['content'],
-            'type' => $data['type'],
-            'target_type' => $targetType,
-            'target_id' => $targetType === 'all' ? null : $targetId,
-            'due_date' => $data['due_date'] ?? null,
-            'created_by' => $request->user()->id,
-        ]);
+        // Nouvelle tache : chaque fidele concerne est prevenu (centre + push).
+        $audience = array_diff(Audience::userIds($scopes), [$author->id]);
+        $due = $exercise->due_date ? ' · à rendre le '.$exercise->due_date->locale('fr')->isoFormat('dddd D MMMM') : '';
+        Notifier::send($audience, 'task', 'Nouvel exercice : '.$exercise->title,
+            (self::TYPES[$exercise->type] ?? 'Exercice').$due, '/tableau-de-bord#exercices', ['exercise_id' => $exercise->id]);
 
-        return response()->json(['message' => 'Exercice créé.']);
+        return response()->json(['message' => 'Exercice créé ('.count($audience).' fidèle(s) prévenu(s)).']);
     }
 
-    public function destroy(Exercise $exercise): JsonResponse
+    public function destroy(Request $request, Exercise $exercise): JsonResponse
     {
+        $this->authorizeManage($request, $exercise);
+        Audit::log('exercise.deleted', $exercise, null, ['title' => $exercise->title, 'scopes' => $exercise->audienceList()]);
+        $exercise->scopes()->delete();
         $exercise->delete();
 
         return response()->json(['message' => 'Exercice supprimé.']);
     }
 
     /** Reponses des fideles a un exercice. */
-    public function responses(Exercise $exercise): JsonResponse
+    public function responses(Request $request, Exercise $exercise): JsonResponse
     {
+        $this->authorizeManage($request, $exercise);
         $responses = $exercise->responses()->with('user.profile')->latest('completed_at')->get()
             ->map(fn ($r) => [
                 'user_id' => $r->user_id,
@@ -91,14 +92,9 @@ class ExerciseController extends Controller
         ]);
     }
 
-    private function targetLabel(Exercise $e): string
+    private function authorizeManage(Request $request, Exercise $exercise): void
     {
-        return match ($e->target_type) {
-            'tribe' => 'Tribu '.(Tribe::find($e->target_id)?->name ?? '?'),
-            'department' => 'Dept. '.(Department::find($e->target_id)?->name ?? '?'),
-            'gem' => 'GEM '.(\App\Models\Gem::find($e->target_id)?->name ?? '?'),
-            default => "Toute l'église",
-        };
+        abort_unless(Audience::canManage($request->user(), $exercise->created_by, $exercise->audienceList()), 403, 'Cet exercice est hors de votre périmètre.');
     }
 
     private function typeList(): array

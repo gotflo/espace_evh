@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { api, ApiError } from '../../api/client'
-import { getReference } from '../../api/reference'
 import { AppLayout } from '../../components/AppLayout'
-import { TargetField } from '../../components/TargetField'
+import { AudiencePicker } from '../../components/AudiencePicker'
 import { SkeletonCard } from '../../components/Skeleton'
-import type { AnnouncementAdminItem, Department, Tribe } from '../../types'
+import type { AnnouncementAdminItem, AudienceScope } from '../../types'
 
 const CATEGORIES = [
   { key: 'info', label: 'Information' },
@@ -16,16 +15,13 @@ const CAT_LABEL: Record<string, string> = { info: 'Info', important: 'Important'
 export default function Announcements() {
   const [items, setItems] = useState<AnnouncementAdminItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [tribes, setTribes] = useState<Tribe[]>([])
-  const [departments, setDepartments] = useState<Department[]>([])
   const [mode, setMode] = useState<'list' | 'new'>('list')
   const [error, setError] = useState('')
 
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [category, setCategory] = useState('info')
-  const [targetType, setTargetType] = useState<'all' | 'tribe' | 'department'>('all')
-  const [targetId, setTargetId] = useState('')
+  const [scopes, setScopes] = useState<AudienceScope[]>([])
   const [image, setImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -38,9 +34,6 @@ export default function Announcements() {
       .finally(() => setLoading(false))
   }, [])
   useEffect(() => { load() }, [load])
-  useEffect(() => {
-    getReference().then((r) => { setTribes(r.tribes); setDepartments(r.departments) }).catch(() => {})
-  }, [])
 
   function onPickImage(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -49,7 +42,7 @@ export default function Announcements() {
     setImagePreview(URL.createObjectURL(file))
   }
   function resetForm() {
-    setTitle(''); setBody(''); setCategory('info'); setTargetType('all'); setTargetId('')
+    setTitle(''); setBody(''); setCategory('info'); setScopes([])
     setImage(null); setImagePreview(null)
   }
   function openNew() { resetForm(); setError(''); setMode('new') }
@@ -62,8 +55,7 @@ export default function Announcements() {
       if (body.trim()) fd.append('body', body.trim())
       if (image) fd.append('image', image)
       fd.append('category', category)
-      fd.append('target_type', targetType)
-      if (targetType !== 'all') fd.append('target_id', targetId)
+      fd.append('scopes', JSON.stringify(scopes))
       await api('/admin/announcements', { method: 'POST', body: fd })
       resetForm(); setMode('list'); load()
     } catch (err) {
@@ -115,8 +107,8 @@ export default function Announcements() {
               {CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
           </div>
-          <TargetField targetType={targetType} targetId={targetId} onType={setTargetType} onId={setTargetId} tribes={tribes} departments={departments} />
-          <button className="btn btn-primary mt" disabled={busy || !hasContent || (targetType !== 'all' && !targetId)} onClick={publish}>
+          <AudiencePicker value={scopes} onChange={setScopes} />
+          <button className="btn btn-primary mt" disabled={busy || !hasContent || scopes.length === 0} onClick={publish}>
             {busy ? <span className="spinner" /> : "Publier l'annonce"}
           </button>
         </section>

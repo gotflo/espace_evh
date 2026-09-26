@@ -18,11 +18,19 @@ export function MyGrades() {
     api<MyEvaluations>('/me/evaluations').then(setData).catch(() => setData(null))
   }, [])
 
-  if (!data || data.evaluations.length === 0) return null
+  if (!data) return null
+  if (data.evaluations.length === 0) {
+    return (
+      <section className="panel mt" id="mes-notes">
+        <div className="panel-head"><h3>Mes notes (Vertumètre)</h3></div>
+        <p className="helper">Aucune note pour l'instant. Vos responsables vous noteront au fil de votre parcours (méditation, participation…).</p>
+      </section>
+    )
+  }
 
   return (
-    <section className="panel mt">
-      <div className="panel-head"><h3>Mes notes</h3></div>
+    <section className="panel mt" id="mes-notes">
+      <div className="panel-head"><h3>Mes notes (Vertumètre)</h3></div>
 
       <div className="grades-top">
         <div className="grade-avg">

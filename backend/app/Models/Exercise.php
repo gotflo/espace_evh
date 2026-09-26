@@ -2,14 +2,19 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicationScopes;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Exercise extends Model
 {
+    use HasPublicationScopes;
+
+    public const SCOPABLE_TYPE = 'exercise';
+
     protected $fillable = [
-        'title', 'content', 'type', 'target_type', 'target_id', 'due_date', 'created_by', 'is_active',
+        'title', 'content', 'type', 'due_date', 'created_by', 'is_active',
     ];
 
     protected $casts = [

@@ -11,6 +11,8 @@ import { DashRequests } from '../components/DashRequests'
 import { FissReminder } from '../components/FissReminder'
 import { FissSummary } from '../components/FissSummary'
 import { Skeleton } from '../components/Skeleton'
+import { NewMembersPanel } from '../components/NewMembersPanel'
+import { PushSettings } from '../components/PushSettings'
 import type { Stats } from '../types'
 
 export default function Dashboard() {
@@ -44,26 +46,6 @@ export default function Dashboard() {
   }, [])
 
   const maxTribe = Math.max(1, ...(stats?.by_tribe.map((t) => t.total) ?? [1]))
-
-  const recentPanel = (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Derniers inscrits</h3>
-        <button className="btn-link" onClick={() => navigate('/admin/membres')}>Tout voir</button>
-      </div>
-      <div className="mini-list">
-        {stats?.recent.map((m) => (
-          <button key={m.user_id} className="mini-row" onClick={() => navigate(`/admin/membres/${m.user_id}`)}>
-            {m.photo_url
-              ? <img className="mini-avatar" src={m.photo_url} alt="" />
-              : <span className="mini-avatar">{(m.full_name[0] ?? '?').toUpperCase()}</span>}
-            <span>{m.full_name}</span>
-          </button>
-        ))}
-        {stats && stats.recent.length === 0 && <p className="helper">Aucun membre.</p>}
-      </div>
-    </section>
-  )
 
   const tribePanel = (
     <section className="panel">
@@ -104,6 +86,7 @@ export default function Dashboard() {
         <span className="verse-ref">Actes 20.28</span>
       </div>
 
+      <PushSettings variant="prompt" />
       <FissReminder />
       <FissSummary />
       {canViewMembers ? (
@@ -126,17 +109,21 @@ export default function Dashboard() {
                 <span className="stat-value">{stats?.inactive ?? '-'}</span>
                 <span className="stat-label">Inactifs</span>
               </button>
-              <button className="stat-tile" onClick={() => navigate('/admin/membres')}>
-                <span className="stat-value">{stats?.completed ?? '-'}</span>
-                <span className="stat-label">Profils complétés</span>
+              <button className={`stat-tile ${stats.fiss_rate !== null && stats.fiss_rate < 50 ? 'stat-warn' : ''}`} onClick={() => navigate('/admin/membres?statut=sans-fiss')}>
+                <span className="stat-value">{stats.fiss_rate !== null ? `${stats.fiss_rate} %` : '-'}</span>
+                <span className="stat-label">FISS du mois ({stats.fiss_filled})</span>
+              </button>
+              <button className="stat-tile" onClick={() => navigate('/admin/membres?statut=incomplet')}>
+                <span className="stat-value">{stats.incomplete_profiles}</span>
+                <span className="stat-label">Profils incomplets</span>
               </button>
             </div>
           )}
 
           <div className="dash-main">
             <div className="dash-col dash-main-col">
+              <NewMembersPanel />
               <EventsFeed />
-              {recentPanel}
             </div>
             <div className="dash-col dash-side-col">
               {canViewAll && tribePanel}
@@ -149,8 +136,8 @@ export default function Dashboard() {
       ) : (
         <div className="dash-main">
           <div className="dash-col dash-main-col">
-            <AnnouncementsFeed />
             <EventsFeed />
+            <AnnouncementsFeed />
             <MyExercises />
           </div>
           <div className="dash-col dash-side-col">
@@ -176,7 +163,10 @@ export default function Dashboard() {
                     : 'Aucun'}</strong>
                 </div>
               </div>
-              <button className="btn btn-ghost mt" onClick={() => navigate('/profil')}>Modifier mon profil</button>
+              <div className="editor-actions mt">
+                <button className="btn btn-primary small" onClick={() => navigate('/servir')}>Service : rejoindre un département</button>
+                <button className="btn btn-ghost small" onClick={() => navigate('/mon-profil')}>Mon profil</button>
+              </div>
             </section>
           </div>
         </div>

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\FissEditRequest;
 use App\Models\SpiritualHealthForm;
+use App\Services\FissService;
 use App\Support\FissCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -11,32 +13,64 @@ use Illuminate\Support\Carbon;
 
 class MyFissController extends Controller
 {
-    /** Fiche du mois en cours (ou vide), historique, indices de notation, statut de rappel. */
+    /** Fiche du mois (verrouillee ou non), historique, demandes de modification, indices de notation. */
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
         $period = now()->format('Y-m');
 
-        $current = SpiritualHealthForm::where('user_id', $user->id)->where('period', $period)->first();
-        $history = SpiritualHealthForm::where('user_id', $user->id)
-            ->where('period', '!=', $period)->orderByDesc('period')->limit(12)->get()
-            ->map(fn (SpiritualHealthForm $f) => $this->present($f));
+        $forms = SpiritualHealthForm::where('user_id', $user->id)->orderByDesc('period')->limit(13)
+            ->with(['editRequests' => fn ($q) => $q->latest('id')])->get();
+        $current = $forms->firstWhere('period', $period);
 
         return response()->json([
             'period' => $period,
-            'period_label' => Carbon::createFromFormat('Y-m', $period)->locale('fr')->isoFormat('MMMM YYYY'),
+            'period_label' => FissService::periodLabel($period),
             'filled' => (bool) $current,
             'reminder' => $this->reminderStatus((bool) $current),
             'current' => $current ? $this->present($current) : null,
-            'history' => $history,
+            'history' => $forms->where('period', '!=', $period)->take(12)->map(fn ($f) => $this->present($f))->values(),
             'indices' => FissCatalog::indices(),
+            'max_requests' => FissEditRequest::MAX_PER_FORM,
         ]);
     }
 
-    /** Enregistre / met a jour la fiche du mois en cours. */
+    /** Enregistre la fiche du mois : elle est aussitot verrouillee. */
     public function store(Request $request): JsonResponse
     {
-        $data = $request->validate([
+        $form = FissService::create($request->user(), $this->validated($request));
+
+        return response()->json(['message' => 'Fiche enregistrée. Merci !', 'current' => $this->present($form->load('editRequests'))], 201);
+    }
+
+    /** Modifie une fiche deverrouillee (demande approuvee) ; elle est reverrouillee. */
+    public function update(Request $request, SpiritualHealthForm $form): JsonResponse
+    {
+        $form = FissService::update($request->user(), $form, $this->validated($request));
+
+        return response()->json(['message' => 'Fiche modifiée et reverrouillée.', 'form' => $this->present($form->load('editRequests'))]);
+    }
+
+    /** Demande de modification (motif obligatoire, 2 par fiche au maximum). */
+    public function requestEdit(Request $request, SpiritualHealthForm $form): JsonResponse
+    {
+        $data = $request->validate(['reason' => ['required', 'string', 'min:5', 'max:1000']]);
+        FissService::requestEdit($request->user(), $form, $data['reason']);
+
+        return response()->json(['message' => 'Demande envoyée à votre patriarche.', 'form' => $this->present($form->fresh()->load('editRequests'))], 201);
+    }
+
+    public function cancelRequest(Request $request, FissEditRequest $editRequest): JsonResponse
+    {
+        FissService::cancel($request->user(), $editRequest);
+
+        return response()->json(['message' => 'Demande annulée.']);
+    }
+
+    /** @return array<string, mixed> */
+    private function validated(Request $request): array
+    {
+        return $request->validate([
             'meditation' => ['nullable', 'integer', 'min:0', 'max:20'],
             'priere' => ['nullable', 'integer', 'min:0', 'max:20'],
             'jeune' => ['nullable', 'integer', 'min:0', 'max:20'],
@@ -48,13 +82,6 @@ class MyFissController extends Controller
             'situation_conjugale' => ['nullable', 'integer', 'min:0', 'max:20'],
             'comment' => ['nullable', 'string', 'max:2000'],
         ]);
-
-        $form = SpiritualHealthForm::updateOrCreate(
-            ['user_id' => $request->user()->id, 'period' => now()->format('Y-m')],
-            $data,
-        );
-
-        return response()->json(['message' => 'Fiche de santé spirituelle enregistrée.', 'current' => $this->present($form)]);
     }
 
     /** Niveau de rappel selon le jour du mois (aucun si deja remplie). */
@@ -73,10 +100,15 @@ class MyFissController extends Controller
     /** @return array<string, mixed> */
     private function present(SpiritualHealthForm $f): array
     {
+        $requests = $f->editRequests;
+        $open = FissService::openRequest($f);
+        $pending = $requests->firstWhere('status', 'pending');
+        $used = $requests->where('status', '!=', 'cancelled')->count();
+
         return [
             'id' => $f->id,
             'period' => $f->period,
-            'period_label' => Carbon::createFromFormat('Y-m', $f->period)->locale('fr')->isoFormat('MMMM YYYY'),
+            'period_label' => FissService::periodLabel($f->period),
             'meditation' => $f->meditation,
             'priere' => $f->priere,
             'jeune' => $f->jeune,
@@ -89,6 +121,18 @@ class MyFissController extends Controller
             'comment' => $f->comment,
             'vie_spirituelle_total' => $f->vie_spirituelle_total,
             'vie_sociale_total' => $f->vie_sociale_total,
+            'spiritual_score' => $f->spiritualScore(),
+            'social_score' => $f->socialScore(),
+            'submitted_at' => $f->submitted_at?->toIso8601String(),
+            'locked' => $f->isLocked(),
+            'edit_count' => (int) $f->edit_count,
+            'can_edit_until' => $open?->unlock_expires_at?->toIso8601String(),
+            'editable' => $open !== null,
+            'requests_used' => $used,
+            'requests_left' => max(0, FissEditRequest::MAX_PER_FORM - $used),
+            'pending_request' => $pending ? ['id' => $pending->id, 'reason' => $pending->reason, 'created_at' => $pending->created_at->toIso8601String()] : null,
+            'last_decision' => ($d = $requests->whereIn('status', ['approved', 'rejected', 'used', 'expired'])->sortByDesc('decided_at')->first())
+                ? ['status' => $d->status, 'comment' => $d->decision_comment, 'decided_at' => $d->decided_at?->toIso8601String()] : null,
         ];
     }
 }

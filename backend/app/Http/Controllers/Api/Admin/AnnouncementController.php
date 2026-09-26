@@ -4,29 +4,35 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Announcement;
-use App\Models\Department;
-use App\Models\Tribe;
+use App\Services\Notifier;
 use App\Support\Audience;
+use App\Support\Audit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class AnnouncementController extends Controller
 {
     public const CATEGORIES = ['info' => 'Information', 'important' => 'Important', 'evenement' => 'Événement'];
 
-    public function index(): JsonResponse
+    /** Annonces que l'utilisateur peut gerer (les siennes ou celles de sa portee). */
+    public function index(Request $request): JsonResponse
     {
-        $items = Announcement::withCount('recipients')->with('creator.profile')->latest()->get()
+        $user = $request->user();
+        $items = Announcement::withCount('recipients')->with('creator.profile', 'scopes')->latest()->limit(200)->get()
+            ->filter(fn (Announcement $a) => Audience::canManage($user, $a->created_by, $a->audienceList()))
             ->map(fn (Announcement $a) => [
                 'id' => $a->id,
                 'title' => $a->title,
                 'category' => $a->category,
                 'image_url' => $a->image_url,
-                'target' => $this->targetLabel($a),
+                'target' => $a->audienceLabel(),
+                'scopes' => $a->audienceList(),
                 'recipients_count' => $a->recipients_count,
                 'created_at' => $a->created_at->toDateString(),
                 'author' => $a->creator?->profile?->full_name ?: null,
-            ]);
+            ])->values();
 
         return response()->json(['announcements' => $items]);
     }
@@ -38,8 +44,6 @@ class AnnouncementController extends Controller
             'body' => ['nullable', 'string', 'max:5000'],
             'image' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp,gif', 'max:8192'], // 8 Mo
             'category' => ['required', 'in:'.implode(',', array_keys(self::CATEGORIES))],
-            'target_type' => ['required', 'in:all,tribe,department,gem'],
-            'target_id' => ['nullable', 'integer'],
         ]);
 
         // Une annonce doit avoir au moins un contenu : titre, texte ou image.
@@ -47,52 +51,51 @@ class AnnouncementController extends Controller
             abort(422, 'Ajoutez au moins un titre, un texte ou une image.');
         }
 
-        // Un responsable restreint ne diffuse qu'a sa propre portee (GEM / tribu / dept).
-        if (\App\Support\MemberScope::isScoped($request->user())) {
-            [$data['target_type'], $data['target_id']] = \App\Support\MemberScope::primaryScope($request->user());
-        }
+        // Portee : une ou plusieurs tribus / GEMs / departements, controlee par les droits de l'auteur.
+        $author = $request->user();
+        $scopes = Audience::resolve($author, Audience::fromRequest($request));
 
-        if ($data['target_type'] === 'tribe' && ! Tribe::whereKey($data['target_id'] ?? null)->exists()) {
-            abort(422, 'Tribu invalide.');
-        }
-        if ($data['target_type'] === 'department' && ! Department::whereKey($data['target_id'] ?? null)->exists()) {
-            abort(422, 'Département invalide.');
-        }
+        [$announcement, $recipients] = DB::transaction(function () use ($data, $request, $author, $scopes) {
+            $announcement = Announcement::create([
+                'title' => $data['title'] ?? null,
+                'body' => $data['body'] ?? null,
+                'image_path' => $request->hasFile('image') ? $request->file('image')->store('announcements', 'public') : null,
+                'category' => $data['category'],
+                'created_by' => $author->id,
+            ]);
+            $announcement->syncScopes($scopes);
 
-        $announcement = Announcement::create([
-            'title' => $data['title'] ?? null,
-            'body' => $data['body'] ?? null,
-            'image_path' => $request->hasFile('image') ? $request->file('image')->store('announcements', 'public') : null,
-            'category' => $data['category'],
-            'target_type' => $data['target_type'],
-            'target_id' => $data['target_type'] === 'all' ? null : $data['target_id'],
-            'created_by' => $request->user()->id,
-        ]);
+            // Diffusion : une ligne de reception par destinataire, sauf l'auteur.
+            $recipients = array_values(array_diff(Audience::userIds($scopes), [$author->id]));
+            $announcement->recipients()->attach($recipients);
+            Audit::log('announcement.published', $announcement, null, [], ['title' => $announcement->title, 'scopes' => $scopes, 'recipients' => count($recipients)]);
 
-        // Diffusion : une "notification" (ligne pivot) par destinataire, sauf l'auteur.
-        $recipients = collect(Audience::forActor($request->user(), $data['target_type'], $data['target_id'] ?? null))
-            ->reject(fn ($id) => $id === $request->user()->id)->values();
-        $announcement->recipients()->attach($recipients->all());
+            return [$announcement, $recipients];
+        });
 
-        return response()->json(['message' => 'Annonce publiee ('.$recipients->count().' destinataire(s)).']);
+        Notifier::send(
+            $recipients,
+            'announcement',
+            $announcement->title ?: ($data['category'] === 'important' ? 'Annonce importante' : 'Nouvelle annonce'),
+            $announcement->body ? mb_substr($announcement->body, 0, 200) : null,
+            '/tableau-de-bord#annonces',
+            ['announcement_id' => $announcement->id],
+            $data['category'] === 'important' ? 'high' : 'normal',
+        );
+
+        return response()->json(['message' => 'Annonce publiée ('.count($recipients).' destinataire(s)).']);
     }
 
-    public function destroy(Announcement $announcement): JsonResponse
+    public function destroy(Request $request, Announcement $announcement): JsonResponse
     {
+        abort_unless(Audience::canManage($request->user(), $announcement->created_by, $announcement->audienceList()), 403, 'Cette annonce est hors de votre périmètre.');
+        Audit::log('announcement.deleted', $announcement, null, ['title' => $announcement->title, 'scopes' => $announcement->audienceList()]);
         if ($announcement->image_path) {
-            \Storage::disk('public')->delete($announcement->image_path);
+            Storage::disk('public')->delete($announcement->image_path);
         }
+        $announcement->scopes()->delete();
         $announcement->delete();
 
         return response()->json(['message' => 'Annonce supprimée.']);
-    }
-
-    private function targetLabel(Announcement $a): string
-    {
-        return match ($a->target_type) {
-            'tribe' => 'Tribu '.(Tribe::find($a->target_id)?->name ?? '?'),
-            'department' => 'Dept. '.(Department::find($a->target_id)?->name ?? '?'),
-            default => "Toute l'église",
-        };
     }
 }

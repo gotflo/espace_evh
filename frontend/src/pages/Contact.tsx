@@ -20,7 +20,6 @@ export default function Contact() {
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [ok, setOk] = useState('')
 
   function load() {
     setLoading(true)
@@ -31,11 +30,11 @@ export default function Contact() {
   useEffect(() => { load() }, [])
 
   async function send() {
-    setError(''); setOk(''); setBusy(true)
+    setError(''); setBusy(true)
     try {
-      await api('/me/requests', { method: 'POST', body: { category, subject: subject || null, message } })
+      await api('/me/requests', { method: 'POST', body: { category, subject: subject || null, message }, toast: 'Votre demande a bien été envoyée. Un responsable vous répondra.' })
       setSubject(''); setMessage(''); setCategory('question')
-      setOk('Votre demande a bien été envoyée.'); load()
+      load()
     } catch (err) {
       setError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
     } finally { setBusy(false) }
@@ -44,7 +43,6 @@ export default function Contact() {
   return (
     <AppLayout title="Nous contacter" subtitle="Envoyez une demande à un responsable">
       {error && <div className="alert alert-error">{error}</div>}
-      {ok && <div className="alert alert-ok">{ok}</div>}
 
       <div className="panel-grid">
         <section className="panel">

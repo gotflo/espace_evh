@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Department;
+use App\Models\Gem;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Tribe;
 use App\Models\User;
+use App\Services\Notifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -96,7 +98,7 @@ class RoleController extends Controller
         return $request->validate([
             'name' => ['required', 'string', 'max:60'],
             'description' => ['nullable', 'string', 'max:500'],
-            'scope_kind' => ['required', 'in:none,tribe,gem,department'],
+            'scope_kind' => ['required', 'in:none,tribe,gem,department,member'],
             'permission_keys' => ['nullable', 'array'],
             'permission_keys.*' => ['string', 'exists:permissions,key'],
         ]);
@@ -153,11 +155,13 @@ class RoleController extends Controller
                 'tribe' => Tribe::whereKey($scopeId)->exists(),
                 // Le GEM doit appartenir a la tribu du membre.
                 'gem' => \App\Models\Gem::whereKey($scopeId)->where('tribe_id', $user->profile?->tribe_id)->exists(),
+                // Fidele confie : un autre membre ayant un profil.
+                'member' => (int) $scopeId !== $user->id && User::whereKey($scopeId)->whereHas('profile')->exists(),
                 default => Department::whereKey($scopeId)->exists(),
             };
 
             if (! $scopeId || ! $valid) {
-                $label = match ($scopeKind) { 'tribe' => 'tribu', 'gem' => 'GEM de sa tribu', default => 'departement' };
+                $label = match ($scopeKind) { 'tribe' => 'tribu', 'gem' => 'GEM de sa tribu', 'member' => 'fidèle (autre que lui-même)', default => 'département' };
                 throw ValidationException::withMessages([
                     'scope_id' => "Veuillez choisir un(e) {$label} valide.",
                 ]);
@@ -170,16 +174,27 @@ class RoleController extends Controller
         ])->exists();
 
         if (! $duplicate) {
+            \App\Support\Audit::log('role.assigned', $user, $user->id, [], ['role' => $role->key, 'scope_kind' => $scopeKind, 'scope_id' => $scopeId]);
             $user->roles()->attach($role->id, [
                 'scope_kind' => $scopeKind,
                 'scope_id' => $scopeId,
                 'assigned_by' => $request->user()->id,
             ]);
+
+            $scopeName = match ($scopeKind) {
+                'tribe' => ' · tribu '.Tribe::find($scopeId)?->name,
+                'gem' => ' · GEM '.Gem::find($scopeId)?->name,
+                'department' => ' · '.Department::find($scopeId)?->name,
+                'member' => ' · '.\App\Models\Profile::where('user_id', $scopeId)->first()?->full_name,
+                default => '',
+            };
+            Notifier::send([$user->id], 'role', 'Nouvelle fonction : '.$role->name.$scopeName,
+                'Une nouvelle fonction vous a été confiée. Que Dieu vous fortifie dans ce service !', '/tableau-de-bord');
         }
 
-        // Nommer un GAD sur un GEM le designe aussitot comme responsable de ce GEM.
-        if ($scopeKind === 'gem' && $scopeId) {
-            \App\Models\Gem::whereKey($scopeId)->update(['leader_user_id' => $user->id]);
+        // Nommer un Garde sur un GEM le designe aussitot comme responsable de ce GEM (un seul Garde par GEM).
+        if ($scopeKind === 'gem' && $scopeId && $role->key === 'garde') {
+            \App\Support\GemRules::appointLeader(Gem::findOrFail($scopeId), $user->id, $request->user()->id);
         }
 
         return response()->json(['message' => 'Rôle attribué.']);
@@ -200,6 +215,12 @@ class RoleController extends Controller
         }
 
         DB::table('role_user')->where('id', $assignment)->delete();
+        \App\Support\Audit::log('role.revoked', $user, $user->id, ['role' => Role::whereKey($row->role_id)->value('key'), 'scope_kind' => $row->scope_kind, 'scope_id' => $row->scope_id]);
+
+        // Retirer le role Garde d'un GEM : ce GEM n'a plus de responsable.
+        if ($row->scope_kind === 'gem' && $row->scope_id && Role::whereKey($row->role_id)->value('key') === 'garde') {
+            Gem::whereKey($row->scope_id)->where('leader_user_id', $user->id)->update(['leader_user_id' => null]);
+        }
 
         return response()->json(['message' => 'Rôle retiré.']);
     }

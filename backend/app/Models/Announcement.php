@@ -2,13 +2,18 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicationScopes;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Announcement extends Model
 {
-    protected $fillable = ['title', 'body', 'image_path', 'category', 'target_type', 'target_id', 'created_by'];
+    use HasPublicationScopes;
+
+    public const SCOPABLE_TYPE = 'announcement';
+
+    protected $fillable = ['title', 'body', 'image_path', 'category', 'created_by'];
 
     public function getImageUrlAttribute(): ?string
     {

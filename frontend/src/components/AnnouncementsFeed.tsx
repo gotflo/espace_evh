@@ -18,7 +18,7 @@ export function AnnouncementsFeed() {
   if (items.length === 0) return null
 
   return (
-    <section className="panel mt">
+    <section className="panel mt" id="annonces">
       <div className="panel-head"><h3>Annonces</h3></div>
       <div className="feed">
         {items.map((a) => (

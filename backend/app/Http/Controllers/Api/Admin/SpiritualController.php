@@ -14,8 +14,9 @@ use Illuminate\Support\Carbon;
 class SpiritualController extends Controller
 {
     /** Journal + etapes d'un fidele, plus le catalogue pour les formulaires. */
-    public function show(User $user): JsonResponse
+    public function show(Request $request, User $user): JsonResponse
     {
+        abort_unless($request->user()->canViewMember($user), 403, 'Hors de votre portée.');
         $entries = SpiritualEntry::with('author.profile')
             ->where('member_user_id', $user->id)
             ->orderByDesc('entry_date')->orderByDesc('id')->get()
@@ -46,6 +47,7 @@ class SpiritualController extends Controller
     /** Ajouter une entree au journal. */
     public function storeEntry(Request $request, User $user): JsonResponse
     {
+        abort_unless($request->user()->canManageMember($user), 403, 'Consultation seule : action non autorisée.');
         $data = $request->validate([
             'type' => ['required', 'in:'.implode(',', array_keys(SpiritualCatalog::ENTRY_TYPES))],
             'entry_date' => ['required', 'date', 'before_or_equal:today'],
@@ -64,8 +66,9 @@ class SpiritualController extends Controller
     }
 
     /** Supprimer une entree du journal. */
-    public function destroyEntry(User $user, SpiritualEntry $entry): JsonResponse
+    public function destroyEntry(Request $request, User $user, SpiritualEntry $entry): JsonResponse
     {
+        abort_unless($request->user()->canManageMember($user), 403, 'Consultation seule : action non autorisée.');
         abort_unless($entry->member_user_id === $user->id, 404);
         $entry->delete();
 
@@ -75,6 +78,7 @@ class SpiritualController extends Controller
     /** Cocher / decocher une etape franchie. */
     public function toggleMilestone(Request $request, User $user): JsonResponse
     {
+        abort_unless($request->user()->canManageMember($user), 403, 'Consultation seule : action non autorisée.');
         $data = $request->validate([
             'milestone_key' => ['required', 'in:'.implode(',', array_keys(SpiritualCatalog::MILESTONES))],
             'reached' => ['required', 'boolean'],

@@ -17,7 +17,7 @@ class Gem extends Model
         return $this->belongsTo(Tribe::class);
     }
 
-    /** Le GAD (responsable du GEM). */
+    /** Le Garde (responsable du GEM). */
     public function leader(): BelongsTo
     {
         return $this->belongsTo(User::class, 'leader_user_id');

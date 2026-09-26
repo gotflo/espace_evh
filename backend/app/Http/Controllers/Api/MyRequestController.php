@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MemberRequest;
+use App\Services\Notifier;
+use App\Support\Recipients;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -42,7 +44,15 @@ class MyRequestController extends Controller
             'message' => ['required', 'string', 'max:3000'],
         ]);
 
-        $req = MemberRequest::create($data + ['user_id' => $request->user()->id, 'status' => 'nouvelle']);
+        $user = $request->user();
+        $req = MemberRequest::create($data + ['user_id' => $user->id, 'status' => 'nouvelle']);
+
+        // Les responsables qui traitent les demandes de ce fidele sont prevenus.
+        $name = $user->profile?->full_name ?: $user->phone;
+        Notifier::send(Recipients::followersOf($user, 'requests.handle'), 'request',
+            'Nouvelle demande : '.(self::CATEGORIES[$req->category] ?? 'Demande'),
+            $name.' · '.mb_substr($req->subject ?: $req->message, 0, 140), '/admin/demandes',
+            ['request_id' => $req->id], $req->category === 'priere' || $req->category === 'aide' ? 'high' : 'normal');
 
         return response()->json(['message' => 'Demande envoyée.', 'request' => $this->present($req)], 201);
     }

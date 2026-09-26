@@ -7,8 +7,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class EventParticipation extends Model
 {
-    protected $fillable = ['event_id', 'user_id', 'response', 'volunteer'];
+    protected $fillable = ['event_id', 'user_id', 'occurs_on', 'response', 'volunteer'];
 
+    // occurs_on reste une chaine 'Y-m-d' (cle de l'occurrence, comparee telle quelle).
     protected $casts = ['volunteer' => 'boolean'];
 
     public function user(): BelongsTo
