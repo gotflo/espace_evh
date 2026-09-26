@@ -56,5 +56,12 @@ export const NOTIF_ICON: Record<string, string> = {
   service: '🙌',
   birthday: '🎂',
   fiss: '🩺',
+  fiss_request: '🩺',
+  tribe_change: '🔁',
+  family: '👨‍👩‍👧',
+  profile: '👤',
+  wedding: '💍',
+  activity: '🌱',
+  report: '📊',
   system: '🔔',
 }

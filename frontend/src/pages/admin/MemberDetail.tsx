@@ -61,16 +61,18 @@ export default function MemberDetail() {
   const selectedRole = roleOptions.find((r) => r.key === roleKey)
   const needsScope = selectedRole && selectedRole.scope_kind !== 'none'
 
-  // Role « fidele precis » : liste des membres pour choisir le fidele confie.
+  // Role « fidele precis » : recherche cote serveur (20 resultats), jamais toute la liste.
+  const pickingMember = selectedRole?.scope_kind === 'member'
   useEffect(() => {
-    if (selectedRole?.scope_kind === 'member' && memberOptions === null) {
-      api<{ members: MemberListItem[] }>('/admin/members').then((r) => setMemberOptions(r.members)).catch(() => setMemberOptions([]))
-    }
-  }, [selectedRole, memberOptions])
-  const q = memberQuery.trim().toLowerCase()
-  const memberChoices = (memberOptions ?? [])
-    .filter((m) => String(m.user_id) !== id && (!q || m.full_name.toLowerCase().includes(q) || (m.phone ?? '').includes(q)))
-    .slice(0, 50)
+    if (!pickingMember) return
+    const t = window.setTimeout(() => {
+      setMemberOptions(null)
+      api<{ members: MemberListItem[] }>(`/admin/members?per_page=20&q=${encodeURIComponent(memberQuery.trim())}`)
+        .then((r) => setMemberOptions(r.members)).catch(() => setMemberOptions([]))
+    }, 250)
+    return () => window.clearTimeout(t)
+  }, [pickingMember, memberQuery])
+  const memberChoices = (memberOptions ?? []).filter((m) => String(m.user_id) !== id)
 
   async function assign() {
     setError(''); setBusy(true)
@@ -186,7 +188,7 @@ export default function MemberDetail() {
 
         {/* Colonne roles */}
         <section className="panel">
-          <div className="panel-head"><h3>Roles &amp; fonctions</h3></div>
+          <div className="panel-head"><h3>Rôles et fonctions</h3></div>
           <div className="role-chips">
             {data.roles.map((r) => (
               <span key={r.assignment_id} className={`role-chip ${r.key === 'super_admin' ? 'badge-gold' : ''}`}>

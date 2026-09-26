@@ -63,6 +63,8 @@ export interface SpiritualProfileData {
 export interface User {
   id: number
   phone: string
+  /** Visite precedente (avant celle-ci) */
+  last_seen_at?: string | null
 }
 
 export type Activity = 'active' | 'inactive'

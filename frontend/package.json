@@ -10,7 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "evh-site": "file:../../evh_site",
+    "@fontsource/cormorant-garamond": "^5.3.0",
+    "@fontsource/inter": "^5.3.0",
     "flag-icons": "^7.5.0",
     "libphonenumber-js": "^1.13.11",
     "pdfmake": "^0.2.20",

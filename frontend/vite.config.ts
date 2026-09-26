@@ -11,8 +11,8 @@ import react from '@vitejs/plugin-react'
 const CSP = [
   "default-src 'self'",
   "script-src 'self' https://www.youtube.com https://s.ytimg.com",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' data: https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self' data:",
   "img-src 'self' data: blob: https://i.ytimg.com",
   "frame-src https://www.youtube-nocookie.com https://www.youtube.com",
   "connect-src 'self'",
@@ -45,6 +45,9 @@ export default defineConfig({
   build: {
     // pdfmake (≈ 2 Mo) n'est charge qu'au moment d'un export PDF.
     chunkSizeWarningLimit: 1500,
+    // Les ~250 drapeaux restent des fichiers separes (telecharges seulement s'ils s'affichent)
+    // au lieu d'etre integres a la feuille de style.
+    assetsInlineLimit: (file) => (file.includes('flag-icons') ? false : undefined),
     rollupOptions: {
       output: {
         // Les librairies changent rarement : on les isole pour que le

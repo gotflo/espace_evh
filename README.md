@@ -28,7 +28,10 @@
 14. [Sécurité et confidentialité](#sécurité-et-confidentialité)
 15. [Tests et vérifications](#tests-et-vérifications)
 16. [Déploiement](#déploiement)
-17. [Documentation complémentaire](#documentation-complémentaire)
+17. [Hébergement Hostinger](#hébergement-hostinger)
+18. [Maintenance, sauvegarde et restauration](#maintenance-sauvegarde-et-restauration)
+19. [Limites connues](#limites-connues)
+20. [Documentation complémentaire](#documentation-complémentaire)
 
 ## Fonctionnalités
 
@@ -42,6 +45,8 @@
 - **Calendrier** (mois, semaine, liste) : événements, jours fériés, anniversaires, anniversaires de mariage, échéances.
 - **Horaires des cultes** (mercredi et dimanche) dans le calendrier et sur le tableau de bord, avec le programme
   la veille au soir et un rappel 30 minutes avant chaque rendez-vous.
+- **« Content de vous revoir »** après quelques jours d'absence : nouveautés depuis la dernière visite.
+- **Choix des notifications** reçues sur le téléphone, par catégorie ; brouillons conservés hors ligne.
 - **Mes exercices** : vidéos YouTube lues dans l'application (reprise là où on s'est arrêté), lectures et méditations,
   avec date limite et rappels nommant précisément l'exercice.
 - **Service** : inscription à un département en un clic.
@@ -59,6 +64,9 @@
 - **Exercices vidéo** : un lien YouTube, des consignes, une réponse écrite facultative, une date et heure limites ;
   fermeture automatique ; **suivi** par fidèle (pourcentage réellement regardé, avances rapides détectées, réponse).
 - **Journal d'audit** en lecture seule.
+- **Versets du tableau de bord** (PR et PA) : bibliothèque de textes bibliques, brouillon, programmation,
+  rotation quotidienne, mise en avant, aperçu et historique.
+- **Rapport mensuel automatique** : chiffres clés du mois écoulé envoyés le 1er à chaque responsable.
 
 ## Pile technique et architecture
 
@@ -308,24 +316,74 @@ contexte, IP, date. **Aucune route ne permet de modifier ou supprimer** une entr
 ## Tests et vérifications
 
 ```bash
-cd backend && php artisan test                 # tests de l'API (règles, permissions, automatismes)
+cd backend && php artisan test                 # tests de l'API (règles, permissions, automatismes, concurrence, injections)
+cd backend && php artisan test --group=benchmark   # mesures de volume 500 → 5 000 membres (quelques minutes)
 cd frontend && npx tsc -b && npx eslint src    # types et qualité
 cd frontend && node scripts/check-api-routes.mjs <chemin/vers/php>   # chaque appel du front existe côté API
+cd frontend && node scripts/check-accents.mjs  # aucun texte affiché sans ses accents
 cd frontend && npm run build
 ```
+
+Test de charge réel (utilisateurs simultanés) : `scripts/load/k6-scenario.js`, à lancer sur une copie de test
+(ou pendant un créneau calme, avec accord) après `php artisan app:load-test-users 500` ; supprimer ensuite les
+comptes de test avec `php artisan app:load-test-users --delete`.
 
 ## Déploiement
 
 Procédures pas à pas (fichiers, migrations, variables, cron, retour arrière) :
 - [`docs/MISE-A-JOUR-EVOLUTION-PLATEFORME.md`](docs/MISE-A-JOUR-EVOLUTION-PLATEFORME.md) : rapports, validations, périmètres, famille, audit ;
-- [`docs/MISE-A-JOUR-VIDEOS-CULTES-CHARGE.md`](docs/MISE-A-JOUR-VIDEOS-CULTES-CHARGE.md) : exercices vidéo, horaires des cultes, tenue en charge, sécurité.
+- [`docs/MISE-A-JOUR-VIDEOS-CULTES-CHARGE.md`](docs/MISE-A-JOUR-VIDEOS-CULTES-CHARGE.md) : exercices vidéo, horaires des cultes, tenue en charge, sécurité ;
+- [`docs/MISE-A-JOUR-AUDIT-ROBUSTESSE.md`](docs/MISE-A-JOUR-AUDIT-ROBUSTESSE.md) : audit, versets administrables, hébergement, robustesse.
 
 En résumé : sauvegarde de la base → envoi des fichiers `backend/` modifiés → `php artisan migrate --force`
 → `php artisan config:cache && php artisan route:cache && php artisan event:cache` → build React copié dans `public/` → vérifications.
 Ne **pas** relancer le seeder des rôles en production (il écraserait les réglages faits depuis l'écran Rôles).
 
+## Hébergement Hostinger
+
+Hébergement mutualisé constaté (hPanel) : 1 cœur CPU, 2 Go de RAM, 40 workers PHP, 20 Go de disque, PHP 8.3 avec
+OPcache, cron disponible. Pas de Redis ni de worker permanent supposés : l'application n'en dépend pas.
+
+- **Cron** (indispensable) : `* * * * * /usr/bin/php …/public_html/espace/artisan schedule:run` — déjà en place.
+- **Caches Laravel** après chaque mise en ligne : `php artisan config:cache && php artisan route:cache && php artisan event:cache`
+  (après toute modification du `.env` : `php artisan config:cache` à nouveau).
+- **Réglages PHP recommandés** (hPanel → Configuration PHP) : `memory_limit` 256M, `upload_max_filesize` 16M,
+  `post_max_size` 20M, `exposePhp` désactivé, `logErrors` activé.
+- **Serveur web** : `public/.htaccess` sert directement l'application (sans PHP), met en cache long les fichiers
+  versionnés et renvoie un vrai 404 pour un fichier absent. Testé avec Apache 2.4 dans les deux organisations
+  possibles (racine sur `public/` ou sur le dossier Laravel).
+- **Surveillance** : `GET /api/health` (base, cache, disque, dernier passage des automatismes, sans donnée sensible),
+  à brancher sur un service de surveillance gratuit (ex. UptimeRobot, toutes les 5 min).
+
+## Maintenance, sauvegarde et restauration
+
+- **Journaux** : `storage/logs/laravel-AAAA-MM-JJ.log`, un fichier par jour, 14 jours conservés
+  (`LOG_STACK=daily`). Les notifications de plus de 6 mois sont nettoyées automatiquement (`app:tick`).
+- **État des automatismes** : `/api/health` indique depuis combien de minutes ils ont tourné et si une étape a échoué ;
+  le détail (durée et résultat de chaque étape) est gardé en cache.
+- **Sauvegardes** : Hostinger sauvegarde le compte (stockage à Boston). Avant chaque mise à jour, faire en plus un
+  export SQL (phpMyAdmin → Exporter) et une copie de `.env` et `storage/app/webpush-vapid.json`.
+- **Restauration** (à tester une fois sur une base vide avant d'en avoir besoin) :
+  1. phpMyAdmin → base de test → Importer le fichier SQL ;
+  2. remettre `.env` et `storage/app/webpush-vapid.json` ;
+  3. `php artisan optimize:clear && php artisan migrate:status` (toutes les migrations « Ran ») ;
+  4. ouvrir `/api/health`.
+- **Retour arrière d'une mise à jour** : `php artisan migrate:rollback --step=N` (N indiqué dans chaque procédure
+  `docs/MISE-A-JOUR-*.md`), puis remettre les fichiers précédents. La sauvegarde SQL reste la voie de retour complète.
+
+## Limites connues
+
+- **Charge simultanée** : les volumes jusqu'à 5 000 membres sont mesurés (écrans constants en requêtes SQL,
+  voir `docs/AUDIT-2026-09.md`) ; la tenue à 500 utilisateurs *simultanés* dépend du forfait (1 cœur) et n'a pas été
+  mesurée sur le serveur réel (script k6 fourni).
+- **Rapport « toute l'église » sur 12 mois** : calculé à la demande (≈ 2 s à 5 000 membres en local), puis en cache 10 min.
+- **Push sur iPhone** : uniquement avec l'application installée sur l'écran d'accueil (iOS 16.4+).
+- **SMS** : tant que `SMS_DRIVER=log`, aucun SMS n'est envoyé (phase de test).
+- **Vertumètre** : actuellement la moyenne des notes des responsables ; version remplie par le membre en attente des questionnaires.
+
 ## Documentation complémentaire
 
+- [`docs/AUDIT-2026-09.md`](docs/AUDIT-2026-09.md) : audit complet (architecture, sécurité, performance, hébergement, mesures).
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) : modèle de données et choix techniques.
 - [`docs/IA-ARCHITECTURE.md`](docs/IA-ARCHITECTURE.md) : proposition d'architecture pour de futures fonctions d'IA (non implémentées).
 - `docs/MISE-A-JOUR-*.md` : procédures des mises à jour successives.

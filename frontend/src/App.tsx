@@ -36,6 +36,7 @@ const MyExercisesPage = lazy(() => import('./pages/Exercises'))
 const ExerciseDetail = lazy(() => import('./pages/ExerciseDetail'))
 const Reports = lazy(() => import('./pages/admin/Reports'))
 const AuditLog = lazy(() => import('./pages/admin/AuditLog'))
+const Verses = lazy(() => import('./pages/admin/Verses'))
 
 function Loading() {
   return <div className="loading-screen"><span className="spinner" /></div>
@@ -149,6 +150,7 @@ export default function App() {
       <Route path="/admin/demandes" element={<RequireAuth requireComplete anyPermission={['requests.handle']}><Requests /></RequireAuth>} />
       <Route path="/admin/validations" element={<RequireAuth requireComplete anyPermission={['fiss.review', 'tribes.transfer']}><Validations /></RequireAuth>} />
       <Route path="/admin/rapports" element={<RequireAuth requireComplete anyPermission={['reports.view']}><Reports /></RequireAuth>} />
+      <Route path="/admin/versets" element={<RequireAuth requireComplete anyPermission={['content.manage']}><Verses /></RequireAuth>} />
       <Route path="/admin/journal" element={<RequireAuth requireComplete anyPermission={['audit.view']}><AuditLog /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

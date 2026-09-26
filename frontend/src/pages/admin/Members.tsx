@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../api/client'
 import { getReference } from '../../api/reference'
 import { useAuth } from '../../auth/AuthContext'
 import { AppLayout } from '../../components/AppLayout'
 import type { MemberListItem, Tribe } from '../../types'
+
+interface MemberPage { members: MemberListItem[]; total: number; has_more: boolean }
 
 const TABS = [
   { key: '', label: 'Tous' },
@@ -22,6 +24,10 @@ export default function Members() {
   const statut = params.get('statut') ?? ''
   const tribe = params.get('tribu') ?? ''
   const [members, setMembers] = useState<MemberListItem[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [tribes, setTribes] = useState<Tribe[]>([])
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(true)
@@ -33,17 +39,29 @@ export default function Members() {
     if (allTribes) getReference().then((r) => setTribes(r.tribes)).catch(() => {})
   }, [allTribes])
 
+  const url = useCallback((p: number) => {
+    const filter = API_FILTER[statut] ?? ''
+    return `/admin/members?page=${p}&q=${encodeURIComponent(q)}${filter ? `&${filter}` : ''}${tribe ? `&tribe_id=${tribe}` : ''}`
+  }, [q, statut, tribe])
+
   useEffect(() => {
     const t = setTimeout(() => {
       setLoading(true)
-      const filter = API_FILTER[statut] ?? ''
-      api<{ members: MemberListItem[] }>(`/admin/members?q=${encodeURIComponent(q)}${filter ? `&${filter}` : ''}${tribe ? `&tribe_id=${tribe}` : ''}`)
-        .then((r) => setMembers(r.members))
-        .catch(() => setMembers([]))
+      api<MemberPage>(url(1))
+        .then((r) => { setMembers(r.members); setTotal(r.total); setHasMore(r.has_more); setPage(1) })
+        .catch(() => { setMembers([]); setTotal(0); setHasMore(false) })
         .finally(() => setLoading(false))
     }, 250)
     return () => clearTimeout(t)
-  }, [q, statut, tribe])
+  }, [url])
+
+  function more() {
+    setLoadingMore(true)
+    api<MemberPage>(url(page + 1))
+      .then((r) => { setMembers((prev) => [...prev, ...r.members]); setHasMore(r.has_more); setPage(page + 1) })
+      .catch(() => {})
+      .finally(() => setLoadingMore(false))
+  }
 
   function setParam(name: string, value: string) {
     const next = new URLSearchParams(params)
@@ -76,7 +94,7 @@ export default function Members() {
           </div>
         </div>
 
-        <p className="helper">{loading ? 'Chargement...' : `${members.length} membre(s)`}</p>
+        <p className="helper">{loading ? 'Chargement…' : total > members.length ? `${members.length} sur ${total} membres` : `${total} membre(s)`}</p>
 
         <div className="member-table">
           {members.map((m) => (
@@ -100,6 +118,13 @@ export default function Members() {
           ))}
           {!loading && members.length === 0 && <p className="helper center">Aucun membre trouvé.</p>}
         </div>
+        {hasMore && !loading && (
+          <div className="center mt">
+            <button className="btn btn-ghost" disabled={loadingMore} onClick={more}>
+              {loadingMore ? <span className="spinner" /> : `Afficher plus (${total - members.length} restant(s))`}
+            </button>
+          </div>
+        )}
       </section>
     </AppLayout>
   )

@@ -152,7 +152,9 @@ class AuthController extends Controller
         ]);
 
         return [
-            'user' => $user->only(['id', 'phone']),
+            // Derniere visite AVANT celle-ci (mise a jour apres la reponse) : sert a l'accueil
+            // « Content de vous revoir » avec les nouveautes depuis cette date.
+            'user' => $user->only(['id', 'phone']) + ['last_seen_at' => $user->last_seen_at?->toIso8601String()],
             'profile' => $user->profile,
             'profile_completed' => (bool) optional($user->profile)->is_completed,
             'completion' => $user->profile ? \App\Support\ProfileCompletion::for($user->profile) : null,

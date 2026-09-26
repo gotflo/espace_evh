@@ -120,9 +120,9 @@ function OrgSection({ title, singular, items, endpoint, canManage, showRehearsal
             {showRehearsal && (
               <button type="button" className={`rehearsal-toggle ${it.tracks_rehearsal ? 'on' : ''}`}
                 disabled={!canManage || busy}
-                title="Suit la ponctualité aux repetitions (retards, absences)"
+                title="Suit la ponctualité aux répétitions (retards, absences)"
                 onClick={() => call(() => api(`/admin/${endpoint}/${it.id}`, { method: 'PUT', body: { tracks_rehearsal: !it.tracks_rehearsal } }))}>
-                {it.tracks_rehearsal ? '🎵 Repetitions' : 'Repetitions ?'}
+                {it.tracks_rehearsal ? '🎵 Répétitions' : 'Répétitions ?'}
               </button>
             )}
             <span className="org-count">{it.members_count} membre(s)</span>
@@ -135,7 +135,7 @@ function OrgSection({ title, singular, items, endpoint, canManage, showRehearsal
             {editing === it.id && <LeadersEditor item={it} onDone={(saved) => { setEditing(null); if (saved) onChange() }} />}
           </div>
         ))}
-        {items.length === 0 && <p className="helper">Aucun element.</p>}
+        {items.length === 0 && <p className="helper">Aucun élément.</p>}
       </div>
     </section>
   )

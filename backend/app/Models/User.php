@@ -48,6 +48,7 @@ class User extends Authenticatable
             'last_login_at' => 'datetime',
             'last_seen_at' => 'datetime',
             'activity_changed_at' => 'datetime',
+            'notification_prefs' => 'array',
         ];
     }
 

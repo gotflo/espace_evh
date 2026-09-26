@@ -38,6 +38,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'announcements.publish' => ['Publier des annonces', 'Communication'],
             'events.manage' => ['Créer et gérer les événements', 'Communication'],
             'broadcast.all' => ["Diffuser à toute l'église (annonces, événements, exercices)", 'Communication'],
+            'content.manage' => ['Gérer les versets du tableau de bord', 'Communication'],
             'requests.handle' => ['Traiter les demandes des fidèles', 'Communication'],
             'reports.view' => ['Voir les rapports et statistiques de son périmètre', 'Rapports'],
             'audit.view' => ["Consulter le journal d'audit", 'Rapports'],
@@ -75,7 +76,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'permissions' => array_merge($suivi, [
                     'members.view_all', 'members.edit', 'members.export', 'broadcast.all',
                     'tribes.manage', 'departments.manage', 'gems.manage', 'roles.assign', 'roles.manage',
-                    'exercises.create', 'reports.view', 'audit.view', 'fiss.review', 'tribes.transfer',
+                    'exercises.create', 'reports.view', 'audit.view', 'fiss.review', 'tribes.transfer', 'content.manage',
                 ]),
             ],
             // Assistant Pasteur (AP) : une ou plusieurs tribus (une attribution par tribu).

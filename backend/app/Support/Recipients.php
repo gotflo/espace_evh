@@ -14,11 +14,44 @@ use Illuminate\Support\Facades\DB;
  */
 class Recipients
 {
-    /** Responsables potentiels : membres ayant un role ou dirigeant un departement. */
+    /** Responsables charges une fois pour la duree d'un traitement groupe (voir remember()). */
+    private static ?Collection $batchStaff = null;
+
+    /**
+     * Execute un traitement groupe (passage des automatismes) en chargeant la liste des
+     * responsables une seule fois ; elle est liberee a la fin, meme en cas d'erreur.
+     */
+    public static function remember(callable $callback): mixed
+    {
+        $previous = self::$batchStaff;
+        self::$batchStaff = null;
+        self::$batchStaff = self::staff();
+        try {
+            return $callback();
+        } finally {
+            self::$batchStaff = $previous;
+        }
+    }
+
+    /**
+     * Responsables potentiels : membres dont un role donne une permission de gestion
+     * (tout sauf « repondre aux exercices », que tout fidele possede) ou qui dirigent un
+     * departement : quelques dizaines de personnes, et non toute l'eglise (sans ce filtre,
+     * chaque notification chargeait tous les membres : cout N x N).
+     */
     private static function staff(): Collection
     {
-        return User::where(fn ($q) => $q->whereHas('roles')->orWhereHas('ledDepartments'))
-            ->with('roles.permissions')->get();
+        return self::$batchStaff ?? User::where(fn ($q) => $q
+            ->whereHas('roles.permissions', fn ($p) => $p->where('key', '!=', 'exercises.respond'))
+            ->orWhereHas('roles', fn ($r) => $r->where('key', 'super_admin'))
+            ->orWhereHas('ledDepartments'))
+            ->with('roles.permissions', 'ledDepartments:id')->get();
+    }
+
+    /** Profil et departements du membre charges une fois (et non pour chaque responsable teste). */
+    private static function prepare(User $member): User
+    {
+        return $member->loadMissing('profile.departments:id');
     }
 
     /** @return array<int> ids des utilisateurs ayant cette permission (super admin inclus). */
@@ -36,6 +69,8 @@ class Recipients
      */
     public static function leadersOf(User $member): array
     {
+        self::prepare($member);
+
         return self::staff()
             ->filter(fn (User $u) => $u->id !== $member->id
                 && ! $u->hasPermission('members.view_all')
@@ -50,6 +85,8 @@ class Recipients
      */
     public static function followersOf(User $member, string $permission): array
     {
+        self::prepare($member);
+
         return self::staff()
             ->filter(fn (User $u) => $u->id !== $member->id
                 && $u->hasPermission($permission)
@@ -60,6 +97,8 @@ class Recipients
     /** @return array<int> tous ceux qui ont la charge de ce fidele (pasteurs + responsables de sa portee). */
     public static function watchersOf(User $member): array
     {
+        self::prepare($member);
+
         return self::staff()
             ->filter(fn (User $u) => $u->id !== $member->id && $u->canManageMember($member))
             ->pluck('id')->values()->all();

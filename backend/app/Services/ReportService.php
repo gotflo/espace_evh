@@ -93,7 +93,9 @@ class ReportService
     {
         $members = self::members($scope['tribe_ids']);
         $ids = $members->pluck('user_id')->map(fn ($id) => (int) $id)->all();
-        $status = fn (Profile $p) => $p->user ? $p->user->activityStatus() : 'inactive';
+        // Statut de chaque membre calcule une fois.
+        $statusOf = $members->mapWithKeys(fn (Profile $p) => [$p->user_id => $p->user ? $p->user->activityStatus() : 'inactive'])->all();
+        $status = fn (Profile $p) => $statusOf[$p->user_id] ?? 'inactive';
         $active = $members->filter(fn ($p) => $status($p) === 'active');
 
         $end = now()->endOfMonth();
@@ -103,14 +105,17 @@ class ReportService
             $periods[] = $m->format('Y-m');
         }
 
-        $forms = SpiritualHealthForm::whereIn('user_id', $ids ?: [0])->whereIn('period', $periods)->get();
+        // Lignes brutes (sans construire un objet par fiche : plusieurs milliers sur 12 mois).
+        $forms = SpiritualHealthForm::whereIn('user_id', $ids ?: [0])->whereIn('period', $periods)->toBase()
+            ->get(['user_id', 'period', 'meditation', 'priere', 'jeune', 'sanctification_corps', 'sanctification_ame',
+                'sanctification_esprit', 'situation_financiere', 'situation_familiale', 'situation_conjugale']);
         $evaluations = Evaluation::whereIn('user_id', $ids ?: [0])
-            ->whereBetween('evaluated_on', [$start->toDateString(), $end->toDateString()])->get(['user_id', 'score', 'evaluated_on']);
+            ->whereBetween('evaluated_on', [$start->toDateString(), $end->toDateString()])->toBase()->get(['user_id', 'score', 'evaluated_on']);
         $attendance = Attendance::whereIn('member_user_id', $ids ?: [0])->where('kind', 'culte')
             ->whereBetween('attended_on', [$start->toDateString(), $end->toDateString()])
-            ->get(['member_user_id', 'attended_on', 'event', 'status']);
+            ->toBase()->get(['member_user_id', 'attended_on', 'event', 'status']);
         $participations = EventParticipation::whereIn('user_id', $ids ?: [0])->where('response', 'present')
-            ->whereBetween('occurs_on', [$start->toDateString(), $end->toDateString()])->get(['occurs_on']);
+            ->whereBetween('occurs_on', [$start->toDateString(), $end->toDateString()])->toBase()->get(['occurs_on']);
         $eventsQuery = Event::where('is_personal', false)->when($scope['tribe_ids'] !== null, fn ($q) => $q->where(fn ($w) => $w
             ->whereHas('scopes', fn ($s) => $s->where('scope_type', 'church'))
             ->orWhereHas('scopes', fn ($s) => $s->where('scope_type', 'tribe')->whereIn('scope_id', $scope['tribe_ids'] ?: [0]))));
@@ -120,9 +125,13 @@ class ReportService
         // meme pour 500 membres sur 12 mois.
         $joined = array_count_values($members->map(fn ($p) => $p->created_at ? $p->created_at->format('Y-m') : '9999-99')->all());
         ksort($joined);
+        // Scores calcules une seule fois par fiche, ranges par mois puis par membre.
         $formsByPeriod = [];
         foreach ($forms as $f) {
-            $formsByPeriod[$f->period][] = ['spiritual' => $f->spiritualScore(), 'social' => $f->socialScore()];
+            $formsByPeriod[$f->period][(int) $f->user_id] = [
+                'spiritual' => SpiritualHealthForm::spiritualScoreOf($f),
+                'social' => SpiritualHealthForm::socialScoreOf($f),
+            ];
         }
         $month = fn ($date) => substr((string) ($date instanceof \DateTimeInterface ? $date->format('Y-m-d') : $date), 0, 10);
         $evalByMonth = [];
@@ -172,7 +181,7 @@ class ReportService
 
         $current = end($monthly);
         $currentPeriod = now()->format('Y-m');
-        $filledNow = $forms->where('period', $currentPeriod)->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+        $filledNow = array_keys($formsByPeriod[$currentPeriod] ?? []);
         $row = fn (Profile $p) => ['user_id' => $p->user_id, 'name' => $p->full_name, 'tribe' => $p->tribe?->name];
 
         $report = [
@@ -210,10 +219,11 @@ class ReportService
             foreach ($tribes as $tribe) {
                 $tm = $members->where('tribe_id', $tribe->id);
                 $tIds = $tm->pluck('user_id')->map(fn ($id) => (int) $id)->all();
-                $tForms = $forms->where('period', $currentPeriod)->whereIn('user_id', $tIds);
-                $tPrevForms = $forms->where('period', now()->subMonthNoOverflow()->format('Y-m'))->whereIn('user_id', $tIds);
-                $scores = $tForms->map(fn ($f) => $f->spiritualScore())->filter(fn ($v) => $v !== null);
-                $prevScores = $tPrevForms->map(fn ($f) => $f->spiritualScore())->filter(fn ($v) => $v !== null);
+                $tribeMembers = array_flip($tIds);
+                $tForms = collect(array_intersect_key($formsByPeriod[$currentPeriod] ?? [], $tribeMembers));
+                $tPrevForms = collect(array_intersect_key($formsByPeriod[now()->subMonthNoOverflow()->format('Y-m')] ?? [], $tribeMembers));
+                $scores = $tForms->pluck('spiritual')->filter(fn ($v) => $v !== null);
+                $prevScores = $tPrevForms->pluck('spiritual')->filter(fn ($v) => $v !== null);
                 $tActive = $tm->filter(fn ($p) => $status($p) === 'active')->count();
                 $report['tribes'][] = [
                     'id' => $tribe->id,
@@ -234,18 +244,48 @@ class ReportService
     }
 
     /**
-     * Liste detaillee des membres de la portee (identite, statut, profil, FISS, assiduite).
+     * Liste des membres d'une portee, filtree, cherchee et triee par la base.
+     * Les statistiques (derniere FISS, presences, Vertumetre) ne sont calculees que pour la
+     * page affichee (ou pour tous si $page est null : export PDF).
      *
-     * @return array<int, array<string, mixed>>
+     * @return array{rows: array<int, array<string, mixed>>, total: int}
      */
-    public static function memberRows(User $user, string $scope, string $filter): array
+    public static function memberRows(User $user, string $scope, string $filter, string $search = '', ?int $page = 1, int $perPage = 60): array
     {
         $resolved = self::resolveScope($user, $scope);
-        $members = self::members($resolved['tribe_ids']);
-        $ids = $members->pluck('user_id')->all();
         $period = now()->format('Y-m');
 
-        $lastForms = SpiritualHealthForm::whereIn('user_id', $ids ?: [0])->orderByDesc('period')->get()->groupBy('user_id')->map->first();
+        $query = Profile::where('is_completed', true)
+            ->when($resolved['tribe_ids'] !== null, fn ($q) => $q->whereIn('tribe_id', $resolved['tribe_ids'] ?: [0]));
+        match ($filter) {
+            'active', 'inactive' => $query->whereHas('user', fn ($u) => $u->where(fn ($w) => $w->where('activity_override', $filter)
+                ->orWhere(fn ($x) => $x->whereNull('activity_override')->where('activity_status', $filter)))),
+            'incomplete' => $query->where('completion', '<', 100),
+            'fiss_missing' => $query->whereNotIn('user_id', SpiritualHealthForm::where('period', $period)->select('user_id')),
+            default => null,
+        };
+        $search = trim($search);
+        if ($search !== '') {
+            $query->where(function ($w) use ($search) {
+                \App\Support\Like::contains($w, 'first_name', $search);
+                \App\Support\Like::contains($w, 'last_name', $search, 'or');
+                $w->orWhereHas('user', fn ($u) => \App\Support\Like::contains($u, 'phone', $search));
+            });
+        }
+        $total = (clone $query)->count();
+        $members = $query->with(['user:id,phone,last_login_at,last_seen_at,activity_status,activity_override', 'tribe:id,name', 'gem:id,name'])
+            ->orderBy('first_name')->orderBy('last_name')->orderBy('id')
+            ->when($page !== null, fn ($q) => $q->forPage($page, $perPage))
+            ->get();
+        $ids = $members->pluck('user_id')->all();
+
+        // Seulement la derniere fiche de chaque membre affiche (et non tout l'historique).
+        $latest = SpiritualHealthForm::selectRaw('user_id as uid, max(period) as last_period')
+            ->whereIn('user_id', $ids ?: [0])->groupBy('user_id');
+        $lastForms = SpiritualHealthForm::query()->select('spiritual_health_forms.*')
+            ->joinSub($latest, 'latest', fn ($j) => $j->on('spiritual_health_forms.user_id', '=', 'latest.uid')
+                ->on('spiritual_health_forms.period', '=', 'latest.last_period'))
+            ->get()->keyBy('user_id');
         $presences = Attendance::whereIn('member_user_id', $ids ?: [0])->where('status', 'present')
             ->where('attended_on', '>=', now()->subMonths(3)->toDateString())
             ->selectRaw('member_user_id, count(*) as c')->groupBy('member_user_id')->pluck('c', 'member_user_id');
@@ -271,17 +311,9 @@ class ReportService
                 'attendance_3m' => (int) ($presences[$p->user_id] ?? 0),
                 'vertumetre' => isset($vertumetre[$p->user_id]) ? round((float) $vertumetre[$p->user_id], 1) : null,
             ];
-        });
+        })->values()->all();
 
-        $rows = match ($filter) {
-            'active' => $rows->where('status', 'active'),
-            'inactive' => $rows->where('status', 'inactive'),
-            'incomplete' => $rows->where('completion', '<', 100),
-            'fiss_missing' => $rows->where('fiss_current', false),
-            default => $rows,
-        };
-
-        return $rows->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)->values()->all();
+        return ['rows' => $rows, 'total' => $total];
     }
 
     private static function latest(array $monthly, string $key): ?float

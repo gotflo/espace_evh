@@ -110,6 +110,21 @@ class RobustnessTest extends TestCase
         $this->postJson('/api/test-duplicate')->assertStatus(409)->assertJson(['message' => 'Cette action a déjà été enregistrée.']);
     }
 
+    public function test_validation_errors_are_readable_french_sentences(): void
+    {
+        app()->setLocale('fr');
+        $member = $this->member('+14185550010');
+        Sanctum::actingAs($member);
+
+        $res = $this->postJson('/api/me/requests', ['category' => 'priere', 'message' => str_repeat('x', 6000)])->assertStatus(422);
+        $message = $res->json('message');
+        $this->assertStringNotContainsString('validation.', $message);
+        $this->assertStringContainsString('ne peut pas dépasser', $message);
+
+        $res = $this->putJson('/api/profile', ['first_name' => '', 'last_name' => 'T'])->assertStatus(422);
+        $this->assertStringContainsString('prénom', $res->json('errors.first_name.0'));
+    }
+
     public function test_api_never_answers_500_to_a_visitor_without_session(): void
     {
         $this->get('/api/me')->assertStatus(401);

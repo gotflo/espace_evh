@@ -64,7 +64,12 @@ class MemberController extends Controller
             $query->whereNotIn('user_id', SpiritualHealthForm::where('period', $period)->select('user_id'));
         }
 
-        $profiles = $query->orderBy('last_name')->orderBy('first_name')->limit(1000)->get();
+        // Pagination : 50 membres par page (jamais des milliers de lignes vers un telephone).
+        $perPage = max(1, min(100, (int) $request->query('per_page', 50)));
+        $page = max(1, (int) $request->query('page', 1));
+        $total = (clone $query)->count();
+        $profiles = $query->orderBy('last_name')->orderBy('first_name')->orderBy('id')
+            ->forPage($page, $perPage)->get();
         $filled = SpiritualHealthForm::where('period', $period)->whereIn('user_id', $profiles->pluck('user_id'))->pluck('user_id')->flip();
 
         // La liste est deja limitee a la portee (celle ou l'utilisateur peut agir), sauf soi-meme.
@@ -74,7 +79,13 @@ class MemberController extends Controller
             'fiss_current' => isset($filled[$p->user_id]),
         ]);
 
-        return response()->json(['members' => $members->values(), 'total' => $members->count()]);
+        return response()->json([
+            'members' => $members->values(),
+            'total' => $total,
+            'page' => $page,
+            'per_page' => $perPage,
+            'has_more' => $page * $perPage < $total,
+        ]);
     }
 
     /** Fiche detaillee d'un membre. */

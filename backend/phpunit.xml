@@ -12,6 +12,12 @@
             <directory>tests/Feature</directory>
         </testsuite>
     </testsuites>
+    <!-- Mesures de volume (longues), a lancer a part avec le groupe « benchmark » -->
+    <groups>
+        <exclude>
+            <group>benchmark</group>
+        </exclude>
+    </groups>
     <source>
         <include>
             <directory>app</directory>

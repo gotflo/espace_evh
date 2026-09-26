@@ -61,7 +61,7 @@ export default function ProfileSetup() {
       setProfile(res.profile)
       navigate('/tableau-de-bord', { replace: true })
     } catch (err) {
-      setError(err instanceof ApiError ? err.firstMessage : 'Erreur reseau.')
+      setError(err instanceof ApiError ? err.firstMessage : 'Connexion impossible. Vérifiez votre réseau puis réessayez.')
     } finally {
       setBusy(false)
     }

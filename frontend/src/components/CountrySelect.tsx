@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { COUNTRIES, type Country } from '../data/countries'
+// Drapeaux : feuille chargee seulement avec ce selecteur (ecran de connexion), images a la demande.
+import 'flag-icons/css/flag-icons.min.css'
 
 /**
  * Selecteur de pays sur mesure : affiche de vraies images de drapeaux

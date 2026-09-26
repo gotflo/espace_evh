@@ -15,12 +15,14 @@ use App\Services\CalendarService;
 use App\Services\ExerciseProgress;
 use App\Services\FissService;
 use App\Services\Notifier;
+use App\Services\ReportService;
 use App\Support\Audience;
 use App\Support\Blessings;
 use App\Support\ProfileCompletion;
 use App\Support\Recipients;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -32,7 +34,10 @@ use Illuminate\Support\Facades\DB;
  */
 class AutomationTick extends Command
 {
-    protected $signature = 'app:tick {--only= : activity | event-reminders | service-digest | birthdays | weddings | tasks | fiss | profiles | followups | prune}';
+    /** Cle de cache du dernier passage complet (heure, duree, resultat de chaque etape). */
+    public const STATUS_KEY = 'automation:last-run';
+
+    protected $signature = 'app:tick {--only= : activity | event-reminders | service-digest | birthdays | weddings | tasks | fiss | profiles | monthly-report | followups | prune}';
 
     protected $description = 'Activité des membres, rappels, anniversaires, FISS, profils, relances et nettoyage.';
 
@@ -47,24 +52,43 @@ class AutomationTick extends Command
             'tasks' => fn () => $this->taskReminders(),
             'fiss' => fn () => $this->fiss(),
             'profiles' => fn () => $this->profileReminders(),
+            'monthly-report' => fn () => $this->monthlyReports(),
             'followups' => fn () => $this->followUps(),
             'prune' => fn () => $this->prune(),
         ];
         $only = $this->option('only');
+        $started = microtime(true);
+        $results = [];
 
-        foreach ($steps as $name => $step) {
-            if ($only && $only !== $name) {
-                continue;
-            }
-            try {
-                $count = $step();
-                if ($count) {
-                    $this->info("{$name} : {$count}.");
+        // Responsables charges une seule fois pour tout le passage (et non a chaque notification).
+        Recipients::remember(function () use ($steps, $only, &$results) {
+            foreach ($steps as $name => $step) {
+                if ($only && $only !== $name) {
+                    continue;
                 }
-            } catch (\Throwable $e) {
-                report($e);
-                $this->error("{$name} : ".$e->getMessage());
+                // Une etape en erreur n'empeche jamais les suivantes ; l'erreur est journalisee.
+                $stepStart = microtime(true);
+                try {
+                    $count = $step();
+                    $results[$name] = ['count' => (int) $count, 'ms' => (int) round((microtime(true) - $stepStart) * 1000)];
+                    if ($count) {
+                        $this->info("{$name} : {$count}.");
+                    }
+                } catch (\Throwable $e) {
+                    report($e);
+                    $results[$name] = 'erreur : '.mb_substr($e->getMessage(), 0, 160);
+                    $this->error("{$name} : ".$e->getMessage());
+                }
             }
+        });
+
+        // Trace du dernier passage complet (verifiee par /api/health).
+        if (! $only) {
+            Cache::forever(self::STATUS_KEY, [
+                'at' => now()->toIso8601String(),
+                'duration_ms' => (int) round((microtime(true) - $started) * 1000),
+                'steps' => $results,
+            ]);
         }
 
         return self::SUCCESS;
@@ -160,6 +184,54 @@ class AutomationTick extends Command
         return $sent;
     }
 
+    /**
+     * Debut de mois (du 1er au 3, a partir de 9 h) : chaque responsable qui a acces aux rapports
+     * recoit les chiffres cles du mois ecoule pour son perimetre (eglise, ses tribus ou sa tribu),
+     * avec un lien direct vers le rapport complet. Une seule fois par responsable et par mois.
+     */
+    private function monthlyReports(): int
+    {
+        $now = now();
+        if ($now->day > 3 || $now->hour < 9) {
+            return 0;
+        }
+        $previous = $now->copy()->subMonthNoOverflow();
+        $monthLabel = $previous->locale('fr')->isoFormat('MMMM YYYY');
+        $leaders = User::whereHas('roles.permissions', fn ($q) => $q->where('key', 'reports.view'))
+            ->where(fn ($q) => $q->whereNull('activity_override')->orWhere('activity_override', '!=', 'inactive'))
+            ->get();
+
+        $sent = 0;
+        foreach ($leaders as $leader) {
+            $sent += $this->sendOnce("monthly-report:{$leader->id}:".$previous->format('Y-m'), function () use ($leader, $monthLabel, $previous) {
+                $options = ReportService::options($leader);
+                $scope = $options['church'] ? 'church' : ($options['mine'] ? 'mine' : (isset($options['tribes'][0]) ? 'tribe:'.$options['tribes'][0]['id'] : null));
+                if (! $scope) {
+                    return 0;
+                }
+                $report = ReportService::build($leader, $scope, 2);
+                $month = collect($report['monthly'])->firstWhere('month', $previous->format('Y-m'));
+                if (! $month) {
+                    return 0;
+                }
+                $pct = fn ($v) => $v === null ? null : round((float) $v).' %';
+                $parts = array_filter([
+                    $month['fiss_rate'] !== null ? 'FISS remplies : '.$pct($month['fiss_rate']) : null,
+                    $month['spiritual_score'] !== null ? 'vie spirituelle : '.$pct($month['spiritual_score']) : null,
+                    $month['attendance_rate'] !== null ? 'assiduité : '.$pct($month['attendance_rate']) : null,
+                    $month['new_members'] ? $month['new_members'].' nouveau(x) membre(s)' : null,
+                    $report['kpis']['inactive'] ? $report['kpis']['inactive'].' membre(s) inactif(s)' : null,
+                ]);
+
+                return Notifier::send([$leader->id], 'report', 'Rapport de '.$monthLabel.' · '.$report['scope']['label'],
+                    $parts ? ucfirst(implode(' · ', $parts)).'.' : 'Le rapport du mois est disponible.',
+                    '/admin/rapports?scope='.urlencode($scope).'&mois=6', ['period' => $previous->format('Y-m')]);
+            });
+        }
+
+        return $sent;
+    }
+
     /** Rappel des rendez-vous reguliers (cultes) : minutes avant le debut. */
     public const SERVICE_LEAD_MINUTES = 35;
 
@@ -173,7 +245,7 @@ class AutomationTick extends Command
 
             return Notifier::send(array_diff(Audience::userIds($event->audienceList()), $absent), 'event_reminder',
                 'Bientôt : '.$event->title, 'Commence à '.$start->format('H\hi').$where,
-                '/calendrier?date='.$date, ['event_id' => $event->id, 'date' => $date], 'high');
+                '/calendrier?date='.$date, ['event_id' => $event->id, 'date' => $date, 'kind' => 'service'], 'high');
         });
     }
 
@@ -225,7 +297,7 @@ class AutomationTick extends Command
             $title = count($items) > 1 ? "Demain {$weekday} : programme du culte" : "Demain {$weekday} : {$items[0]}";
             $sent += $this->sendOnce('service-digest:'.$date.':'.md5($program), fn () => Notifier::send(
                 $userIds, 'event_reminder', $title, count($items) > 1 ? implode(' · ', $items) : 'Nous vous attendons !',
-                '/calendrier?date='.$date, ['date' => $date]));
+                '/calendrier?date='.$date, ['date' => $date, 'kind' => 'service']));
         }
 
         return $sent;
@@ -452,11 +524,7 @@ class AutomationTick extends Command
         // Une fois par jour : recalcul du taux de completion stocke (profils existants avant la
         // migration, regles modifiees...). Idempotent, sans toucher a updated_at.
         if (Notifier::once('profile-completion-sync:'.$now->toDateString())) {
-            Profile::query()->chunkById(200, function ($profiles) {
-                foreach ($profiles as $p) {
-                    ProfileCompletion::refresh($p);
-                }
-            });
+            Profile::query()->chunkById(200, fn ($profiles) => ProfileCompletion::refreshMany($profiles));
         }
         if ($now->hour < 10) {
             return 0;
