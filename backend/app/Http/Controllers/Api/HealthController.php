@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Console\Commands\AutomationTick;
 use App\Http\Controllers\Controller;
+use App\Services\Push\WebPush;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -45,6 +46,25 @@ class HealthController extends Controller
         $free = @disk_free_space(storage_path());
         $total = @disk_total_space(storage_path());
         $checks['disk'] = ['ok' => ! $free || ! $total || $free / $total > 0.05];
+
+        // Notifications push : activees, cles et chiffrement utilisables (verification locale,
+        // sans envoi), aucun envoi bloque dans la boite d'envoi, dernier message recu par un appareil.
+        try {
+            $enabled = (bool) config('services.webpush.enabled');
+            $error = $enabled ? app(WebPush::class)->selfCheck() : 'desactivees (WEBPUSH_ENABLED)';
+            $stuck = DB::table('push_outbox')->whereNull('sent_at')->where('created_at', '<', now()->subMinutes(5))->count();
+            $last = DB::table('push_subscriptions')->max('last_used_at');
+            $checks['push'] = array_filter([
+                'ok' => $enabled && $error === null && $stuck === 0,
+                'devices' => DB::table('push_subscriptions')->count(),
+                'waiting' => $stuck,
+                'last_delivery_hours' => $last ? (int) Carbon::parse($last)->diffInHours(now(), true) : null,
+                'error' => $error,
+            ], fn ($v) => $v !== null);
+        } catch (\Throwable $e) {
+            report($e);
+            $checks['push'] = ['ok' => false, 'error' => 'verification impossible'];
+        }
 
         try {
             $last = Cache::get(AutomationTick::STATUS_KEY);

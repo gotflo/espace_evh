@@ -27,6 +27,36 @@ class WebPush
 
     private ?array $keys = null;
 
+    /** La configuration OpenSSL du systeme ne permet pas de generer une cle : utiliser celle de l'application. */
+    private static bool $bundledConfig = false;
+
+    /**
+     * Verification locale, sans reseau : cles VAPID lisibles, generation de cle, chiffrement et
+     * signature possibles. Retourne null si tout va bien, sinon la raison (sans donnee sensible).
+     */
+    public function selfCheck(): ?string
+    {
+        try {
+            $device = self::newKeyPair();
+            $this->encrypt('test', self::b64uEncode($device['public_raw']), self::b64uEncode(random_bytes(16)));
+            $this->vapidHeader('https://fcm.googleapis.com/fcm/send/verification');
+
+            return null;
+        } catch (\Throwable $e) {
+            return $e->getMessage();
+        }
+    }
+
+    /** Origine des cles VAPID : variables d'environnement, fichier genere, ou a generer. */
+    public function keySource(): string
+    {
+        if ((string) config('services.webpush.public_key') !== '' && (string) config('services.webpush.private_key') !== '') {
+            return 'env';
+        }
+
+        return File::exists(storage_path('app/webpush-vapid.json')) ? 'fichier' : 'a generer';
+    }
+
     /** Cle publique VAPID (base64url) a transmettre au navigateur pour s'abonner. */
     public function publicKey(): string
     {
@@ -62,8 +92,9 @@ class WebPush
      * @param  array<string, mixed>  $payload
      * @return array{sent: int, expired: int, failed: int}
      */
-    public function sendMany(iterable $subscriptions, array $payload, int $ttl = 86400, string $urgency = 'normal'): array
+    public function sendMany(iterable $subscriptions, array $payload, int $ttl = 86400, string $urgency = 'normal', bool $details = false): array
     {
+        $devices = [];
         $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $prepared = [];
         $stats = ['sent' => 0, 'expired' => 0, 'failed' => 0];
@@ -77,6 +108,7 @@ class WebPush
                 ];
             } catch (\Throwable $e) {
                 $stats['failed']++;
+                $devices[] = ['id' => $sub->id, 'status' => 0, 'error' => $e->getMessage()];
                 Log::warning('Push : abonnement illisible', ['subscription' => $sub->id, 'error' => $e->getMessage()]);
             }
         }
@@ -120,9 +152,11 @@ class WebPush
             $response = $responses[$key] ?? null;
             if (! $response instanceof Response) {
                 $stats['failed']++;
+                $devices[] = ['id' => $p['sub']->id, 'status' => 0, 'error' => $response instanceof \Throwable ? mb_substr($response->getMessage(), 0, 200) : 'sans réponse'];
 
                 continue;
             }
+            $devices[] = ['id' => $p['sub']->id, 'status' => $response->status(), 'error' => $response->successful() ? null : mb_substr($response->body(), 0, 200)];
             // 404 / 410 : l'abonnement n'existe plus (appli desinstallee, permission retiree...).
             if (in_array($response->status(), [404, 410], true)) {
                 $gone[] = $p['sub']->id;
@@ -145,7 +179,7 @@ class WebPush
             Log::warning('Push : envois en echec', $stats);
         }
 
-        return $stats;
+        return $details ? $stats + ['devices' => $devices] : $stats;
     }
 
     /** Chiffre le message pour l'appareil (aes128gcm, un seul enregistrement). */
@@ -257,13 +291,21 @@ class WebPush
     /** Genere une paire P-256. @return array{key: OpenSSLAsymmetricKey, public_raw: string, private_raw: string} */
     public static function newKeyPair(): array
     {
-        $key = openssl_pkey_new([
-            'curve_name' => 'prime256v1',
-            'private_key_type' => OPENSSL_KEYTYPE_EC,
-            'config' => resource_path('openssl/openssl.cnf'),
-        ]);
+        // Configuration OpenSSL du systeme d'abord (serveur Linux) ; sinon celle fournie avec
+        // l'application (PHP sous Windows, ou hebergement sans openssl.cnf lisible).
+        $options = ['curve_name' => 'prime256v1', 'private_key_type' => OPENSSL_KEYTYPE_EC];
+        $key = self::$bundledConfig ? false : @openssl_pkey_new($options);
         if ($key === false) {
-            throw new RuntimeException('Generation de cle EC impossible.');
+            $key = @openssl_pkey_new($options + ['config' => resource_path('openssl/openssl.cnf')]);
+            if ($key !== false) {
+                self::$bundledConfig = true;
+            }
+        }
+        while (openssl_error_string() !== false) {
+            // vide la file d'erreurs OpenSSL (sinon elle se retrouve dans les messages suivants)
+        }
+        if ($key === false) {
+            throw new RuntimeException('Generation de cle EC impossible (extension OpenSSL).');
         }
         $ec = openssl_pkey_get_details($key)['ec'];
 

@@ -343,7 +343,8 @@ complète : [`docs/A-FAIRE-DE-VOTRE-COTE.md`](docs/A-FAIRE-DE-VOTRE-COTE.md), é
 Détail par évolution (fichiers, migrations, variables, cron, retour arrière) :
 - [`docs/MISE-A-JOUR-EVOLUTION-PLATEFORME.md`](docs/MISE-A-JOUR-EVOLUTION-PLATEFORME.md) : rapports, validations, périmètres, famille, audit ;
 - [`docs/MISE-A-JOUR-VIDEOS-CULTES-CHARGE.md`](docs/MISE-A-JOUR-VIDEOS-CULTES-CHARGE.md) : exercices vidéo, horaires des cultes, tenue en charge, sécurité ;
-- [`docs/MISE-A-JOUR-AUDIT-ROBUSTESSE.md`](docs/MISE-A-JOUR-AUDIT-ROBUSTESSE.md) : audit, versets administrables, hébergement, robustesse.
+- [`docs/MISE-A-JOUR-AUDIT-ROBUSTESSE.md`](docs/MISE-A-JOUR-AUDIT-ROBUSTESSE.md) : audit, versets administrables, hébergement, robustesse ;
+- [`docs/MISE-A-JOUR-PUSH.md`](docs/MISE-A-JOUR-PUSH.md) : notifications push fiables (boîte d'envoi, test par appareil, diagnostic).
 
 En résumé : sauvegarde de la base → envoi des fichiers `backend/` modifiés → `php artisan migrate --force`
 → `php artisan config:cache && php artisan route:cache && php artisan event:cache` → build React copié dans `public/` → vérifications.
