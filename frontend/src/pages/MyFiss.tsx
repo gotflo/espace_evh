@@ -107,8 +107,8 @@ function LockStatus({ f, max, onRequest, onCancel, onEdit }: {
 
 export default function MyFiss() {
   const { profile } = useAuth()
-  // Question « situation conjugale » seulement pour les maries (ou si la situation n'est pas renseignee).
-  const married = !profile?.marital_status || profile.marital_status === 'marie'
+  // Question « situation conjugale » seulement si le profil indique « Marié(e) » (le serveur applique la meme regle).
+  const married = profile?.marital_status === 'marie'
   const [data, setData] = useState<FissData | null>(null)
   const [form, setForm] = useState<FissForm>(EMPTY)
   // null = nouvelle fiche du mois ; sinon fiche existante deverrouillee en cours de modification.
@@ -166,6 +166,13 @@ export default function MyFiss() {
   }
 
   if (!data) return <AppLayout title="Fiche de santé spirituelle"><div className="panel-grid"><SkeletonCard /><SkeletonCard /></div></AppLayout>
+
+  // Bouton actif seulement si toutes les questions affichees ont une reponse (commentaire facultatif)
+  // et, pour une fiche deverrouillee, si quelque chose a change.
+  const required: (keyof FissForm)[] = ['meditation', 'priere', 'jeune', 'sanctification_corps', 'sanctification_ame', 'sanctification_esprit',
+    'situation_financiere', 'situation_familiale', ...(married ? ['situation_conjugale' as const] : [])]
+  const missing = required.filter((k) => form[k] === null || form[k] === undefined || form[k] === '').length
+  const changed = !editing || FIELDS.some((k) => (form[k] ?? null) !== (editing[k] ?? null))
 
   const rl = data.reminder.level
   const showForm = !data.filled || editing !== null
@@ -228,14 +235,15 @@ export default function MyFiss() {
               <div className="panel-head"><h3>Vie sociale <span className="fiss-total">{vieSoc}/{form.situation_conjugale != null ? 60 : 40}</span></h3></div>
               <ScoreField label="Situation financière" value={form.situation_financiere} onChange={(v) => set('situation_financiere', v)} />
               <ScoreField label="Situation familiale" hint="(famille biologique)" value={form.situation_familiale} onChange={(v) => set('situation_familiale', v)} />
-              {(married || form.situation_conjugale != null) && (
+              {married && (
                 <ScoreField label="Situation conjugale" hint="(mariés uniquement)" value={form.situation_conjugale} onChange={(v) => set('situation_conjugale', v)} />
               )}
               <div className="fiss-field">
                 <label>Commentaire (optionnel)</label>
                 <textarea aria-label="Commentaire (optionnel)" className="input" rows={3} value={form.comment ?? ''} onChange={(e) => set('comment', e.target.value)} />
               </div>
-              <button className="btn btn-primary mt" disabled={busy} onClick={save}>
+              {missing > 0 && <p className="helper mt">{missing === 1 ? 'Encore 1 réponse' : `Encore ${missing} réponses`} avant de pouvoir enregistrer.</p>}
+              <button className="btn btn-primary mt" disabled={busy || missing > 0 || !changed} onClick={save}>
                 {busy ? <span className="spinner" /> : editing ? 'Enregistrer la modification' : 'Enregistrer ma fiche du mois'}
               </button>
             </section>

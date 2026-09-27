@@ -337,7 +337,10 @@ complète : [`docs/A-FAIRE-DE-VOTRE-COTE.md`](docs/A-FAIRE-DE-VOTRE-COTE.md), é
 
 ## Déploiement
 
-Procédures pas à pas (fichiers, migrations, variables, cron, retour arrière) :
+**Mise en ligne de tout ce qui a été fait depuis le 20 septembre 2026, en une fois** :
+[`docs/MISE-EN-LIGNE-HOSTINGER.md`](docs/MISE-EN-LIGNE-HOSTINGER.md) (paquets prêts dans `deployment/`).
+
+Détail par évolution (fichiers, migrations, variables, cron, retour arrière) :
 - [`docs/MISE-A-JOUR-EVOLUTION-PLATEFORME.md`](docs/MISE-A-JOUR-EVOLUTION-PLATEFORME.md) : rapports, validations, périmètres, famille, audit ;
 - [`docs/MISE-A-JOUR-VIDEOS-CULTES-CHARGE.md`](docs/MISE-A-JOUR-VIDEOS-CULTES-CHARGE.md) : exercices vidéo, horaires des cultes, tenue en charge, sécurité ;
 - [`docs/MISE-A-JOUR-AUDIT-ROBUSTESSE.md`](docs/MISE-A-JOUR-AUDIT-ROBUSTESSE.md) : audit, versets administrables, hébergement, robustesse.

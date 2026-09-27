@@ -3,6 +3,7 @@ import { api, ApiError } from '../../api/client'
 import { invalidateReference } from '../../api/reference'
 import { AppLayout } from '../../components/AppLayout'
 import type { GemAdminItem, Tribe } from '../../types'
+import { useDirty } from '../../utils/dirty'
 
 /** Membre de la tribu pouvant etre nomme Garde. */
 interface Candidate { user_id: number; full_name: string; gem: string | null; leads: string[] }
@@ -19,6 +20,7 @@ export default function Gems() {
   const [tribeId, setTribeId] = useState('')
   const [leaderId, setLeaderId] = useState('')
   const [busy, setBusy] = useState(false)
+  const formState = useDirty({ name, tribeId, leaderId })
 
   const load = useCallback(() => {
     api<{ gems: GemAdminItem[]; tribes: Tribe[] }>('/admin/gems')
@@ -41,11 +43,11 @@ export default function Gems() {
     setEditId(null); setName(''); setLeaderId(''); setError('')
     // Une seule tribu possible (responsable de tribu) : preselectionnee.
     setTribeId(tribes.length === 1 ? String(tribes[0].id) : '')
-    setMode('form')
+    setMode('form'); formState.reset()
   }
   function openEdit(g: GemAdminItem) {
     setEditId(g.id); setName(g.name); setTribeId(g.tribe_id.toString()); setLeaderId(g.leader_user_id?.toString() ?? '')
-    setError(''); setMode('form')
+    setError(''); setMode('form'); formState.reset()
   }
 
   async function save() {
@@ -106,7 +108,7 @@ export default function Gems() {
               </p>
             )}
           </div>
-          <button className="btn btn-primary mt" disabled={busy || !name.trim() || !tribeId} onClick={save}>
+          <button className="btn btn-primary mt" disabled={busy || !name.trim() || !tribeId || (!!editId && !formState.dirty)} onClick={save}>
             {busy ? <span className="spinner" /> : editId ? 'Enregistrer' : 'Créer le GEM'}
           </button>
         </section>

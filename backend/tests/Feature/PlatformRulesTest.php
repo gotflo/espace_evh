@@ -147,6 +147,23 @@ class PlatformRulesTest extends TestCase
         $this->assertSame('expired', FissEditRequest::first()->status);
     }
 
+    public function test_conjugal_situation_is_only_kept_for_married_members(): void
+    {
+        $single = $this->member('+14185550560', $this->juda, 'Seul');
+        Profile::where('user_id', $single->id)->update(['marital_status' => 'celibataire']);
+        $married = $this->member('+14185550561', $this->juda, 'Marie');
+        Profile::where('user_id', $married->id)->update(['marital_status' => 'marie']);
+        $fiss = ['meditation' => 12, 'priere' => 14, 'jeune' => 8, 'situation_familiale' => 15, 'situation_conjugale' => 17];
+
+        Sanctum::actingAs(User::find($single->id));
+        $this->postJson('/api/me/fiss', $fiss)->assertCreated();
+        $this->assertNull(SpiritualHealthForm::where('user_id', $single->id)->value('situation_conjugale'));
+
+        Sanctum::actingAs(User::find($married->id));
+        $this->postJson('/api/me/fiss', $fiss)->assertCreated();
+        $this->assertSame(17, (int) SpiritualHealthForm::where('user_id', $married->id)->value('situation_conjugale'));
+    }
+
     public function test_patriarch_is_told_which_members_missed_last_months_fiss(): void
     {
         $patriarch = $this->give($this->member('+14185550520', $this->juda, 'Patri'), 'patriarche', 'tribe', $this->juda->id);
@@ -479,7 +496,13 @@ class PlatformRulesTest extends TestCase
 
         $admin = $this->give($this->member('+14185550643', null, 'Admin'), 'super_admin');
         Sanctum::actingAs($admin);
-        $this->putJson("/api/admin/departments/{$dept->id}/leaders", ['user_ids' => [$outsider->id]])->assertStatus(422); // doit etre membre
+        // Nommer quelqu'un qui n'est pas encore dans le departement l'y ajoute ; profil incomplet refuse.
+        $newcomer = $this->member('+14185550644', $this->juda, 'Nouveau');
+        $this->putJson("/api/admin/departments/{$dept->id}/leaders", ['user_ids' => [$newcomer->id]])->assertOk();
+        $this->assertTrue($dept->members()->where('profiles.user_id', $newcomer->id)->exists());
+        $this->assertTrue($dept->leaders()->whereKey($newcomer->id)->exists());
+        Profile::where('user_id', $newcomer->id)->update(['is_completed' => false]);
+        $this->putJson("/api/admin/departments/{$dept->id}/leaders", ['user_ids' => [$newcomer->id]])->assertStatus(422);
         $this->putJson("/api/admin/departments/{$dept->id}/leaders", ['user_ids' => [$leader->id]])->assertOk();
 
         Sanctum::actingAs(User::find($leader->id));

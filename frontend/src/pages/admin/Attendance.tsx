@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { AppLayout } from '../../components/AppLayout'
 import type { AttendanceMember, AttendanceStatus, RosterData } from '../../types'
 import { ymd } from '../../utils/events'
+import { useDirty } from '../../utils/dirty'
 
 // Date locale (et non UTC : le soir, toISOString donnerait deja le lendemain).
 const TODAY = ymd(new Date())
@@ -29,6 +30,8 @@ export default function Attendance() {
   const [hidden, setHidden] = useState(0)
   const [query, setQuery] = useState('')
   const [comebacks, setComebacks] = useState<AttendanceMember[]>([])
+  const sheet = useDirty(members.map((m) => [m.user_id, m.present, m.status]))
+  const resetSheet = sheet.reset
 
   const load = useCallback(() => {
     setLoading(true)
@@ -36,10 +39,11 @@ export default function Attendance() {
       .then((r) => {
         setMembers(r.members.map((m) => ({ ...m, status: m.status ?? (kind === 'repetition' ? 'absent' : null) })))
         setHidden(r.inactive_hidden ?? 0)
+        resetSheet()
       })
       .catch(() => setMembers([]))
       .finally(() => setLoading(false))
-  }, [date, event, kind])
+  }, [date, event, kind, resetSheet])
   useEffect(() => { load() }, [load])
 
   // Recherche : filtre la feuille ET retrouve un fidele inactif qui revient (masque par defaut).
@@ -77,6 +81,7 @@ export default function Attendance() {
         ? { attended_on: date, event, kind, statuses: Object.fromEntries(members.map((m) => [m.user_id, m.status ?? 'absent'])) }
         : { attended_on: date, event, kind, present_user_ids: members.filter((m) => m.present).map((m) => m.user_id) }
       await api<{ message: string }>('/admin/attendance', { method: 'POST', body })
+      resetSheet()
     } catch (err) {
       setError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
     } finally { setSaving(false) }
@@ -177,7 +182,7 @@ export default function Attendance() {
         </div>
 
         {canRecord && members.length > 0 && (
-          <button className="btn btn-primary mt" disabled={saving} onClick={save}>
+          <button className="btn btn-primary mt" disabled={saving || !sheet.dirty} onClick={save}>
             {saving ? <span className="spinner" /> : 'Enregistrer la session'}
           </button>
         )}

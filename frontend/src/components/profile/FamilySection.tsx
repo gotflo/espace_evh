@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import type { FamilyOverview, FamilyPerson } from '../../types'
 import { Icon } from '../Icon'
+import { useDirty } from '../../utils/dirty'
 
 const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 const MARITAL = [
@@ -58,7 +59,7 @@ interface ChildRow { name: string; birth_year: string; user_id: number | null; l
  * Famille : situation matrimoniale, conjoint(e) (lie seulement apres sa confirmation),
  * date de mariage (ajoutee au calendrier), enfants (lignes generees selon le nombre).
  */
-export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, onWedding, onSaveProfile, busy, hasChildrenInitial }: {
+export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, onWedding, onSaveProfile, busy, changed, hasChildrenInitial }: {
   marital: string
   onMarital: (v: string) => void
   weddingDay: string
@@ -66,6 +67,8 @@ export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, on
   onWedding: (day: string, month: string) => void
   onSaveProfile: () => Promise<void>
   busy: boolean
+  /** Situation modifiee depuis le dernier enregistrement (active le bouton). */
+  changed: boolean
   hasChildrenInitial?: boolean | null
 }) {
   const [family, setFamily] = useState<FamilyOverview | null>(null)
@@ -75,13 +78,16 @@ export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, on
   const [hasChildren, setHasChildren] = useState<boolean | null>(null)
   const [rows, setRows] = useState<ChildRow[]>([])
   const [working, setWorking] = useState(false)
+  const kids = useDirty({ hasChildren, rows })
+  const resetKids = kids.reset
 
   const apply = useCallback((f: FamilyOverview) => {
     setFamily(f)
     setSpouseName(f.spouse_name ?? '')
     setRows(f.children.map((c) => ({ name: c.name, birth_year: c.birth_year?.toString() ?? '', user_id: c.user_id, linked: c.user_id ? c.name : undefined })))
     setHasChildren(f.children.length > 0 ? true : (hasChildrenInitial ?? null))
-  }, [hasChildrenInitial])
+    resetKids()
+  }, [hasChildrenInitial, resetKids])
   const load = useCallback(() => { api<FamilyOverview>('/me/family').then(apply).catch(() => {}) }, [apply])
   useEffect(() => { load() }, [load])
 
@@ -203,7 +209,7 @@ export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, on
         </div>
       )}
 
-      <button className="btn btn-primary" disabled={busy} onClick={() => onSaveProfile()}>
+      <button className="btn btn-primary" disabled={busy || !changed} onClick={() => onSaveProfile()}>
         {busy ? <span className="spinner" /> : 'Enregistrer la situation'}
       </button>
 
@@ -241,7 +247,7 @@ export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, on
           </>
         )}
         {hasChildren !== null && (
-          <button className="btn btn-ghost" disabled={working || (hasChildren && rows.some((r) => !r.name.trim()))} onClick={saveChildren}>
+          <button className="btn btn-ghost" disabled={working || !kids.dirty || (hasChildren && rows.some((r) => !r.name.trim() || (r.birth_year !== '' && (Number(r.birth_year) < 1900 || Number(r.birth_year) > year))))} onClick={saveChildren}>
             {working ? <span className="spinner" /> : 'Enregistrer les enfants'}
           </button>
         )}

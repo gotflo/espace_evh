@@ -1,5 +1,9 @@
 # Mise à jour : audit, robustesse, versets administrables, hébergement
 
+> **Pour la mise en ligne, suivre [`MISE-EN-LIGNE-HOSTINGER.md`](MISE-EN-LIGNE-HOSTINGER.md)** : elle regroupe cette
+> mise à jour et toutes les précédentes depuis le 20 septembre, avec les paquets prêts. Ce document reste le détail
+> de cette évolution.
+
 Voir l'audit complet : [`AUDIT-2026-09.md`](AUDIT-2026-09.md).
 
 ## Ce qui change pour les membres et les responsables

@@ -9,6 +9,7 @@ import { FamilySection } from '../components/profile/FamilySection'
 import { TribeChange } from '../components/profile/TribeChange'
 import type { Department, Profile, ProfileCompletion, SpiritualProfileData, Tribe } from '../types'
 import { Icon } from '../components/Icon'
+import { useDirty } from '../utils/dirty'
 
 const CIVILITY = [['dr', 'Dr'], ['reverend', 'Révérend'], ['pasteur', 'Pasteur'], ['m', 'M.'], ['mme', 'Mme'], ['mlle', 'Mlle']]
 const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
@@ -63,11 +64,17 @@ export default function MyProfile() {
   const [sp, setSp] = useState<SpiritualProfileData>(emptySpiritual)
   const setSpField = <K extends keyof SpiritualProfileData>(k: K, v: SpiritualProfileData[K]) => setSp((p) => ({ ...p, [k]: v }))
 
+  // Boutons « Enregistrer » actifs seulement quand quelque chose a change.
+  const personal = useDirty({ firstName, lastName, birthDay, birthMonth, gender, tribeId, deptIds, email, marital, civility,
+    weddingDay, weddingMonth, tshirt, yearVerse, photo: photoFile?.name ?? null })
+  const spiritual = useDirty(sp)
+  const resetSpiritual = spiritual.reset
+
   useEffect(() => {
     getReference().then((r) => { setTribes(r.tribes); setDepartments(r.departments) }).catch(() => {})
-    api<{ spiritual: SpiritualProfileData }>('/me/spiritual-profile').then((r) => setSp({ ...emptySpiritual, ...r.spiritual })).catch(() => {})
+    api<{ spiritual: SpiritualProfileData }>('/me/spiritual-profile').then((r) => { setSp({ ...emptySpiritual, ...r.spiritual }); resetSpiritual() }).catch(() => {})
     api<{ completion: ProfileCompletion | null }>('/profile').then((r) => setCompletion(r.completion)).catch(() => {})
-  }, [])
+  }, [resetSpiritual])
 
   function onPickPhoto(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -101,7 +108,7 @@ export default function MyProfile() {
       if (tshirt) fd.append('tshirt_size', tshirt)
       if (yearVerse) fd.append('year_verse', yearVerse)
       const res = await api<{ profile: Profile; completion: ProfileCompletion }>('/profile', { method: 'POST', body: fd })
-      setProfile(res.profile); setPhotoFile(null); setCompletion(res.completion)
+      setProfile(res.profile); setPhotoFile(null); setCompletion(res.completion); personal.reset()
     } catch (err) {
       setError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
     } finally { setBusy(false) }
@@ -113,6 +120,7 @@ export default function MyProfile() {
       const body: Record<string, unknown> = { ...sp }
       Object.keys(body).forEach((k) => { if (body[k] === '' ) body[k] = null })
       await api('/me/spiritual-profile', { method: 'PUT', body })
+      spiritual.reset()
     } catch (err) {
       setError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
     } finally { setBusy(false) }
@@ -199,7 +207,7 @@ export default function MyProfile() {
           <div className="field"><label>Départements <span className="helper" style={{ display: 'inline' }}>(plusieurs possibles)</span></label>
             <DepartmentPicker departments={departments} selected={deptIds} onChange={setDeptIds} />
           </div>
-          <button className="btn btn-primary" disabled={busy || !firstName.trim() || !lastName.trim()} onClick={savePersonal}>
+          <button className="btn btn-primary" disabled={busy || !personal.dirty || !firstName.trim() || !lastName.trim() || !gender} onClick={savePersonal}>
             {busy ? <span className="spinner" /> : 'Enregistrer'}
           </button>
         </section>
@@ -208,7 +216,7 @@ export default function MyProfile() {
       {tab === 'famille' && (
         <section className="panel form-panel" id="famille">
           <FamilySection marital={marital} onMarital={setMarital} weddingDay={weddingDay} weddingMonth={weddingMonth}
-            onWedding={(d, m) => { setWeddingDay(d); setWeddingMonth(m) }} onSaveProfile={savePersonal} busy={busy}
+            onWedding={(d, m) => { setWeddingDay(d); setWeddingMonth(m) }} onSaveProfile={savePersonal} busy={busy} changed={personal.dirty}
             hasChildrenInitial={profile?.has_children ?? null} />
         </section>
       )}
@@ -231,7 +239,7 @@ export default function MyProfile() {
               </select>
             </div>
           </div>
-          <button className="btn btn-primary" disabled={busy || !firstName.trim() || !lastName.trim()} onClick={savePersonal}>
+          <button className="btn btn-primary" disabled={busy || !personal.dirty || !firstName.trim() || !lastName.trim() || !gender} onClick={savePersonal}>
             {busy ? <span className="spinner" /> : 'Enregistrer'}
           </button>
         </section>
@@ -309,7 +317,7 @@ export default function MyProfile() {
             <textarea aria-label="À quoi pensez-vous le plus, et pour quoi fournissez-vous le plus d'effort ?" className="input" rows={2} value={sp.focus_effort ?? ''} onChange={(e) => setSpField('focus_effort', e.target.value)} />
           </div>
 
-          <button className="btn btn-primary" disabled={busy} onClick={saveSpiritual}>
+          <button className="btn btn-primary" disabled={busy || !spiritual.dirty} onClick={saveSpiritual}>
             {busy ? <span className="spinner" /> : 'Enregistrer ma vie spirituelle'}
           </button>
         </section>

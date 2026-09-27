@@ -9,7 +9,6 @@ use App\Services\FissService;
 use App\Support\FissCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 
 class MyFissController extends Controller
 {
@@ -70,7 +69,7 @@ class MyFissController extends Controller
     /** @return array<string, mixed> */
     private function validated(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'meditation' => ['nullable', 'integer', 'min:0', 'max:20'],
             'priere' => ['nullable', 'integer', 'min:0', 'max:20'],
             'jeune' => ['nullable', 'integer', 'min:0', 'max:20'],
@@ -82,6 +81,13 @@ class MyFissController extends Controller
             'situation_conjugale' => ['nullable', 'integer', 'min:0', 'max:20'],
             'comment' => ['nullable', 'string', 'max:2000'],
         ]);
+
+        // Situation conjugale : seulement pour un profil « Marié(e) » ; ignoree sinon.
+        if ($request->user()->profile?->marital_status !== 'marie') {
+            $data['situation_conjugale'] = null;
+        }
+
+        return $data;
     }
 
     /** Niveau de rappel selon le jour du mois (aucun si deja remplie). */
