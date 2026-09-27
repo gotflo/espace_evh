@@ -5,7 +5,7 @@ Comptez environ 1 h 30 en tout, en plusieurs fois. Cochez au fur et à mesure.
 
 | # | Étape | Durée | Quand |
 |---|-------|-------|-------|
-| 1 | Mettre en ligne la mise à jour | 30 min | dès que possible |
+| 1 | Mettre en ligne la mise à jour | 45 min | dès que possible |
 | 2 | Régler PHP dans hPanel | 5 min | juste après |
 | 3 | Brancher la surveillance (UptimeRobot) | 10 min | juste après |
 | 4 | Supprimer les cultes en double | 5 min | juste après |
@@ -18,34 +18,9 @@ Comptez environ 1 h 30 en tout, en plusieurs fois. Cochez au fur et à mesure.
 
 ## 1. Mettre en ligne la mise à jour
 
-Suivre [`MISE-A-JOUR-AUDIT-ROBUSTESSE.md`](MISE-A-JOUR-AUDIT-ROBUSTESSE.md) (liste des fichiers, commandes,
-vérifications, retour arrière). En résumé :
-
-1. **Sauvegarde** : hPanel → Bases de données → phpMyAdmin → votre base → **Exporter** → Exécuter.
-   Garder aussi une copie de `.env` et de `storage/app/webpush-vapid.json` (Gestionnaire de fichiers → clic droit → Télécharger).
-2. **Envoyer les fichiers** du dossier `backend/` indiqués dans la procédure (Gestionnaire de fichiers ou FTP),
-   dont `public/.htaccess` et le dossier `lang/`.
-3. **Ajouter au `.env` du serveur** :
-   ```ini
-   LOG_STACK=daily
-   LOG_DAILY_DAYS=14
-   APP_FALLBACK_LOCALE=en
-   ```
-4. **Lancer les commandes** (SSH, voir l'encadré ci-dessous) :
-   ```sh
-   cd /home/u772952451/domains/vasesdhonneurchicoutimi.org/public_html/espace
-   php artisan migrate --force
-   php artisan config:cache && php artisan route:cache && php artisan event:cache
-   php artisan app:tick
-   ```
-5. **Application** : sur votre ordinateur, dans `frontend/` : `npm install` puis `npm run build` ; envoyer le contenu
-   de `frontend/dist/` dans `public/` (remplacer `index.html`, `sw.js` et `assets/`).
-6. Ouvrir `https://espace.vasesdhonneurchicoutimi.org/api/health` : la page doit afficher `"status":"ok"`.
-
-> **Sans SSH ?** hPanel → Avancé → **Accès SSH** → Activer, puis copier la commande de connexion affichée.
-> À défaut, créer une tâche Cron temporaire (hPanel → Avancé → Tâches Cron) avec la commande
-> `/usr/bin/php /home/u772952451/domains/vasesdhonneurchicoutimi.org/public_html/espace/artisan migrate --force`,
-> attendre une minute, puis la **supprimer**. Même principe pour les autres commandes.
+Tout ce qui a été fait depuis le 20 septembre part **en une seule fois**, avec deux fichiers ZIP déjà préparés
+(dossier `deployment/`). Procédure pas à pas, sauvegardes, vérifications et retour arrière :
+**[`MISE-EN-LIGNE-HOSTINGER.md`](MISE-EN-LIGNE-HOSTINGER.md)** (environ 45 minutes).
 
 ## 2. Régler PHP dans hPanel
 

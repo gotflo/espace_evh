@@ -11,6 +11,7 @@ import { MemberFissPanel } from '../../components/MemberFissPanel'
 import { MemberCompletion, MemberFamily, MemberFissHistory } from '../../components/MemberExtras'
 import type { Department, Gem, MemberDetailData, MemberListItem, RoleOption, Tribe } from '../../types'
 import { Icon } from '../../components/Icon'
+import { useDirty } from '../../utils/dirty'
 
 export default function MemberDetail() {
   const { id } = useParams()
@@ -38,6 +39,8 @@ export default function MemberDetail() {
   const [belongDepts, setBelongDepts] = useState<number[]>([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const belonging = useDirty({ belongTribe, belongGem, belongDepts })
+  const resetBelonging = belonging.reset
 
   const load = useCallback(() => {
     api<MemberDetailData>(`/admin/members/${id}`).then((d) => {
@@ -45,8 +48,9 @@ export default function MemberDetail() {
       setBelongTribe(d.profile?.tribe_id?.toString() ?? '')
       setBelongGem(d.profile?.gem_id?.toString() ?? '')
       setBelongDepts(d.profile?.departments?.map((x) => x.id) ?? [])
+      resetBelonging()
     }).catch(() => setData(null))
-  }, [id])
+  }, [id, resetBelonging])
 
   useEffect(() => { load() }, [load])
 
@@ -273,7 +277,7 @@ export default function MemberDetail() {
             <label>Départements <span className="helper" style={{ display: 'inline' }}>(plusieurs possibles)</span></label>
             <DepartmentPicker departments={departments} selected={belongDepts} onChange={setBelongDepts} />
           </div>
-          <button className="btn btn-primary" disabled={busy} onClick={saveBelonging}>
+          <button className="btn btn-primary" disabled={busy || !belonging.dirty} onClick={saveBelonging}>
             {busy ? <span className="spinner" /> : "Enregistrer l'appartenance"}
           </button>
         </section>

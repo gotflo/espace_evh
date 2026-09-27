@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError } from '../../api/client'
 import { AppLayout } from '../../components/AppLayout'
 import type { ManagedRole, PermissionGroup } from '../../types'
+import { useDirty } from '../../utils/dirty'
 
 const SCOPE_LABEL: Record<string, string> = {
   none: 'Sans portée',
@@ -26,6 +27,7 @@ export default function RolesAdmin() {
   const [perms, setPerms] = useState<string[]>([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const formState = useDirty({ name, description, scopeKind, perms })
 
   const loadRoles = useCallback(() => {
     api<{ roles: ManagedRole[] }>('/admin/roles').then((r) => setRoles(r.roles)).catch(() => setRoles([]))
@@ -45,6 +47,7 @@ export default function RolesAdmin() {
       setScopeKind(role.scope_kind); setPerms([...role.permission_keys])
     }
     setEditing(role)
+    formState.reset()
   }
 
   function togglePerm(key: string) {
@@ -148,7 +151,7 @@ export default function RolesAdmin() {
           </div>
 
           <div className="editor-actions">
-            <button className="btn btn-primary" disabled={busy || !name.trim()} onClick={save}>
+            <button className="btn btn-primary" disabled={busy || !name.trim() || (editing !== 'new' && !formState.dirty)} onClick={save}>
               {busy ? <span className="spinner" /> : 'Enregistrer'}
             </button>
             {editing !== 'new' && !editing.is_system && (

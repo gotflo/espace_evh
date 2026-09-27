@@ -7,58 +7,108 @@ import type { OrgItem } from '../../types'
 
 interface OrgData { tribes: OrgItem[]; departments: OrgItem[] }
 
-/** Choix des responsables d'un departement parmi ses membres (5 maximum). */
+type Person = { user_id: number; name: string }
+const mergePeople = (a: Person[], b: Person[]) => [...a, ...b.filter((p) => !a.some((x) => x.user_id === p.user_id))]
+
+/**
+ * Choix des responsables d'un departement (5 au maximum) : parmi ses membres, ou n'importe quel
+ * membre de l'eglise trouve par la recherche (il est alors ajoute au departement).
+ */
 function LeadersEditor({ item, onDone }: { item: OrgItem; onDone: (saved: boolean) => void }) {
-  const [members, setMembers] = useState<{ user_id: number; name: string }[] | null>(null)
-  const [selected, setSelected] = useState<number[]>((item.leaders ?? []).map((l) => l.user_id))
+  const initial = (item.leaders ?? []).map((l) => l.user_id)
+  const [members, setMembers] = useState<Person[] | null>(null)
+  const [known, setKnown] = useState<Person[]>((item.leaders ?? []).map((l) => ({ user_id: l.user_id, name: l.name })))
+  const [selected, setSelected] = useState<number[]>(initial)
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<Person[]>([])
+  const [rehearsal, setRehearsal] = useState(!!item.tracks_rehearsal)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    api<{ members: { user_id: number; name: string }[] }>(`/admin/departments/${item.id}/members`)
-      .then((r) => setMembers(r.members)).catch(() => setMembers([]))
+    api<{ members: Person[] }>(`/admin/departments/${item.id}/members`)
+      .then((r) => { setMembers(r.members); setKnown((k) => mergePeople(k, r.members)) }).catch(() => setMembers([]))
   }, [item.id])
 
-  const toggle = (id: number) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : s.length >= 5 ? s : [...s, id]))
+  // Recherche dans toute l'eglise (a partir de 2 lettres, apres une courte pause de frappe).
+  useEffect(() => {
+    const q = query.trim()
+    if (q.length < 2) { setResults([]); return }
+    const t = window.setTimeout(() => {
+      api<{ members: { user_id: number; full_name: string }[] }>(`/admin/members?per_page=8&q=${encodeURIComponent(q)}`)
+        .then((r) => setResults(r.members.map((m) => ({ user_id: m.user_id, name: m.full_name }))))
+        .catch(() => setResults([]))
+    }, 300)
+    return () => window.clearTimeout(t)
+  }, [query])
+
+  const toggle = (p: Person) => {
+    setKnown((k) => mergePeople(k, [p]))
+    setSelected((s) => (s.includes(p.user_id) ? s.filter((x) => x !== p.user_id) : s.length >= 5 ? s : [...s, p.user_id]))
+  }
+  const leadersChanged = selected.length !== initial.length || selected.some((id) => !initial.includes(id))
+  const changed = leadersChanged || rehearsal !== !!item.tracks_rehearsal
+  const nameOf = (id: number) => known.find((p) => p.user_id === id)?.name ?? ''
+  const memberIds = (members ?? []).map((m) => m.user_id)
 
   async function save() {
     setBusy(true)
     try {
-      await api(`/admin/departments/${item.id}/leaders`, { method: 'PUT', body: { user_ids: selected } })
+      if (leadersChanged) await api(`/admin/departments/${item.id}/leaders`, { method: 'PUT', body: { user_ids: selected } })
+      if (rehearsal !== !!item.tracks_rehearsal) await api(`/admin/departments/${item.id}`, { method: 'PUT', body: { tracks_rehearsal: rehearsal } })
       onDone(true)
     } catch { /* toast deja affiche */ } finally { setBusy(false) }
   }
 
   return (
     <div className="leaders-editor">
-      <p className="helper">Les responsables doivent être membres du département (5 au maximum). Ils peuvent suivre ses membres, faire l'appel des répétitions et publier ses événements.</p>
-      {members === null ? <span className="spinner" /> : members.length === 0 ? (
-        <p className="helper">Ce département n'a encore aucun membre.</p>
-      ) : (
+      <p className="helper">Jusqu'à 5 responsables. Ils peuvent suivre les membres du département, faire l'appel des répétitions et publier ses événements. Une personne choisie hors du département y est ajoutée.</p>
+      {selected.length > 0 && (
         <div className="leaders-options">
-          {members.map((m) => (
-            <label key={m.user_id} className={`check-pill ${selected.includes(m.user_id) ? 'on' : ''}`}>
-              <input type="checkbox" checked={selected.includes(m.user_id)} onChange={() => toggle(m.user_id)}
-                disabled={!selected.includes(m.user_id) && selected.length >= 5} />
-              {m.name}
-            </label>
+          {selected.map((id) => (
+            <button key={id} type="button" className="check-pill on" onClick={() => toggle({ user_id: id, name: nameOf(id) })}
+              aria-label={`Retirer ${nameOf(id)}`}>{nameOf(id)} ×</button>
           ))}
         </div>
       )}
+      {members === null ? <span className="spinner" /> : members.length > 0 && (
+        <>
+          <p className="helper mt-sm">Membres du département</p>
+          <div className="leaders-options">
+            {members.filter((m) => !selected.includes(m.user_id)).map((m) => (
+              <button key={m.user_id} type="button" className="check-pill" disabled={selected.length >= 5} onClick={() => toggle(m)}>{m.name}</button>
+            ))}
+          </div>
+        </>
+      )}
+      <input className="input mt-sm" type="search" aria-label="Rechercher un membre de l'église" placeholder="Rechercher un membre de l'église…"
+        value={query} onChange={(e) => setQuery(e.target.value)} />
+      {results.length > 0 && (
+        <div className="leaders-options mt-sm">
+          {results.filter((p) => !selected.includes(p.user_id) && !memberIds.includes(p.user_id)).map((p) => (
+            <button key={p.user_id} type="button" className="check-pill" disabled={selected.length >= 5} onClick={() => { toggle(p); setQuery('') }}>
+              {p.name} (sera ajouté)
+            </button>
+          ))}
+        </div>
+      )}
+      <label className="check-line mt-sm">
+        <input type="checkbox" checked={rehearsal} onChange={(e) => setRehearsal(e.target.checked)} />
+        Suivre la ponctualité aux répétitions (retards, absences)
+      </label>
       <div className="row-actions">
         <button className="btn btn-ghost small" onClick={() => onDone(false)}>Annuler</button>
-        <button className="btn btn-primary small" disabled={busy || members === null} onClick={save}>{busy ? <span className="spinner" /> : 'Enregistrer'}</button>
+        <button className="btn btn-primary small" disabled={busy || !changed} onClick={save}>{busy ? <span className="spinner" /> : 'Enregistrer'}</button>
       </div>
     </div>
   )
 }
 
-function OrgSection({ title, singular, items, endpoint, canManage, showRehearsal, showLeaders, onChange, onError }: {
+function OrgSection({ title, singular, items, endpoint, canManage, showLeaders, onChange, onError }: {
   title: string
   singular: string
   items: OrgItem[]
   endpoint: string
   canManage: boolean
-  showRehearsal?: boolean
   showLeaders?: boolean
   onChange: () => void
   onError: (msg: string) => void
@@ -117,14 +167,6 @@ function OrgSection({ title, singular, items, endpoint, canManage, showRehearsal
                 </small>
               )}
             </span>
-            {showRehearsal && (
-              <button type="button" className={`rehearsal-toggle ${it.tracks_rehearsal ? 'on' : ''}`}
-                disabled={!canManage || busy}
-                title="Suit la ponctualité aux répétitions (retards, absences)"
-                onClick={() => call(() => api(`/admin/${endpoint}/${it.id}`, { method: 'PUT', body: { tracks_rehearsal: !it.tracks_rehearsal } }))}>
-                {it.tracks_rehearsal ? 'Répétitions suivies' : 'Répétitions ?'}
-              </button>
-            )}
             <span className="org-count">{it.members_count} membre(s)</span>
             {canManage && (
               <span className="org-actions">
@@ -161,7 +203,7 @@ export default function Organization() {
           onChange={load} onError={setError} />
         <OrgSection title="Départements" singular="departement" endpoint="departments"
           items={data?.departments ?? []} canManage={hasPermission('departments.manage')}
-          showRehearsal showLeaders onChange={load} onError={setError} />
+          showLeaders onChange={load} onError={setError} />
       </div>
     </AppLayout>
   )

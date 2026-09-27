@@ -4,7 +4,11 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Department;
+use App\Models\Profile;
 use App\Models\Tribe;
+use App\Services\Notifier;
+use App\Support\Audit;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -83,15 +87,20 @@ class OrgController extends Controller
             'user_ids.*' => ['integer', 'exists:users,id'],
         ]);
         $ids = array_values(array_unique(array_map('intval', $data['user_ids'])));
-        $memberIds = $department->members()->pluck('profiles.user_id')->map(fn ($id) => (int) $id)->all();
-        foreach ($ids as $id) {
-            abort_unless(in_array($id, $memberIds, true), 422, 'Un responsable doit d\'abord être membre du département.');
+        // Tout membre de l'eglise (profil complet) peut etre nomme ; s'il ne fait pas encore partie
+        // du departement, il y est ajoute (un nouveau departement peut ainsi recevoir ses responsables).
+        $profiles = Profile::whereIn('user_id', $ids)->where('is_completed', true)->pluck('id', 'user_id');
+        abort_if($profiles->count() !== count($ids), 422, 'Un responsable doit avoir un profil complet.');
+        $joining = array_diff($profiles->values()->all(), $department->members()->pluck('profiles.id')->all());
+        if ($joining) {
+            $department->members()->syncWithoutDetaching($joining);
+            Audit::log('department.members_added', $department, null, [], ['profile_ids' => array_values($joining)], ['reason' => 'nomme responsable']);
         }
         $before = $department->leaders()->pluck('users.id')->sort()->values()->all();
         $department->leaders()->sync($ids);
-        \App\Support\Audit::log('department.leaders_updated', $department, null, ['leaders' => $before], ['leaders' => $ids]);
+        Audit::log('department.leaders_updated', $department, null, ['leaders' => $before], ['leaders' => $ids]);
         foreach (array_diff($ids, $before) as $newLeader) {
-            \App\Services\Notifier::send([$newLeader], 'role', "Responsable du département {$department->name}",
+            Notifier::send([$newLeader], 'role', "Responsable du département {$department->name}",
                 'Vous pouvez désormais suivre ses membres, faire l\'appel des répétitions et publier ses événements.', '/tableau-de-bord');
         }
 
@@ -107,7 +116,7 @@ class OrgController extends Controller
 
     public function destroyDepartment(Department $department): JsonResponse
     {
-        \App\Support\Audit::log('department.deleted', $department, null, ['name' => $department->name], [], ['member_profile_ids' => $department->members()->pluck('profiles.id')]);
+        Audit::log('department.deleted', $department, null, ['name' => $department->name], [], ['member_profile_ids' => $department->members()->pluck('profiles.id')]);
         $department->delete();
 
         return response()->json(['message' => 'Département supprimé.']);
@@ -118,7 +127,7 @@ class OrgController extends Controller
         return $request->validate(['name' => ['required', 'string', 'max:60']])['name'];
     }
 
-    /** @param class-string<\Illuminate\Database\Eloquent\Model> $model */
+    /** @param class-string<Model> $model */
     private function uniqueSlug(string $model, string $name): string
     {
         $base = Str::slug($name) ?: 'item';

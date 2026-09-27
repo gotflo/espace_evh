@@ -5,6 +5,7 @@ import { SkeletonCard } from '../../components/Skeleton'
 import { AudiencePicker } from '../../components/AudiencePicker'
 import type { AudienceScope, EventAdminItem, EventCategory, EventParticipants, Recurrence } from '../../types'
 import { Icon } from '../../components/Icon'
+import { useDirty } from '../../utils/dirty'
 
 const RECURRENCES: { key: Recurrence; label: string }[] = [
   { key: 'none', label: 'Une seule fois' },
@@ -53,6 +54,7 @@ export default function Events() {
   const [existingImage, setExistingImage] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const formState = useDirty({ form, image: image?.name ?? null })
   const [participants, setParticipants] = useState<EventParticipants | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -72,7 +74,7 @@ export default function Events() {
   }, [])
 
   function clearImage() { setImage(null); setImagePreview(null) }
-  function openNew() { setForm({ ...EMPTY }); clearImage(); setExistingImage(null); setError(''); setMode('form') }
+  function openNew() { setForm({ ...EMPTY }); clearImage(); setExistingImage(null); setError(''); setMode('form'); formState.reset() }
   function openEdit(e: EventAdminItem) {
     setForm({
       id: e.id, title: e.title, description: e.description ?? '', category: e.category,
@@ -80,7 +82,7 @@ export default function Events() {
       all_day: e.all_day, recurrence: e.recurrence ?? 'none', recurrence_until: e.recurrence_until ?? '',
       scopes: e.scopes,
     })
-    clearImage(); setExistingImage(e.image_url); setError(''); setMode('form')
+    clearImage(); setExistingImage(e.image_url); setError(''); setMode('form'); formState.reset()
   }
   function onPickImage(ev: ChangeEvent<HTMLInputElement>) {
     const file = ev.target.files?.[0]
@@ -227,7 +229,7 @@ export default function Events() {
             </div>
           </div>
           <AudiencePicker value={form.scopes} onChange={(scopes) => setForm((f) => ({ ...f, scopes }))} />
-          <button className="btn btn-primary mt" disabled={busy || !form.title.trim() || !form.starts_at || form.scopes.length === 0} onClick={save}>
+          <button className="btn btn-primary mt" disabled={busy || !form.title.trim() || !form.starts_at || form.scopes.length === 0 || (!!form.id && !formState.dirty)} onClick={save}>
             {busy ? <span className="spinner" /> : form.id ? 'Enregistrer' : "Créer l'événement"}
           </button>
         </section>

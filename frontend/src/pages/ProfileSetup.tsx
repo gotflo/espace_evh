@@ -7,6 +7,7 @@ import type { Department, Profile, Tribe } from '../types'
 import { Brand } from '../components/Brand'
 import { DepartmentPicker } from '../components/DepartmentPicker'
 import { Icon } from '../components/Icon'
+import { useDirty } from '../utils/dirty'
 
 const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 
@@ -28,6 +29,8 @@ export default function ProfileSetup() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(profile?.photo_url ?? null)
 
   const [error, setError] = useState('')
+  // En modification : bouton actif seulement si quelque chose a change.
+  const edits = useDirty({ firstName, lastName, birthDay, birthMonth, gender, tribeId, deptIds, photo: photoFile?.name ?? null })
   const [busy, setBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -153,7 +156,7 @@ export default function ProfileSetup() {
             <DepartmentPicker departments={departments} selected={deptIds} onChange={setDeptIds} />
           </div>
 
-          <button className="btn btn-primary mt" disabled={busy || !firstName.trim() || !lastName.trim()}>
+          <button className="btn btn-primary mt" disabled={busy || !firstName.trim() || !lastName.trim() || !gender || (profileCompleted && !edits.dirty)}>
             {busy ? <span className="spinner" /> : 'Enregistrer mon profil'}
           </button>
         </form>

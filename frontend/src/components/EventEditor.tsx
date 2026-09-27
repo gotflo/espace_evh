@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext'
 import type { AudienceScope, EventCategory, EventOccurrence, Recurrence } from '../types'
 import { CAT_LABEL, parseYmd, ymd } from '../utils/events'
 import { AudiencePicker } from './AudiencePicker'
+import { useDirty } from '../utils/dirty'
 
 const RECURRENCES: { key: Recurrence; label: string }[] = [
   { key: 'none', label: 'Une seule fois' },
@@ -73,6 +74,7 @@ export function EventEditor({ date, event, onClose, onSaved }: {
 
   const [f, setF] = useState(init)
   const [busy, setBusy] = useState(false)
+  const changes = useDirty(f)
   const set = <K extends keyof typeof init>(k: K, v: (typeof init)[K]) => setF((prev) => ({ ...prev, [k]: v }))
 
   useEffect(() => { titleRef.current?.focus() }, [])
@@ -239,7 +241,7 @@ export function EventEditor({ date, event, onClose, onSaved }: {
         {church && !editing && <p className="helper">Les destinataires sont prévenus immédiatement, puis rappelés la veille.</p>}
 
         <div className="editor-actions mt">
-          <button className="btn btn-primary" disabled={busy || !valid} onClick={save}>
+          <button className="btn btn-primary" disabled={busy || !valid || (editing && !changes.dirty)} onClick={save}>
             {busy ? <span className="spinner" /> : editing ? 'Enregistrer' : church ? "Publier l'événement" : 'Ajouter à mon agenda'}
           </button>
           {editing && <button className="btn btn-ghost danger" disabled={busy} onClick={remove}>Supprimer</button>}

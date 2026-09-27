@@ -3,6 +3,7 @@ import { api, ApiError } from '../../api/client'
 import { AppLayout } from '../../components/AppLayout'
 import { VerseCard, type VerseContent } from '../../components/VerseBanner'
 import { Icon } from '../../components/Icon'
+import { useDirty } from '../../utils/dirty'
 
 type VerseState = 'draft' | 'scheduled' | 'live' | 'expired'
 
@@ -43,6 +44,9 @@ function VerseEditor({ verse, onClose, onSaved }: { verse: Verse | null; onClose
   const [pinned, setPinned] = useState(verse?.is_pinned ?? false)
   const [errors, setErrors] = useState<Record<string, string[]>>({})
   const [busy, setBusy] = useState(false)
+  // Texte existant : « Publier » (ou « Brouillon ») seulement s'il y a un changement a enregistrer.
+  const changes = useDirty({ label, text, reference, message, schedule, startsAt, endsAt, pinned })
+  const sameStatus = (status: 'draft' | 'published') => !!verse && verse.status === status && !changes.dirty
 
   async function save(status: 'draft' | 'published') {
     setBusy(true); setErrors({})
@@ -117,8 +121,8 @@ function VerseEditor({ verse, onClose, onSaved }: { verse: Verse | null; onClose
         <VerseCard verse={{ id: null, label: label || 'Intitulé', text: text || 'Le texte apparaîtra ici.', reference: reference || 'Référence', message: message.trim() || null }} />
 
         <div className="row-actions mt">
-          <button className="btn btn-ghost" disabled={busy || !valid} onClick={() => save('draft')}>Enregistrer en brouillon</button>
-          <button className="btn btn-primary" disabled={busy || !valid} onClick={() => save('published')}>
+          <button className="btn btn-ghost" disabled={busy || !valid || sameStatus('draft')} onClick={() => save('draft')}>Enregistrer en brouillon</button>
+          <button className="btn btn-primary" disabled={busy || !valid || sameStatus('published')} onClick={() => save('published')}>
             {busy ? <span className="spinner" /> : schedule && startsAt && new Date(startsAt) > new Date() ? 'Programmer' : 'Publier'}
           </button>
         </div>
