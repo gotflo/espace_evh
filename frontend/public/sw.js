@@ -3,7 +3,7 @@
 //   l'application s'ouvre donc instantanement une fois installee.
 // - Navigation (routes) : reseau d'abord, repli sur le cache hors-ligne.
 // - L'API et les medias /storage passent toujours par le reseau (jamais en cache).
-const CACHE = 'evh-app-v3'
+const CACHE = 'evh-app-v4'
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/logo-vh.png', '/icon-192.png']
 
 self.addEventListener('install', (event) => {
@@ -60,6 +60,20 @@ self.addEventListener('fetch', (event) => {
 
 // ---------------------------------------------------------------- Notifications push
 // Le serveur envoie { title, body, url, type, tag } chiffre (Web Push / VAPID).
+// Accuse de reception au serveur : il sait si le message est arrive sur l'appareil et s'il a
+// pu etre affiche (diagnostic : php artisan app:push-check).
+async function reportReceipt(status, error) {
+  try {
+    const sub = await self.registration.pushManager.getSubscription()
+    if (!sub) return
+    await fetch('/api/push/receipt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ endpoint: sub.endpoint, status, error }),
+    })
+  } catch { /* hors ligne : sans importance */ }
+}
+
 self.addEventListener('push', (event) => {
   let data = {}
   try { data = event.data ? event.data.json() : {} } catch { data = { title: event.data ? event.data.text() : '' } }
@@ -70,23 +84,33 @@ self.addEventListener('push', (event) => {
     icon: '/icon-192.png',
     badge: '/icon-192.png',
     tag: data.tag || undefined,
-    renotify: !!data.tag,
     data: { url: data.url || '/tableau-de-bord' },
-    lang: 'fr',
   }
 
   event.waitUntil((async () => {
-    await self.registration.showNotification(title, options)
+    let status = 'shown'
+    let error = null
+    try {
+      await self.registration.showNotification(title, options)
+    } catch (e) {
+      status = 'error'
+      error = String((e && e.message) || e)
+      // Dernier recours : notification minimale (titre seul).
+      try { await self.registration.showNotification(title) } catch { /* rien de plus a faire */ }
+    }
+    await reportReceipt(status, error)
     // Pastille sur l'icone de l'application (Android / ordinateur / iPhone installe).
     try {
       const list = await self.registration.getNotifications()
       if (self.navigator && 'setAppBadge' in self.navigator) await self.navigator.setAppBadge(list.length)
     } catch { /* non supporte */ }
-    // Previent les onglets ouverts : la cloche se met a jour immediatement.
-    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    // Previent les onglets ouverts : la cloche se met a jour immediatement
     // (avec le texte : si l'application est ouverte, elle l'affiche elle-meme, car l'iPhone
     // n'affiche pas la notification systeme quand l'application est au premier plan).
-    clients.forEach((c) => c.postMessage({ type: 'evh-push', title, body: options.body }))
+    try {
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      clients.forEach((c) => c.postMessage({ type: 'evh-push', title, body: options.body }))
+    } catch { /* ignore */ }
   })())
 })
 

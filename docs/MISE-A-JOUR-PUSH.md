@@ -131,3 +131,23 @@ Sur l'iPhone : supprimer l'icône « Vases d'Honneur » de l'écran d'accueil, o
 
 Paquet : `push4-backend-20260927.zip` (6 fichiers, dont `public/.htaccess`). Puis :
 `php artisan optimize:clear && php artisan config:cache && php artisan route:cache && php artisan app:push-outbox && php artisan app:push-check`.
+
+## Complément 4 : accusé de réception du téléphone
+
+Constat : le cron fonctionne (PHP 8.3, `app:tick` et `app:push-outbox` exécutés), les envois partent et Apple les
+accepte, mais rien ne s'affiche sur l'iPhone. Reste à savoir si le message arrive jusqu'à l'application sur le
+téléphone.
+
+- Le service worker envoie un **accusé de réception** (`POST /api/push/receipt`) à chaque push : « affichée », ou
+  « erreur » avec la raison exacte. `app:push-check` l'affiche pour chaque appareil (« reçu sur le téléphone »).
+- Affichage simplifié (option `renotify` retirée) avec une notification minimale en dernier recours ; cache de
+  l'application renouvelé (`evh-app-v4`) pour forcer la mise à jour du service worker.
+
+Paquets : `push5-backend-20260927.zip` (5 fichiers, dont une migration) et `push5-public-20260927.zip`
+(`sw.js` et `index.html` en dernier). Puis `php artisan migrate --force && php artisan optimize:clear &&
+php artisan config:cache && php artisan route:cache`.
+
+Lecture du résultat de `app:push-check` après un test :
+- « reçu sur le téléphone : jamais » → le message n'atteint pas l'application (abonnement, réglages iOS) ;
+- « affichage en ERREUR : … » → l'iPhone refuse l'affichage (raison indiquée) ;
+- « notification affichée » alors que rien n'est visible → réglages de notification de l'iPhone.
