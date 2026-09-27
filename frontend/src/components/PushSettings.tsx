@@ -61,6 +61,22 @@ export function PushSettings({ variant = 'card' }: { variant?: 'card' | 'prompt'
     } finally { setBusy(false) }
   }
 
+  // Abonnement neuf : supprime celui de cet appareil (telephone et serveur), en recree un, puis
+  // envoie un test differe. Regle le cas d'un abonnement devenu obsolete (reinstallation...).
+  async function reset() {
+    setBusy(true); setReport(null)
+    try {
+      await disablePush()
+      const next = await enablePush()
+      setState(next)
+      if (next !== 'on') { setReport({ message: 'Les notifications ne sont pas autorisées pour cette application.', devices: [] }); return }
+    } catch (e) {
+      setReport({ message: e instanceof PushError ? e.message : 'La réinitialisation a échoué.', devices: [] })
+      return
+    } finally { setBusy(false) }
+    await test(true)
+  }
+
   function dismiss() {
     setDismissed(true)
     try { localStorage.setItem(DISMISS_KEY, '1') } catch { /* ignore */ }
@@ -117,6 +133,7 @@ export function PushSettings({ variant = 'card' }: { variant?: 'card' | 'prompt'
           <>
             <button className="btn btn-ghost small" disabled={busy} onClick={() => test()}>Envoyer un test</button>
             <button className="btn btn-ghost small" disabled={busy} onClick={() => test(true)}>Tester dans 10 s</button>
+            <button className="btn btn-ghost small" disabled={busy} onClick={reset}>Réinitialiser</button>
             <button className="btn-link" disabled={busy} onClick={disable}>Désactiver sur cet appareil</button>
           </>
         )}

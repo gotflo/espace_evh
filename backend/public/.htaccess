@@ -1,3 +1,9 @@
+# Types des fichiers de l'application installable (le manifeste etait servi en texte brut).
+<IfModule mod_mime.c>
+    AddType application/manifest+json .webmanifest
+    AddType text/javascript .js
+</IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes
