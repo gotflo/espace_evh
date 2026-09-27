@@ -496,3 +496,11 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible, .nav-it
 .fiss-hist-state { font-size: 0.72rem; font-weight: 600; color: var(--text-soft); margin-left: 0.35rem; }
 .check-line { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; cursor: pointer; }
 .check-line input { width: 18px; height: 18px; accent-color: #0d5f57; }
+
+/* Resultat du test de notification, appareil par appareil */
+.push-report { margin-top: 0.8rem; padding: 0.75rem 0.9rem; border-radius: var(--radius-sm); background: var(--field-bg); font-size: 0.88rem; }
+.push-report ul { list-style: none; margin: 0.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.45rem; }
+.push-report li { display: flex; flex-direction: column; gap: 0.1rem; }
+.push-report li.ok strong { color: #067647; }
+.push-report li.ko strong { color: #b42318; }
+.push-report li span { color: var(--text-muted); }

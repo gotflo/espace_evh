@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { api } from '../api/client'
-import { disablePush, enablePush, getPushState, PushError, type PushState } from '../push'
+import { api, ApiError } from '../api/client'
+import { currentEndpoint, disablePush, enablePush, getPushState, PushError, type PushState } from '../push'
 import { toast } from '../toast'
 import { Icon } from './Icon'
 
 const DISMISS_KEY = 'evh_push_prompt_dismissed'
+
+type TestReport = { message: string; devices: { device: string; this_device: boolean; ok: boolean; explanation: string }[] }
 
 /**
  * Activation des notifications push sur cet appareil.
@@ -14,6 +16,7 @@ const DISMISS_KEY = 'evh_push_prompt_dismissed'
 export function PushSettings({ variant = 'card' }: { variant?: 'card' | 'prompt' }) {
   const [state, setState] = useState<PushState | null>(null)
   const [busy, setBusy] = useState(false)
+  const [report, setReport] = useState<TestReport | null>(null)
   const [dismissed, setDismissed] = useState(() => {
     try { return localStorage.getItem(DISMISS_KEY) === '1' } catch { return false }
   })
@@ -44,11 +47,18 @@ export function PushSettings({ variant = 'card' }: { variant?: 'card' | 'prompt'
     toast.info('Cet appareil ne recevra plus de notifications push.', { title: 'Notifications désactivées' })
   }
 
+  // Test reel : reenregistre cet appareil aupres du serveur, envoie tout de suite, puis affiche
+  // ce que le service de notification a repondu pour chaque appareil du compte.
   async function test() {
-    setBusy(true)
+    setBusy(true); setReport(null)
     try {
-      await api('/me/push/test', { method: 'POST', toast: 'Elle doit apparaître dans quelques secondes.' })
-    } catch { /* toast automatique */ } finally { setBusy(false) }
+      await enablePush()
+      const endpoint = await currentEndpoint()
+      setReport(await api<TestReport>('/me/push/test', { method: 'POST', body: { endpoint }, toast: false }))
+    } catch (e) {
+      const message = e instanceof PushError ? e.message : e instanceof ApiError ? e.firstMessage : "Le test n'a pas pu être lancé."
+      setReport({ message, devices: [] })
+    } finally { setBusy(false) }
   }
 
   function dismiss() {
@@ -108,6 +118,25 @@ export function PushSettings({ variant = 'card' }: { variant?: 'card' | 'prompt'
           </>
         )}
       </div>
+      {report && (
+        <div className="push-report" role="status">
+          <p>{report.message}</p>
+          {report.devices.length > 0 && (
+            <ul>
+              {report.devices.map((d, i) => (
+                <li key={i} className={d.ok ? 'ok' : 'ko'}>
+                  <strong>{d.ok ? '✓' : '✗'} {d.device}{d.this_device ? ' (cet appareil)' : ''}</strong>
+                  <span>{d.explanation}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {report.devices.some((d) => d.ok) && (
+            <p className="helper">Acceptée mais rien ne s'affiche ? Vérifiez dans les réglages du téléphone que les notifications
+              du navigateur (ou de l'application installée) sont autorisées, et que le mode « Ne pas déranger » est coupé.</p>
+          )}
+        </div>
+      )}
     </section>
   )
 }

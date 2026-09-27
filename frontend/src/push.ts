@@ -51,6 +51,11 @@ async function currentSubscription(): Promise<PushSubscription | null> {
   return reg ? reg.pushManager.getSubscription() : null
 }
 
+/** Adresse d'abonnement de cet appareil (pour le reperer dans le resultat d'un test). */
+export async function currentEndpoint(): Promise<string | null> {
+  try { return (await currentSubscription())?.endpoint ?? null } catch { return null }
+}
+
 export async function getPushState(): Promise<PushState> {
   if (!pushSupported()) return isIos() && !isStandalone() ? 'ios-install' : 'unsupported'
   if (Notification.permission === 'denied') return 'denied'

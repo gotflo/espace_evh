@@ -165,21 +165,23 @@ class Notifier
         }
     }
 
-    /** @param array<int> $userIds @param array<string, mixed> $payload */
+    /**
+     * Push : enregistre dans la boite d'envoi (push_outbox), puis envoye tout de suite.
+     * Si l'envoi immediat n'aboutit pas (processus coupe par l'hebergeur apres la reponse,
+     * service push injoignable), le cron le rattrape (app:push-outbox, chaque minute).
+     *
+     * @param  array<int>  $userIds
+     * @param  array<string, mixed>  $payload
+     */
     private static function push(array $userIds, array $payload, string $urgency): void
     {
-        $job = function () use ($userIds, $payload, $urgency) {
-            $webPush = app(WebPush::class);
-            foreach (array_chunk($userIds, 500) as $ids) {
-                PushSubscription::whereIn('user_id', $ids)->chunkById(200, function ($subs) use ($webPush, $payload, $urgency) {
-                    try {
-                        $webPush->sendMany($subs, $payload, 86400, $urgency);
-                    } catch (\Throwable $e) {
-                        Log::warning('Push : erreur', ['error' => $e->getMessage()]);
-                    }
-                });
-            }
-        };
+        $id = DB::table('push_outbox')->insertGetId([
+            'user_ids' => json_encode(array_values($userIds)),
+            'payload' => json_encode($payload, JSON_UNESCAPED_UNICODE),
+            'urgency' => $urgency,
+            'created_at' => now(),
+        ]);
+        $job = fn () => self::deliver($id);
 
         // En console (cron, tests) on envoie directement, mais apres la validation de la
         // transaction en cours s'il y en a une (aucun appel reseau pendant un verrou, aucun push
@@ -194,5 +196,44 @@ class Notifier
                 $job();
             });
         }
+    }
+
+    /**
+     * Envoie un element de la boite d'envoi. Reservation atomique : un meme envoi ne part
+     * jamais deux fois, meme si l'envoi immediat et le cron se croisent. Retourne false si
+     * l'element etait deja envoye ou en cours d'envoi.
+     */
+    public static function deliver(int $id): bool
+    {
+        $claimed = DB::table('push_outbox')->where('id', $id)->whereNull('sent_at')
+            ->where(fn ($q) => $q->whereNull('claimed_at')->orWhere('claimed_at', '<', now()->subMinutes(5)))
+            ->update(['claimed_at' => now(), 'attempts' => DB::raw('attempts + 1')]);
+        if (! $claimed) {
+            return false;
+        }
+
+        $row = DB::table('push_outbox')->find($id);
+        $payload = json_decode((string) $row->payload, true) ?: [];
+        $stats = ['sent' => 0, 'expired' => 0, 'failed' => 0];
+        $webPush = app(WebPush::class);
+        try {
+            foreach (array_chunk(json_decode((string) $row->user_ids, true) ?: [], 500) as $ids) {
+                PushSubscription::whereIn('user_id', $ids)->chunkById(200, function ($subs) use ($webPush, $payload, $row, &$stats) {
+                    foreach ($webPush->sendMany($subs, $payload, 86400, (string) $row->urgency) as $k => $v) {
+                        $stats[$k] = ($stats[$k] ?? 0) + $v;
+                    }
+                });
+            }
+        } catch (\Throwable $e) {
+            // Erreur generale (cle, chiffrement...) : journalisee ; le cron retentera (3 essais au plus).
+            Log::error('Push : envoi impossible', ['outbox' => $id, 'error' => $e->getMessage()]);
+            DB::table('push_outbox')->where('id', $id)->update(['result' => json_encode(['error' => mb_substr($e->getMessage(), 0, 300)])]);
+
+            return false;
+        }
+
+        DB::table('push_outbox')->where('id', $id)->update(['sent_at' => now(), 'result' => json_encode($stats)]);
+
+        return true;
     }
 }

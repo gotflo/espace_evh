@@ -7,6 +7,7 @@ use App\Models\PushSubscription;
 use App\Models\UserNotification;
 use App\Services\Notifier;
 use App\Services\Push\WebPush;
+use App\Support\Like;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -97,8 +98,8 @@ class MyNotificationController extends Controller
         $ids = $request->user()->notifications()->whereNull('read_at')
             ->where(function ($q) use ($path) {
                 $q->where('url', $path);
-                \App\Support\Like::where($q, 'url', \App\Support\Like::escape($path).'?%', 'or');
-                \App\Support\Like::where($q, 'url', \App\Support\Like::escape($path).'#%', 'or');
+                Like::where($q, 'url', Like::escape($path).'?%', 'or');
+                Like::where($q, 'url', Like::escape($path).'#%', 'or');
             })
             ->get(['id', 'url'])
             ->filter(function ($n) use ($visited) {
@@ -184,17 +185,89 @@ class MyNotificationController extends Controller
     }
 
     /** Envoie une notification de test a l'utilisateur. */
-    public function test(Request $request): JsonResponse
+    public function test(Request $request, WebPush $webPush): JsonResponse
     {
         // Limite propre a ce bouton (5 par minute), independante de la limite generale de l'API.
         $key = 'push-test:'.$request->user()->id;
         abort_if(RateLimiter::tooManyAttempts($key, 5), 429, 'Patientez une minute avant un nouvel essai.');
         RateLimiter::hit($key, 60);
 
-        Notifier::send([$request->user()->id], 'system', 'Notifications activées',
-            'Vous recevrez ici les annonces, rappels et tâches de Vases d\'Honneur.', '/notifications');
+        $user = $request->user();
+        $subs = $user->pushSubscriptions()->get();
+        abort_if($subs->isEmpty(), 422, 'Aucun appareil n\'est abonné pour ce compte. Activez les notifications sur cet appareil, puis réessayez.');
+        abort_unless(config('services.webpush.enabled'), 422, 'Les notifications push sont désactivées sur le serveur (WEBPUSH_ENABLED).');
 
-        return response()->json(['message' => 'Notification de test envoyée.']);
+        // Envoi immediat (pas apres la reponse) et sans limite horaire : le resultat de chaque
+        // appareil est renvoye, pour savoir exactement ce qui bloque.
+        UserNotification::create(['user_id' => $user->id, 'type' => 'system',
+            'title' => 'Notification de test', 'body' => 'Si vous lisez ceci sur votre téléphone, tout fonctionne.', 'url' => '/notifications']);
+        try {
+            $result = $webPush->sendMany($subs, ['title' => 'Notification de test', 'body' => 'Si vous lisez ceci sur votre téléphone, tout fonctionne.',
+                'url' => '/notifications', 'type' => 'system', 'tag' => 'test-'.now()->timestamp, 'priority' => 'high'], 600, 'high', true);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['message' => 'Le serveur ne peut pas préparer les notifications : '.$e->getMessage(), 'devices' => []], 500);
+        }
+
+        $current = $request->input('endpoint') ? PushSubscription::hashEndpoint((string) $request->input('endpoint')) : null;
+        $byId = $subs->keyBy('id');
+        $devices = collect($result['devices'])->map(function ($d) use ($byId, $current) {
+            $sub = $byId->get($d['id']);
+
+            return [
+                'device' => self::deviceLabel((string) $sub?->user_agent),
+                'this_device' => $current !== null && $sub?->endpoint_hash === $current,
+                'ok' => $d['status'] >= 200 && $d['status'] < 300,
+                'status' => $d['status'],
+                'explanation' => self::explainStatus($d['status'], $d['error']),
+            ];
+        })->values();
+
+        $ok = $devices->where('ok', true)->count();
+
+        return response()->json([
+            'message' => $ok ? "Envoyée à {$ok} appareil(s) sur {$devices->count()}. Elle doit apparaître dans quelques secondes."
+                : 'Aucun appareil n\'a pu recevoir la notification (détail ci-dessous).',
+            'devices' => $devices,
+        ]);
+    }
+
+    /** Nom lisible de l'appareil, d'apres son navigateur. */
+    private static function deviceLabel(string $ua): string
+    {
+        $os = match (true) {
+            str_contains($ua, 'iPhone') || str_contains($ua, 'iPad') => 'iPhone / iPad',
+            str_contains($ua, 'Android') => 'Android',
+            str_contains($ua, 'Windows') => 'Windows',
+            str_contains($ua, 'Mac OS') => 'Mac',
+            default => 'Appareil',
+        };
+        $browser = match (true) {
+            str_contains($ua, 'Edg/') => 'Edge',
+            str_contains($ua, 'SamsungBrowser') => 'Samsung Internet',
+            str_contains($ua, 'Firefox') => 'Firefox',
+            str_contains($ua, 'Chrome') => 'Chrome',
+            str_contains($ua, 'Safari') => 'Safari',
+            default => '',
+        };
+
+        return trim($os.($browser ? ' · '.$browser : ''));
+    }
+
+    /** Traduction de la reponse du service push du navigateur. */
+    private static function explainStatus(int $status, ?string $error): string
+    {
+        return match (true) {
+            $status >= 200 && $status < 300 => 'Acceptée par le service de notification du navigateur.',
+            $status === 404 || $status === 410 => 'Abonnement expiré : il a été retiré. Rouvrez l\'application sur cet appareil pour le renouveler.',
+            $status === 401 || $status === 403 => 'Refusée : la clé du serveur ne correspond plus à l\'abonnement. Désactivez puis réactivez les notifications sur cet appareil.',
+            $status === 413 => 'Message trop long pour le service de notification.',
+            $status === 429 => 'Service de notification saturé : réessayez dans quelques minutes.',
+            $status >= 500 => 'Service de notification momentanément indisponible : réessayez plus tard.',
+            $status === 0 => 'Le serveur n\'a pas pu joindre le service de notification'.($error ? ' ('.$error.')' : '').'.',
+            default => "Refusée (code {$status})".($error ? ' : '.$error : '').'.',
+        };
     }
 
     /** @return array<string, mixed> */
