@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\PushSubscription;
 use App\Services\Push\WebPush;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -212,6 +213,35 @@ class Notifier
     public static function pushLater(array $userIds, array $payload, int $delay): void
     {
         self::push($userIds, $payload, 'high', $delay);
+    }
+
+    /**
+     * Rattrapage de la boite d'envoi (cron chaque minute, et automatismes en secours) : envoie
+     * ce qui attend depuis plus d'une minute (3 essais au plus), abandonne proprement au-dela
+     * et nettoie les anciens envois. Retourne le nombre d'envois rattrapes.
+     */
+    public static function flushOutbox(): int
+    {
+        $pending = DB::table('push_outbox')->whereNull('sent_at')->where('attempts', '<', 3)
+            ->where('created_at', '<=', now()->subMinute())
+            ->where(fn ($q) => $q->whereNull('claimed_at')->orWhere('claimed_at', '<', now()->subMinutes(5)))
+            ->orderBy('id')->limit(50)->pluck('id');
+
+        $sent = 0;
+        foreach ($pending as $id) {
+            $sent += self::deliver((int) $id) ? 1 : 0;
+        }
+
+        $abandoned = DB::table('push_outbox')->whereNull('sent_at')->where('attempts', '>=', 3)
+            ->where('claimed_at', '<', now()->subMinutes(5));
+        if ($count = $abandoned->count()) {
+            Log::error('Push : envois abandonnes apres 3 essais', ['count' => $count]);
+            $abandoned->update(['sent_at' => now()]);
+        }
+        DB::table('push_outbox')->where('created_at', '<', now()->subDays(7))->delete();
+        Cache::forever('push-outbox:last-run', now()->toIso8601String());
+
+        return $sent;
     }
 
     /**

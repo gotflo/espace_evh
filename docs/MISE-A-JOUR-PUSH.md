@@ -114,3 +114,20 @@ Paquets : `push3-backend-20260927.zip` (`app/Console/Commands/PushCheck.php`, `p
 Sur l'iPhone : supprimer l'icône « Vases d'Honneur » de l'écran d'accueil, ouvrir le site dans **Safari**, Partager →
 **Sur l'écran d'accueil**, ouvrir l'application **depuis l'icône**, se connecter, Notifications → **Activer**, puis
 **Réinitialiser** et revenir à l'écran d'accueil.
+
+## Complément 3 : envois bloqués dans la boîte d'envoi (cause trouvée)
+
+`app:push-check` en production : 4 envois en attente depuis plus de 5 minutes, et 4 abonnements pour le même iPhone.
+
+- **Cause** : sur LiteSpeed (Hostinger), PHP est interrompu dès que la réponse est envoyée ; l'envoi fait « après
+  la réponse » (annonces, événements, test différé) n'avait jamais lieu. Seul « Envoyer un test » (immédiat) partait,
+  mais l'application étant ouverte, l'iPhone ne l'affichait pas.
+- **Corrections** :
+  - `public/.htaccess` : `noabort` pour LiteSpeed (le travail après la réponse n'est plus coupé) ;
+  - la boîte d'envoi est aussi vidée par les automatismes (`app:tick`), en plus de `app:push-outbox` ;
+  - `app:push-check` affiche chaque envoi en attente et l'heure du dernier rattrapage (« JAMAIS » si le cron ne
+    lance pas la commande) ;
+  - un téléphone qui se réabonne remplace ses anciennes adresses (plus de doublons).
+
+Paquet : `push4-backend-20260927.zip` (6 fichiers, dont `public/.htaccess`). Puis :
+`php artisan optimize:clear && php artisan config:cache && php artisan route:cache && php artisan app:push-outbox && php artisan app:push-check`.

@@ -168,6 +168,13 @@ class MyNotificationController extends Controller
             ],
         );
 
+        // Un meme telephone reinstalle (ou reabonne) obtient une nouvelle adresse : les anciennes
+        // du meme membre sur ce meme telephone et navigateur ne recoivent plus rien, on les retire.
+        PushSubscription::where('user_id', $request->user()->id)
+            ->where('user_agent', mb_substr((string) $request->userAgent(), 0, 250))
+            ->where('endpoint_hash', '!=', PushSubscription::hashEndpoint($data['endpoint']))
+            ->delete();
+
         return response()->json(['message' => 'Notifications activées sur cet appareil.']);
     }
 

@@ -11,6 +11,12 @@
 
     RewriteEngine On
 
+    # LiteSpeed (Hostinger) : ne pas interrompre PHP une fois la reponse envoyee. Sans cela,
+    # le travail fait apres la reponse (envoi des notifications push) est coupe net.
+    <IfModule LiteSpeed>
+        RewriteRule .* - [E=noabort:1,E=noconntimeout:1]
+    </IfModule>
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

@@ -106,6 +106,40 @@ class PushDeliveryTest extends TestCase
         Http::assertSentCount(2);
     }
 
+    public function test_automations_also_flush_the_outbox_if_the_minute_cron_does_not_run(): void
+    {
+        $member = $this->member('+14187100008');
+        $this->subscribe($member, 'https://web.push.apple.com/abc', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7) Safari/604.1');
+        Http::fake(['web.push.apple.com/*' => Http::response('', 201)]);
+        $id = DB::table('push_outbox')->insertGetId(['user_ids' => json_encode([$member->id]), 'urgency' => 'high',
+            'payload' => json_encode(['title' => 'Test', 'body' => '', 'url' => '/']), 'created_at' => now()->subMinutes(3)]);
+
+        $this->artisan('app:tick', ['--only' => 'push-outbox'])->assertSuccessful();
+        $this->assertNotNull(DB::table('push_outbox')->where('id', $id)->value('sent_at'));
+        Http::assertSentCount(1);
+        $this->artisan('app:push-check')->expectsOutputToContain('Dernier rattrapage (cron chaque minute, automatismes en secours) : il y a 0 min')->assertSuccessful();
+    }
+
+    public function test_resubscribing_the_same_phone_removes_its_old_addresses_only(): void
+    {
+        $member = $this->member('+14187100009');
+        $iphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7) Safari/604.1';
+        $this->subscribe($member, 'https://web.push.apple.com/ancienne-1', $iphone);
+        $this->subscribe($member, 'https://web.push.apple.com/ancienne-2', $iphone);
+        $this->subscribe($member, 'https://fcm.googleapis.com/fcm/send/ordinateur', 'Mozilla/5.0 (Windows NT 10.0) Chrome/140.0');
+        $other = $this->member('+14187100010');
+        $this->subscribe($other, 'https://web.push.apple.com/autre-membre', $iphone);
+
+        Sanctum::actingAs($member);
+        $device = WebPush::newKeyPair();
+        $this->withHeader('User-Agent', $iphone)->postJson('/api/me/push/subscribe', ['endpoint' => 'https://web.push.apple.com/nouvelle',
+            'keys' => ['p256dh' => WebPush::b64uEncode($device['public_raw']), 'auth' => WebPush::b64uEncode(random_bytes(16))]])->assertOk();
+
+        $this->assertSame(['https://fcm.googleapis.com/fcm/send/ordinateur', 'https://web.push.apple.com/nouvelle'],
+            PushSubscription::where('user_id', $member->id)->orderBy('endpoint')->pluck('endpoint')->all());
+        $this->assertSame(1, PushSubscription::where('user_id', $other->id)->count(), 'les appareils des autres membres ne changent pas');
+    }
+
     public function test_normal_sending_goes_through_the_outbox_and_is_marked_sent(): void
     {
         $member = $this->member('+14187100003');
