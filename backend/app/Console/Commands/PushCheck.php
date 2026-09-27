@@ -6,6 +6,8 @@ use App\Models\PushSubscription;
 use App\Models\User;
 use App\Services\Push\WebPush;
 use Illuminate\Console\Command;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -45,9 +47,15 @@ class PushCheck extends Command
         $waiting = DB::table('push_outbox')->whereNull('sent_at')->count();
         $stuck = DB::table('push_outbox')->whereNull('sent_at')->where('created_at', '<', now()->subMinutes(5))->count();
         $this->line("Boîte d'envoi : {$waiting} en attente, dont {$stuck} depuis plus de 5 min (le cron doit les rattraper)");
+        foreach (DB::table('push_outbox')->whereNull('sent_at')->orderBy('id')->limit(10)->get() as $r) {
+            $this->line("  en attente #{$r->id} du {$r->created_at} : {$r->attempts} essai(s)".($r->claimed_at ? ", pris le {$r->claimed_at}" : ', jamais pris').($r->result ? " - {$r->result}" : ''));
+        }
         foreach (DB::table('push_outbox')->whereNotNull('result')->orderByDesc('id')->limit(5)->get(['id', 'created_at', 'result']) as $r) {
             $this->line("  envoi #{$r->id} du {$r->created_at} : {$r->result}");
         }
+        $flushed = Cache::get('push-outbox:last-run');
+        $this->line('Dernier rattrapage (cron chaque minute, automatismes en secours) : '
+            .($flushed ? 'il y a '.(int) Carbon::parse($flushed)->diffInMinutes(now(), true).' min' : 'JAMAIS - le cron ne lance pas app:push-outbox'));
 
         $who = $this->argument('membre');
         if (! $who) {

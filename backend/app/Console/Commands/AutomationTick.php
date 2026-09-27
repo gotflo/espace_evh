@@ -37,7 +37,7 @@ class AutomationTick extends Command
     /** Cle de cache du dernier passage complet (heure, duree, resultat de chaque etape). */
     public const STATUS_KEY = 'automation:last-run';
 
-    protected $signature = 'app:tick {--only= : activity | event-reminders | service-digest | birthdays | weddings | tasks | fiss | profiles | monthly-report | followups | tribe-changes | prune}';
+    protected $signature = 'app:tick {--only= : activity | event-reminders | service-digest | birthdays | weddings | tasks | fiss | profiles | monthly-report | followups | tribe-changes | push-outbox | prune}';
 
     protected $description = 'Activité des membres, rappels, anniversaires, FISS, profils, relances et nettoyage.';
 
@@ -55,6 +55,8 @@ class AutomationTick extends Command
             'monthly-report' => fn () => $this->monthlyReports(),
             'followups' => fn () => $this->followUps(),
             'tribe-changes' => fn () => TribeChangeService::completeApproved(),
+            // Secours de app:push-outbox : aucun push ne reste bloque si seule cette tache tourne.
+            'push-outbox' => fn () => Notifier::flushOutbox(),
             'prune' => fn () => $this->prune(),
         ];
         $only = $this->option('only');
