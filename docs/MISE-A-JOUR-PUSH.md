@@ -95,3 +95,22 @@ Sur l'iPhone, si « Tester dans 10 s » ne montre toujours rien : Réglages → 
 « Vases d'Honneur » → autoriser, style « Bannières » ; vérifier qu'aucun mode **Concentration** n'est actif.
 Après la mise à jour, fermer complètement l'application (balayer vers le haut) puis la rouvrir, pour que le nouveau
 service de notification soit pris en compte.
+
+## Complément 2 : abonnement de l'iPhone et manifeste
+
+Vérifications faites : le chiffrement produit par le serveur a été déchiffré par une implémentation indépendante
+(module cryptographique de Node, RFC 8291) ; il est conforme. Le service d'Apple accepte les messages. Reste le lien
+entre le serveur et l'application installée sur le téléphone.
+
+- **Bouton « Réinitialiser »** (Notifications) : supprime l'abonnement de cet appareil (téléphone et serveur), en
+  crée un nouveau, puis envoie un test 10 secondes plus tard.
+- **`php artisan app:push-check`** liste désormais chaque appareil : membre, modèle et version (ex. « iPhone iOS
+  18.1 »), date d'abonnement, dernier message accepté.
+- **Manifeste** servi en `application/manifest+json` (il l'était en texte brut) : `public/.htaccess`.
+
+Paquets : `push3-backend-20260927.zip` (`app/Console/Commands/PushCheck.php`, `public/.htaccess`) et
+`push3-public-20260927.zip` (application compilée, `index.html` en dernier). Puis `php artisan optimize:clear`.
+
+Sur l'iPhone : supprimer l'icône « Vases d'Honneur » de l'écran d'accueil, ouvrir le site dans **Safari**, Partager →
+**Sur l'écran d'accueil**, ouvrir l'application **depuis l'icône**, se connecter, Notifications → **Activer**, puis
+**Réinitialiser** et revenir à l'écran d'accueil.

@@ -33,6 +33,12 @@ class PushCheck extends Command
         $subs = PushSubscription::count();
         $hosts = PushSubscription::pluck('endpoint')->map(fn ($e) => (string) parse_url($e, PHP_URL_HOST))->countBy();
         $this->line("Appareils abonnés : {$subs}".($hosts->isNotEmpty() ? ' ('.$hosts->map(fn ($n, $h) => "{$h} : {$n}")->implode(', ').')' : ''));
+        foreach (PushSubscription::with('user.profile')->orderBy('id')->limit(30)->get() as $s) {
+            $this->line(sprintf('  appareil #%d : %s (%s) · %s · abonné le %s · dernier message accepté : %s', $s->id,
+                $s->user?->profile?->full_name ?: 'membre #'.$s->user_id, substr((string) $s->user?->phone, -4),
+                self::device((string) $s->user_agent), $s->created_at?->format('Y-m-d H:i') ?? '?',
+                $s->last_used_at?->format('Y-m-d H:i') ?? 'jamais'));
+        }
         $recent = PushSubscription::where('last_used_at', '>=', now()->subDay())->count();
         $this->line("Appareils ayant reçu un message dans les 24 h : {$recent}");
 
@@ -69,5 +75,18 @@ class PushCheck extends Command
         $this->info("Envoyés : {$result['sent']}, expirés (retirés) : {$result['expired']}, en échec : {$result['failed']}.");
 
         return $result['sent'] > 0 ? self::SUCCESS : self::FAILURE;
+    }
+
+    /** Systeme et version (ex. « iPhone iOS 18.1 »), d'apres le navigateur de l'appareil. */
+    private static function device(string $ua): string
+    {
+        if (preg_match('/(iPhone|iPad).*? OS (\d+)_(\d+)/', $ua, $m)) {
+            return "{$m[1]} iOS {$m[2]}.{$m[3]}";
+        }
+        if (preg_match('/Android (\d+)/', $ua, $m)) {
+            return 'Android '.$m[1];
+        }
+
+        return str_contains($ua, 'Windows') ? 'Windows' : (str_contains($ua, 'Mac OS') ? 'Mac' : 'appareil inconnu');
     }
 }
