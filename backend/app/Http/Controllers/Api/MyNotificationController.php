@@ -197,6 +197,15 @@ class MyNotificationController extends Controller
         abort_if($subs->isEmpty(), 422, 'Aucun appareil n\'est abonné pour ce compte. Activez les notifications sur cet appareil, puis réessayez.');
         abort_unless(config('services.webpush.enabled'), 422, 'Les notifications push sont désactivées sur le serveur (WEBPUSH_ENABLED).');
 
+        // Test differe : envoye dans 10 s, le temps de revenir a l'ecran d'accueil (l'iPhone
+        // n'affiche pas la notification quand l'application est ouverte).
+        if ($request->boolean('delayed')) {
+            Notifier::pushLater([$user->id], ['title' => 'Notification de test', 'body' => 'Elle s\'affiche bien sur votre téléphone : tout fonctionne.',
+                'url' => '/notifications', 'type' => 'system', 'tag' => 'test-'.now()->timestamp, 'priority' => 'high'], 10);
+
+            return response()->json(['message' => 'Revenez à l\'écran d\'accueil de votre téléphone maintenant : la notification arrive dans 10 secondes.', 'devices' => []]);
+        }
+
         // Envoi immediat (pas apres la reponse) et sans limite horaire : le resultat de chaque
         // appareil est renvoye, pour savoir exactement ce qui bloque.
         UserNotification::create(['user_id' => $user->id, 'type' => 'system',

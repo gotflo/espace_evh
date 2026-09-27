@@ -84,7 +84,9 @@ self.addEventListener('push', (event) => {
     } catch { /* non supporte */ }
     // Previent les onglets ouverts : la cloche se met a jour immediatement.
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-    clients.forEach((c) => c.postMessage({ type: 'evh-push' }))
+    // (avec le texte : si l'application est ouverte, elle l'affiche elle-meme, car l'iPhone
+    // n'affiche pas la notification systeme quand l'application est au premier plan).
+    clients.forEach((c) => c.postMessage({ type: 'evh-push', title, body: options.body }))
   })())
 })
 
