@@ -140,6 +140,23 @@ class PushDeliveryTest extends TestCase
         $this->assertSame(1, PushSubscription::where('user_id', $other->id)->count(), 'les appareils des autres membres ne changent pas');
     }
 
+    public function test_the_phone_acknowledges_what_it_received_and_displayed(): void
+    {
+        $member = $this->member('+14187100011');
+        $sub = $this->subscribe($member, 'https://web.push.apple.com/recu', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7) Safari/604.1');
+
+        // Sans session : le service worker s'identifie par son adresse d'abonnement.
+        $this->postJson('/api/push/receipt', ['endpoint' => $sub->endpoint, 'status' => 'error', 'error' => 'TypeError: renotify'])->assertNoContent();
+        $this->assertSame('TypeError: renotify', $sub->fresh()->last_error);
+        $this->postJson('/api/push/receipt', ['endpoint' => $sub->endpoint, 'status' => 'shown'])->assertNoContent();
+        $this->assertNull($sub->fresh()->last_error);
+        $this->assertNotNull($sub->fresh()->last_received_at);
+
+        $this->postJson('/api/push/receipt', ['endpoint' => 'https://web.push.apple.com/inconnue', 'status' => 'shown'])->assertNoContent();
+        $this->postJson('/api/push/receipt', ['endpoint' => 'http://ailleurs', 'status' => 'autre'])->assertStatus(422);
+        $this->artisan('app:push-check')->expectsOutputToContain('notification affichée')->assertSuccessful();
+    }
+
     public function test_normal_sending_goes_through_the_outbox_and_is_marked_sent(): void
     {
         $member = $this->member('+14187100003');

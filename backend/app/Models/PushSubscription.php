@@ -9,10 +9,10 @@ class PushSubscription extends Model
 {
     protected $fillable = [
         'user_id', 'endpoint', 'endpoint_hash', 'public_key', 'auth_token', 'content_encoding',
-        'user_agent', 'last_used_at',
+        'user_agent', 'last_used_at', 'last_received_at', 'last_error',
     ];
 
-    protected $casts = ['last_used_at' => 'datetime'];
+    protected $casts = ['last_used_at' => 'datetime', 'last_received_at' => 'datetime'];
 
     protected $hidden = ['public_key', 'auth_token'];
 

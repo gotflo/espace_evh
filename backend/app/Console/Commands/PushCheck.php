@@ -40,6 +40,9 @@ class PushCheck extends Command
                 $s->user?->profile?->full_name ?: 'membre #'.$s->user_id, substr((string) $s->user?->phone, -4),
                 self::device((string) $s->user_agent), $s->created_at?->format('Y-m-d H:i') ?? '?',
                 $s->last_used_at?->format('Y-m-d H:i') ?? 'jamais'));
+            // Accuse de reception envoye par le telephone lui-meme.
+            $this->line('      reçu sur le téléphone : '.($s->last_received_at?->format('Y-m-d H:i') ?? 'jamais (le message n\'arrive pas jusqu\'à l\'application)')
+                .($s->last_error ? ' · affichage en ERREUR : '.$s->last_error : ($s->last_received_at ? ' · notification affichée' : '')));
         }
         $recent = PushSubscription::where('last_used_at', '>=', now()->subDay())->count();
         $this->line("Appareils ayant reçu un message dans les 24 h : {$recent}");

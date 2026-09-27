@@ -56,6 +56,10 @@ Route::get('/calendar/feed/{token}.ics', [CalendarController::class, 'ics'])
 // --- Etat de sante (surveillance externe), sans donnee sensible ---
 Route::get('/health', HealthController::class)->middleware('throttle:30,1');
 
+// Accuse de reception d'un push, envoye par l'appareil (service worker, sans session) :
+// l'adresse d'abonnement, connue seulement du navigateur et du serveur, identifie l'appareil.
+Route::post('/push/receipt', [MyNotificationController::class, 'receipt'])->middleware('throttle:60,1');
+
 // --- Routes protegees (jeton Sanctum requis) ---
 Route::middleware(['auth:sanctum', 'throttle:150,1', TrackActivity::class])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);

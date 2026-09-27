@@ -10,6 +10,7 @@ use App\Services\Push\WebPush;
 use App\Support\Like;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 
@@ -247,6 +248,26 @@ class MyNotificationController extends Controller
                 : 'Aucun appareil n\'a pu recevoir la notification (détail ci-dessous).',
             'devices' => $devices,
         ]);
+    }
+
+    /**
+     * Accuse de reception envoye par le service worker de l'appareil : le push est arrive
+     * (« shown » : notification affichee, « error » : l'affichage a echoue, avec la raison).
+     * Reponse identique que l'appareil soit connu ou non (rien a deviner de l'exterieur).
+     */
+    public function receipt(Request $request): Response
+    {
+        $data = $request->validate([
+            'endpoint' => ['required', 'string', 'max:2000', 'starts_with:https://'],
+            'status' => ['required', 'in:shown,error'],
+            'error' => ['nullable', 'string', 'max:250'],
+        ]);
+        PushSubscription::where('endpoint_hash', PushSubscription::hashEndpoint($data['endpoint']))->update([
+            'last_received_at' => now(),
+            'last_error' => $data['status'] === 'error' ? mb_substr((string) ($data['error'] ?? 'erreur inconnue'), 0, 250) : null,
+        ]);
+
+        return response()->noContent();
     }
 
     /** Nom lisible de l'appareil, d'apres son navigateur. */
