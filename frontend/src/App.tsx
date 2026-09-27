@@ -112,6 +112,9 @@ function PushBridge() {
         const url = new URL(e.data.url, window.location.origin)
         if (url.origin === window.location.origin) navigate(url.pathname + url.search + url.hash)
         void pollNow()
+      } else if (e.data?.type === 'evh-push' && typeof e.data.title === 'string' && document.visibilityState === 'visible') {
+        // Application ouverte : la notification s'affiche ici (l'iPhone ne la montre pas dans la barre).
+        toast.info(typeof e.data.body === 'string' ? e.data.body : '', { title: e.data.title })
       } else if (e.data?.type === 'evh-push-resubscribe') {
         syncPush()
       }

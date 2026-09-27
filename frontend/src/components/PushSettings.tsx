@@ -49,12 +49,12 @@ export function PushSettings({ variant = 'card' }: { variant?: 'card' | 'prompt'
 
   // Test reel : reenregistre cet appareil aupres du serveur, envoie tout de suite, puis affiche
   // ce que le service de notification a repondu pour chaque appareil du compte.
-  async function test() {
+  async function test(delayed = false) {
     setBusy(true); setReport(null)
     try {
       await enablePush()
       const endpoint = await currentEndpoint()
-      setReport(await api<TestReport>('/me/push/test', { method: 'POST', body: { endpoint }, toast: false }))
+      setReport(await api<TestReport>('/me/push/test', { method: 'POST', body: { endpoint, delayed }, toast: false }))
     } catch (e) {
       const message = e instanceof PushError ? e.message : e instanceof ApiError ? e.firstMessage : "Le test n'a pas pu être lancé."
       setReport({ message, devices: [] })
@@ -106,14 +106,17 @@ export function PushSettings({ variant = 'card' }: { variant?: 'card' | 'prompt'
         </p>
       )}
       {state === 'off' && <p className="helper">Activez les notifications pour être prévenu même lorsque l'application est fermée.</p>}
-      {state === 'on' && <p className="helper">Vous recevez les annonces, rappels d'événements, tâches et réponses sur cet appareil.</p>}
+      {state === 'on' && <p className="helper">Vous recevez les annonces, rappels d'événements, tâches et réponses sur cet appareil.
+        Quand l'application est ouverte, elles s'affichent dans l'application ; pour voir la notification du téléphone,
+        choisissez « Tester dans 10 s » puis revenez à l'écran d'accueil.</p>}
 
 
       <div className="push-actions">
         {state === 'off' && <button className="btn btn-primary small" disabled={busy} onClick={enable}>{busy ? <span className="spinner" /> : 'Activer les notifications'}</button>}
         {state === 'on' && (
           <>
-            <button className="btn btn-ghost small" disabled={busy} onClick={test}>Envoyer un test</button>
+            <button className="btn btn-ghost small" disabled={busy} onClick={() => test()}>Envoyer un test</button>
+            <button className="btn btn-ghost small" disabled={busy} onClick={() => test(true)}>Tester dans 10 s</button>
             <button className="btn-link" disabled={busy} onClick={disable}>Désactiver sur cet appareil</button>
           </>
         )}

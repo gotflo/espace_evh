@@ -173,7 +173,7 @@ class Notifier
      * @param  array<int>  $userIds
      * @param  array<string, mixed>  $payload
      */
-    private static function push(array $userIds, array $payload, string $urgency): void
+    private static function push(array $userIds, array $payload, string $urgency, int $delay = 0): void
     {
         $id = DB::table('push_outbox')->insertGetId([
             'user_ids' => json_encode(array_values($userIds)),
@@ -190,12 +190,28 @@ class Notifier
         if (app()->runningInConsole()) {
             DB::afterCommit($job);
         } else {
-            defer(function () use ($job) {
+            defer(function () use ($job, $delay) {
                 ignore_user_abort(true);
                 @set_time_limit(300);
+                if ($delay > 0) {
+                    sleep($delay);
+                }
                 $job();
             });
         }
+    }
+
+    /**
+     * Push seul (sans notification dans la cloche, sans limite ni preferences), envoye apres
+     * $delay secondes : test de l'utilisateur, le temps de quitter l'application (l'iPhone
+     * n'affiche pas la notification quand l'application est au premier plan).
+     *
+     * @param  array<int>  $userIds
+     * @param  array<string, mixed>  $payload
+     */
+    public static function pushLater(array $userIds, array $payload, int $delay): void
+    {
+        self::push($userIds, $payload, 'high', $delay);
     }
 
     /**

@@ -147,6 +147,21 @@ class PushDeliveryTest extends TestCase
             'Aucun appareil n\'est abonné pour ce compte. Activez les notifications sur cet appareil, puis réessayez.');
     }
 
+    public function test_delayed_test_goes_through_the_outbox_without_limits(): void
+    {
+        $member = $this->member('+14187100007');
+        $this->subscribe($member, 'https://web.push.apple.com/iphone', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0) Safari/604.1');
+        Http::fake(['web.push.apple.com/*' => Http::response('', 201)]);
+        Sanctum::actingAs($member);
+
+        $this->postJson('/api/me/push/test', ['delayed' => true])->assertOk()
+            ->assertJsonPath('message', 'Revenez à l\'écran d\'accueil de votre téléphone maintenant : la notification arrive dans 10 secondes.');
+        $row = DB::table('push_outbox')->sole();
+        $this->assertSame('high', $row->urgency);
+        $this->assertNotNull($row->sent_at);
+        Http::assertSentCount(1);
+    }
+
     public function test_health_reports_push_readiness_and_waiting_messages(): void
     {
         $this->artisan('app:tick')->assertSuccessful();

@@ -75,3 +75,23 @@ boîte d'envoi est traitée automatiquement chaque minute (rien à ajouter dans 
 php artisan migrate:rollback --step=1
 ```
 puis remettre les anciennes versions des fichiers ci-dessus.
+
+## Complément : notification visible dans la barre du téléphone
+
+Constat en production : un seul appareil abonné (iPhone) ; le test apparaît dans la cloche mais pas dans la barre
+du téléphone. Le service d'Apple accepte bien le message. En revanche, **l'iPhone n'affiche pas la notification
+système quand l'application est ouverte au premier plan**, ce qui est toujours le cas au moment d'appuyer sur
+« Envoyer un test ».
+
+- **« Tester dans 10 s »** (page Notifications) : le push part 10 secondes plus tard, le temps de revenir à l'écran
+  d'accueil ; il passe par la boîte d'envoi (rattrapé par le cron si l'attente est interrompue).
+- **Application ouverte** : un push reçu s'affiche désormais en message dans l'application (en plus de la cloche).
+
+Fichiers : `app/Services/Notifier.php`, `app/Http/Controllers/Api/MyNotificationController.php` (paquet
+`push2-backend-20260927.zip`), et l'application compilée (`push2-public-20260927.zip`, qui contient le nouveau
+`sw.js`). Commandes : `php artisan optimize:clear && php artisan config:cache && php artisan route:cache`.
+
+Sur l'iPhone, si « Tester dans 10 s » ne montre toujours rien : Réglages → **Notifications** → application
+« Vases d'Honneur » → autoriser, style « Bannières » ; vérifier qu'aucun mode **Concentration** n'est actif.
+Après la mise à jour, fermer complètement l'application (balayer vers le haut) puis la rouvrir, pour que le nouveau
+service de notification soit pris en compte.
