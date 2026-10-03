@@ -6,6 +6,7 @@ import { OfflineBanner } from './OfflineBanner'
 import { useUnreadCount } from '../notifications'
 import { Icon } from './Icon'
 import { ICONS } from '../utils/icons'
+import { APP_NAME } from '../config'
 
 export function AppLayout({ title, subtitle, actions, children }: {
   title: string
@@ -28,9 +29,17 @@ export function AppLayout({ title, subtitle, actions, children }: {
   const canReports = hasPermission('reports.view')
   const canAudit = hasPermission('audit.view')
   const canContent = hasPermission('content.manage')
+  // Rapports mensuels : a remplir (patriarche, responsable de departement) ou a lire (rapports).
+  const canLeaderReports = canReports
+    || roles.some((r) => (r.key === 'patriarche' && r.scope_kind === 'tribe') || r.key === 'department_leader')
+  // Annuaire des responsables : pasteurs (toute l'eglise), AP et patriarches (leurs tribus).
+  const canLeaders = hasPermission('members.view_all')
+    || (hasPermission('members.view_scope') && roles.some((r) => r.scope_kind === 'tribe' && r.key !== 'department_leader'))
+  // Rapport hebdomadaire : le Garde d'un GEM.
+  const isGarde = roles.some((r) => r.key === 'garde' && r.scope_kind === 'gem')
 
   const isLeader = canViewMembers || canAttendance || canExercises || canAnnounce || canEvents
-    || canRequests || canManageRoles || canManageGems || canManageOrg || canValidate || canReports || canAudit || canContent
+    || canRequests || canManageRoles || canManageGems || canManageOrg || canValidate || canReports || canLeaderReports || canAudit || canContent
 
   const initials = ((profile?.first_name?.[0] ?? '') + (profile?.last_name?.[0] ?? '')).toUpperCase()
   const mainRole = roles[0]?.name ?? 'Fidèle'
@@ -51,7 +60,7 @@ export function AppLayout({ title, subtitle, actions, children }: {
         <div className="sidebar-brand">
           <div className="sidebar-logo"><img src="/logo-vh.png" alt="" /></div>
           <div className="sidebar-brand-text">
-            <span>Vases d'Honneur</span>
+            <span>{APP_NAME}</span>
             <small>Chicoutimi</small>
           </div>
         </div>
@@ -69,7 +78,10 @@ export function AppLayout({ title, subtitle, actions, children }: {
 
           {isLeader && <span className="nav-section">Gestion</span>}
           {canViewMembers && <NavLink to="/admin/membres" className="nav-item"><Icon path={ICONS.members} /><span>Membres</span></NavLink>}
+          {canLeaders && <NavLink to="/admin/responsables" className="nav-item"><Icon path={ICONS.roles} /><span>Responsables</span></NavLink>}
+          {isGarde && <NavLink to="/admin/rapport-gem" className="nav-item"><Icon path={ICONS.gem} /><span>Rapport de GEM</span></NavLink>}
           {canReports && <NavLink to="/admin/rapports" className="nav-item"><Icon path={ICONS.reports} /><span>Rapports</span></NavLink>}
+          {canLeaderReports && <NavLink to="/admin/rapports-mensuels" className="nav-item"><Icon path={ICONS.clipboard} /><span>Rapports mensuels</span></NavLink>}
           {canValidate && <NavLink to="/admin/validations" className="nav-item"><Icon path={ICONS.validate} /><span>Validations</span></NavLink>}
           {canAttendance && <NavLink to="/admin/presences" className="nav-item"><Icon path={ICONS.attendance} /><span>Présences</span></NavLink>}
           {canRequests && <NavLink to="/admin/demandes" className="nav-item"><Icon path={ICONS.requests} /><span>Demandes</span></NavLink>}

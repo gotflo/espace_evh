@@ -49,6 +49,7 @@ class User extends Authenticatable
             'last_seen_at' => 'datetime',
             'activity_changed_at' => 'datetime',
             'notification_prefs' => 'array',
+            'blocked_at' => 'datetime',
         ];
     }
 
@@ -271,6 +272,35 @@ class User extends Authenticatable
         }
 
         return $this->hasInScope($target);
+    }
+
+    /**
+     * Tribus dont l'utilisateur voit les fiches de sante spirituelle (FISS) : null = toutes
+     * (autorite pastorale), sinon les tribus dont il est responsable (patriarche, Assistant Pasteur).
+     * Un Garde, un responsable de departement ou un accompagnateur suivent leurs membres SANS voir
+     * leurs fiches : la portee GEM / departement / fidele confie ne donne jamais acces aux FISS.
+     *
+     * @return array<int>|null
+     */
+    public function fissTribeIds(): ?array
+    {
+        if (! $this->hasPermission('spiritual.view')) {
+            return [];
+        }
+
+        return $this->hasPermission('members.view_all') ? null : $this->scopeTribeIds();
+    }
+
+    /** Peut-il voir les FISS de ce membre (contenu, fiche du mois remplie ou non, historique) ? */
+    public function canViewFissOf(self $target): bool
+    {
+        $tribeIds = $this->fissTribeIds();
+        if ($tribeIds === null) {
+            return true;
+        }
+        $tribeId = $target->relationLoaded('profile') ? $target->profile?->tribe_id : $target->profile()->value('tribe_id');
+
+        return $tribeId && in_array((int) $tribeId, $tribeIds, true);
     }
 
     /** Le membre fait-il partie de la portee de l'utilisateur ? */

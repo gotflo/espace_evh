@@ -215,9 +215,8 @@ class MyNotificationController extends Controller
         }
 
         // Envoi immediat (pas apres la reponse) et sans limite horaire : le resultat de chaque
-        // appareil est renvoye, pour savoir exactement ce qui bloque.
-        UserNotification::create(['user_id' => $user->id, 'type' => 'system',
-            'title' => 'Notification de test', 'body' => 'Si vous lisez ceci sur votre téléphone, tout fonctionne.', 'url' => '/notifications']);
+        // appareil est renvoye, pour savoir exactement ce qui bloque. Un test n'apparait jamais
+        // dans la liste des notifications du membre (push seul).
         try {
             $result = $webPush->sendMany($subs, ['title' => 'Notification de test', 'body' => 'Si vous lisez ceci sur votre téléphone, tout fonctionne.',
                 'url' => '/notifications', 'type' => 'system', 'tag' => 'test-'.now()->timestamp, 'priority' => 'high'], 600, 'high', true);

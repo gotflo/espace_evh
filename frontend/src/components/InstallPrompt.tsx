@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { APP_NAME } from '../config'
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
@@ -56,10 +57,10 @@ export function InstallPrompt() {
   if (!show) return null
 
   return (
-    <div className="install-banner" role="dialog" aria-label="Installer l'application">
+    <div className="install-banner" role="dialog" aria-label={`Installer ${APP_NAME}`}>
       <img src="/icon-192.png" alt="" className="install-icon" />
       <div className="install-text">
-        <strong>Installer l'application</strong>
+        <strong>Installer {APP_NAME}</strong>
         {isIos()
           ? <small>Appuyez sur Partager puis « Sur l’écran d’accueil ».</small>
           : <small>Accès rapide depuis votre écran d’accueil.</small>}

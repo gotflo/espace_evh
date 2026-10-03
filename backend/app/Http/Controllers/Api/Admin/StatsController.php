@@ -29,7 +29,14 @@ class StatsController extends Controller
         $active = $scope(Profile::query())->whereHas('user', fn ($u) => $u->where(fn ($w) => $w->where('activity_override', 'active')
             ->orWhere(fn ($x) => $x->whereNull('activity_override')->where('activity_status', 'active'))))->count();
         $incomplete = $scope(Profile::query())->where('is_completed', true)->where('completion', '<', 100)->count();
-        $fissFilled = $scope(Profile::query())->whereIn('user_id', \App\Models\SpiritualHealthForm::where('period', now()->format('Y-m'))->select('user_id'))->count();
+        // FISS du mois : seulement sur les membres dont l'utilisateur voit les fiches (ses tribus, ou
+        // tous) ; un Garde ou un responsable de departement n'a pas ce chiffre.
+        $fissTribes = $user->fissTribeIds();
+        $fissScope = fn ($query) => $scope($query)->where('is_completed', true)
+            ->when($fissTribes !== null, fn ($q) => $q->whereIn('tribe_id', $fissTribes ?: [0]));
+        $fissMembers = $fissTribes === [] ? null : $fissScope(Profile::query())->count();
+        $fissFilled = $fissTribes === [] ? null
+            : $fissScope(Profile::query())->whereIn('user_id', \App\Models\SpiritualHealthForm::where('period', now()->format('Y-m'))->select('user_id'))->count();
 
         // Repartition par tribu (limitee aux tribus visibles).
         $byTribe = $scope(Profile::query())
@@ -54,7 +61,7 @@ class StatsController extends Controller
             'completed' => $completed,
             'incomplete_profiles' => $incomplete,
             'fiss_filled' => $fissFilled,
-            'fiss_rate' => $completed ? round($fissFilled / $completed * 100) : null,
+            'fiss_rate' => $fissMembers ? round($fissFilled / $fissMembers * 100) : null,
             'by_tribe' => $byTribe,
             'recent' => $recent,
             'new_members' => NewMemberController::counts($user),

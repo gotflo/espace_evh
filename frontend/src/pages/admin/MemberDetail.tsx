@@ -301,8 +301,8 @@ export default function MemberDetail() {
         </section>
       )}
 
-      {canViewSpiritual && id && <MemberFissPanel userId={id} />}
-      {canFissHistory && id && <MemberFissHistory userId={id} />}
+      {canViewSpiritual && data.can_view_fiss && id && <MemberFissPanel userId={id} />}
+      {canFissHistory && data.can_view_fiss && id && <MemberFissHistory userId={id} />}
       {canViewSpiritual && id && <SpiritualPanel userId={id} canRecord={canRecordSpiritual && manage} />}
       {canManageEval && id && <EvaluationsPanel userId={id} canManage={manage} />}
     </AppLayout>

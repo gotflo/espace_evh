@@ -32,8 +32,11 @@ export default function Members() {
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
-  const { hasPermission } = useAuth()
+  const { hasPermission, roles } = useAuth()
   const allTribes = hasPermission('members.view_all')
+  // FISS : pasteurs et responsables de tribu (patriarche, AP) ; le serveur applique la meme regle.
+  const seesFiss = hasPermission('spiritual.view') && (allTribes || roles.some((r) => r.scope_kind === 'tribe'))
+  const tabs = seesFiss ? TABS : TABS.filter((t) => t.key !== 'sans-fiss')
 
   useEffect(() => {
     if (allTribes) getReference().then((r) => setTribes(r.tribes)).catch(() => {})
@@ -74,7 +77,7 @@ export default function Members() {
       <section className="panel">
         <div className="toolbar">
           <div className="filter-chips" role="radiogroup" aria-label="Filtre">
-            {TABS.map((t) => (
+            {tabs.map((t) => (
               <button key={t.key} role="radio" aria-checked={statut === t.key} className={`chip-toggle ${statut === t.key ? 'on' : ''}`} onClick={() => setParam('statut', t.key)}>
                 {t.label}
               </button>
@@ -107,7 +110,7 @@ export default function Members() {
                 <span className="member-meta">{[m.tribe, ...m.departments].filter(Boolean).join(' · ') || 'Sans tribu ni département'}</span>
                 <span className="member-flags">
                   {m.completion < 100 && <span className="flag warn" title="Profil incomplet">Profil {m.completion} %</span>}
-                  {!m.fiss_current && m.activity === 'active' && <span className="flag" title="FISS du mois non remplie">FISS à remplir</span>}
+                  {m.fiss_current === false && m.activity === 'active' && <span className="flag" title="FISS du mois non remplie">FISS à remplir</span>}
                 </span>
               </span>
               <span className="member-roles">

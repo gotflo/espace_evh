@@ -35,13 +35,19 @@ return [
         ],
     ],
 
-    // Envoi de SMS pour les codes OTP. 'log' en dev, 'twilio' plus tard.
+    // Envoi/validation des codes OTP. 'log' en dev, 'twilio_verify' en production.
     'sms' => [
         'driver' => env('SMS_DRIVER', 'log'),
         'twilio' => [
-            'sid' => env('TWILIO_SID'),
-            'token' => env('TWILIO_TOKEN'),
-            'from' => env('TWILIO_FROM'),
+            'sid' => env('TWILIO_ACCOUNT_SID'),
+            'token' => env('TWILIO_AUTH_TOKEN'),
+            'api_key_sid' => env('TWILIO_API_KEY_SID'),
+            'api_key_secret' => env('TWILIO_API_KEY_SECRET'),
+            'verify_service_sid' => env('TWILIO_VERIFY_SERVICE_SID'),
+            // Modele Verify (HJ...) qui affiche le nom de l'application dans le SMS ; facultatif.
+            'template_sid' => env('TWILIO_VERIFY_TEMPLATE_SID'),
+            // Delai avant le second essai d'un envoi qui a echoue pour une raison passagere.
+            'retry_delay_ms' => (int) env('TWILIO_RETRY_DELAY_MS', 1500),
         ],
     ],
 

@@ -83,3 +83,16 @@ cette permission : il ne voit que ses tribus assignées.
 - Graphiques SVG maison (`components/charts.tsx`) : palette validée pour le daltonisme, tableau de données associé,
   mêmes fonctions pour l'écran et le PDF.
 - Service worker : cache des fichiers `/assets/` (immuables), réception des push.
+
+## 6. Agent de supervision
+
+La console de supervision est un projet séparé (evh_monitoring, autre sous-domaine). La plateforme fournit :
+
+- **Collecte** : middleware global `MonitorRequests` (identifiant `X-Request-Id`, mesure après la réponse),
+  écouteurs `MessageLogged` et requêtes SQL, instrumentation de Twilio Verify, de la boîte d'envoi push et des
+  automatismes (`App\Services\Monitoring\Monitor`), masquage systématique (`Support\Monitoring\Redactor`).
+- **API de contrôle** `/api/agent/*` (`AgentController`), protégée par `VerifyAgentSignature` (HMAC-SHA256 d'un
+  secret partagé, horodatage, anti-rejeu). Les actions passent par la logique de la plateforme (`UserAdmin`,
+  `Notifier`, `app:tick`) et son journal d'audit.
+- **Comptes bloqués** : colonnes `users.blocked_at` / `blocked_reason`, middleware `EnsureNotBlocked`.
+- La garde Sanctum des membres est limitée au fournisseur `users`.

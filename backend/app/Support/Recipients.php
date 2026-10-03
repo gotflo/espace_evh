@@ -138,11 +138,14 @@ class Recipients
             }
         }
 
-        return array_values(array_filter(
-            self::staff()->filter(fn (User $u) => $u->hasPermission('members.view_all') && $u->hasPermission($permission))
-                ->pluck('id')->all(),
-            fn ($id) => $id !== $exceptUserId,
-        ));
+        return array_values(array_filter(self::authorities($permission), fn ($id) => $id !== $exceptUserId));
+    }
+
+    /** @return array<int> autorites pastorales (vue de toute l'eglise) ayant cette permission. */
+    public static function authorities(string $permission): array
+    {
+        return self::staff()->filter(fn (User $u) => $u->hasPermission('members.view_all') && $u->hasPermission($permission))
+            ->pluck('id')->values()->all();
     }
 
     /** @return array<int> responsables d'un departement (responsables designes + roles sur ce departement). */

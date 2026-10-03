@@ -60,8 +60,11 @@ class MemberController extends Controller
             $query->where('completion', '<', 100);
         }
         $period = now()->format('Y-m');
+        // FISS : seulement pour les membres dont l'utilisateur voit les fiches (ses tribus, ou tous).
+        $fissTribes = $user->fissTribeIds();
         if ($request->query('fiss_missing')) {
-            $query->whereNotIn('user_id', SpiritualHealthForm::where('period', $period)->select('user_id'));
+            $query->when($fissTribes !== null, fn ($q) => $q->whereIn('tribe_id', $fissTribes ?: [0]))
+                ->whereNotIn('user_id', SpiritualHealthForm::where('period', $period)->select('user_id'));
         }
 
         // Pagination : 50 membres par page (jamais des milliers de lignes vers un telephone).
@@ -76,7 +79,7 @@ class MemberController extends Controller
         $authority = $user->hasPermission('members.view_all');
         $members = $profiles->map(fn (Profile $p) => $this->listItem($p) + [
             'can_manage' => $authority || (int) $p->user_id !== $user->id,
-            'fiss_current' => isset($filled[$p->user_id]),
+            'fiss_current' => $fissTribes === null || in_array((int) $p->tribe_id, $fissTribes, true) ? isset($filled[$p->user_id]) : null,
         ]);
 
         return response()->json([
@@ -109,6 +112,7 @@ class MemberController extends Controller
             'completion' => $user->profile ? ProfileCompletion::for($user->profile) : null,
             'family' => FamilyService::overview($user),
             'can_manage' => $viewer->canManageMember($user),
+            'can_view_fiss' => $viewer->canViewFissOf($user),
             'led_departments' => $user->ledDepartments->map(fn ($d) => ['id' => $d->id, 'name' => $d->name])->values(),
             'roles' => $user->roles->map(fn ($r) => [
                 'assignment_id' => $r->pivot->id,

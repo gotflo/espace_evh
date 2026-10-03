@@ -13,6 +13,9 @@ use App\Services\ActivityService;
 use App\Services\CalendarService;
 use App\Services\ExerciseProgress;
 use App\Services\FissService;
+use App\Services\GemReportService;
+use App\Services\LeaderReportService;
+use App\Services\Monitoring\Monitor;
 use App\Services\Notifier;
 use App\Services\ReportService;
 use App\Services\TribeChangeService;
@@ -37,7 +40,7 @@ class AutomationTick extends Command
     /** Cle de cache du dernier passage complet (heure, duree, resultat de chaque etape). */
     public const STATUS_KEY = 'automation:last-run';
 
-    protected $signature = 'app:tick {--only= : activity | event-reminders | service-digest | birthdays | weddings | tasks | fiss | profiles | monthly-report | followups | tribe-changes | push-outbox | prune}';
+    protected $signature = 'app:tick {--only= : activity | event-reminders | service-digest | birthdays | weddings | tasks | fiss | profiles | monthly-report | leader-reports | gem-reports | followups | tribe-changes | push-outbox | prune}';
 
     protected $description = 'Activité des membres, rappels, anniversaires, FISS, profils, relances et nettoyage.';
 
@@ -53,6 +56,8 @@ class AutomationTick extends Command
             'fiss' => fn () => $this->fiss(),
             'profiles' => fn () => $this->profileReminders(),
             'monthly-report' => fn () => $this->monthlyReports(),
+            'leader-reports' => fn () => $this->leaderReports(),
+            'gem-reports' => fn () => $this->gemReports(),
             'followups' => fn () => $this->followUps(),
             'tribe-changes' => fn () => TribeChangeService::completeApproved(),
             // Secours de app:push-outbox : aucun push ne reste bloque si seule cette tache tourne.
@@ -87,6 +92,12 @@ class AutomationTick extends Command
 
         // Trace du dernier passage complet (verifiee par /api/health).
         if (! $only) {
+            $failed = array_keys(array_filter($results, 'is_string'));
+            Monitor::jobRun('app:tick', $started, $failed ? 'partial' : 'ok', ['steps' => $results]);
+            if ($failed) {
+                Monitor::event('error', 'automation', 'job.failed', 'Automatismes : étape(s) en échec : '.implode(', ', $failed),
+                    ['steps' => array_intersect_key($results, array_flip($failed))], 'failure');
+            }
             Cache::forever(self::STATUS_KEY, [
                 'at' => now()->toIso8601String(),
                 'duration_ms' => (int) round((microtime(true) - $started) * 1000),
@@ -230,6 +241,68 @@ class AutomationTick extends Command
                     $parts ? ucfirst(implode(' · ', $parts)).'.' : 'Le rapport du mois est disponible.',
                     '/admin/rapports?scope='.urlencode($scope).'&mois=6', ['period' => $previous->format('Y-m')]);
             });
+        }
+
+        return $sent;
+    }
+
+    /**
+     * Rapport mensuel des responsables (a partir de 9 h) : chaque patriarche et chaque responsable
+     * de departement est invite a remplir le rapport du mois ecoule du 1er au 4, puis relance du
+     * 5 au 10 s'il n'est toujours pas envoye. Une fois par personne, par rapport et par etape.
+     */
+    private function leaderReports(): int
+    {
+        $now = now();
+        if ($now->day > 10 || $now->hour < 9) {
+            return 0;
+        }
+        $period = LeaderReportService::duePeriod();
+        $month = LeaderReportService::periodLabel($period);
+        $late = $now->day >= 5;
+
+        $sent = 0;
+        foreach (LeaderReportService::pending($period) as $scope) {
+            $what = ($scope['kind'] === 'tribe' ? 'tribu ' : 'département ').$scope['scope_name'];
+            foreach ($scope['user_ids'] as $userId) {
+                $sent += $this->sendOnce("leader-report:{$period}:{$scope['kind']}:{$scope['scope_id']}:{$userId}:".($late ? 'late' : 'first'),
+                    fn () => Notifier::send([$userId], 'leader_report',
+                        ($late ? 'Rappel : rapport' : 'Rapport')." de {$month} à remplir",
+                        ucfirst($what).' · un questionnaire guidé, quelques minutes suffisent.',
+                        "/admin/rapports-mensuels?remplir={$scope['kind']}:{$scope['scope_id']}&mois={$period}",
+                        ['period' => $period, 'kind' => $scope['kind'], 'scope_id' => $scope['scope_id']], $late ? 'high' : 'normal'));
+            }
+        }
+
+        return $sent;
+    }
+
+    /**
+     * Rapport hebdomadaire des Gardes : invitation le dimanche a partir de 18 h (ou le lundi matin),
+     * relance le mardi ou le mercredi (a partir de 9 h) si le rapport de la semaine n'est pas envoye.
+     * Une fois par Garde, par GEM, par semaine et par etape.
+     */
+    private function gemReports(): int
+    {
+        $now = now();
+        $stage = match (true) {
+            ($now->isSunday() && $now->hour >= 18) || ($now->isMonday() && $now->hour >= 9) => 'first',
+            ($now->isTuesday() || $now->isWednesday()) && $now->hour >= 9 => 'late',
+            default => null,
+        };
+        if (! $stage) {
+            return 0;
+        }
+        $week = GemReportService::dueWeek();
+        $label = GemReportService::weekLabel($week);
+
+        $sent = 0;
+        foreach (GemReportService::pending($week) as $gem) {
+            $sent += $this->sendOnce("gem-report:{$gem->id}:{$week->toDateString()}:{$gem->leader_user_id}:{$stage}",
+                fn () => Notifier::send([(int) $gem->leader_user_id], 'gem_report',
+                    ($stage === 'late' ? 'Rappel : rapport' : 'Rapport').' de la semaine à envoyer',
+                    "{$gem->name} · semaine {$label} · présences au culte et à la rencontre, une minute suffit.",
+                    '/admin/rapport-gem', ['gem_id' => $gem->id, 'week_start' => $week->toDateString()], $stage === 'late' ? 'high' : 'normal'));
         }
 
         return $sent;
@@ -629,6 +702,8 @@ class AutomationTick extends Command
         DB::table('user_notifications')->whereNotNull('read_at')->where('created_at', '<', now()->subDays(60))->delete();
         DB::table('user_notifications')->where('created_at', '<', now()->subMonths(6))->delete();
         DB::table('notification_dispatches')->where('sent_at', '<', now()->subMonths(4))->delete();
+        // Mesures de supervision au-dela de la duree maximale (la console purge plus tot selon ses reglages).
+        Monitor::prune();
 
         return 0;
     }

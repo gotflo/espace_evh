@@ -1,7 +1,8 @@
 {
-  "name": "Espace Vases d'Honneur Chicoutimi",
-  "short_name": "Vases d'Honneur",
-  "description": "Espace membre de l'eglise Vases d'Honneur Chicoutimi : suivi, evenements, annonces et vie spirituelle.",
+  "name": "My vasesdhonneur",
+  "short_name": "My vasesdhonneur",
+  "id": "/",
+  "description": "My vasesdhonneur, espace membre de l'eglise Vases d'Honneur Chicoutimi : suivi, evenements, annonces et vie spirituelle.",
   "lang": "fr",
   "dir": "ltr",
   "start_url": "/",

@@ -18,11 +18,14 @@ import App from './App.tsx'
 import { AuthProvider } from './auth/AuthContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { isStaleBuildError, reloadOnce } from './utils/reload'
+import { installClientErrorReporting } from './monitoring'
 
 // Apres une mise a jour du site, un ancien ecran peut chercher un fichier qui n'existe plus :
 // on recharge une fois pour obtenir la nouvelle version (au lieu d'une page blanche).
 window.addEventListener('vite:preloadError', (e) => { e.preventDefault(); reloadOnce() })
 window.addEventListener('unhandledrejection', (e) => { if (isStaleBuildError(e.reason)) reloadOnce() })
+// Erreurs d'affichage remontees a la supervision (sans donnee personnelle).
+installClientErrorReporting()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

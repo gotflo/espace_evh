@@ -8,11 +8,14 @@ use App\Models\Profile;
 use App\Models\Role;
 use App\Models\Tribe;
 use App\Models\User;
+use App\Services\Monitoring\Monitor;
 use App\Services\OtpService;
+use App\Services\Sms\TwilioVerifyException;
 use App\Support\Phone;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -34,22 +37,41 @@ class AuthController extends Controller
             ]);
         }
 
+        // Compte bloque depuis la console : aucun code envoye (ni SMS facture).
+        if (User::where('phone', $phone)->whereNotNull('blocked_at')->exists()) {
+            Monitor::event('warning', 'security', 'auth.blocked', 'Demande de code pour un compte bloqué', ['phone' => '…'.substr($phone, -4)], 'denied');
+            throw ValidationException::withMessages([
+                'phone' => 'Ce compte est suspendu. Contactez un responsable de l\'église.',
+            ]);
+        }
+
         if ($this->otp->isThrottled($phone)) {
             throw ValidationException::withMessages([
                 'phone' => 'Un code vient déjà d\'être envoyé. Patientez un instant avant de réessayer.',
             ]);
         }
 
-        $code = $this->otp->sendCode($phone);
+        try {
+            $code = $this->otp->sendCode($phone);
+        } catch (TwilioVerifyException $e) {
+            // Numero refuse par Twilio : message clair sous le champ. Panne ou mauvaise configuration :
+            // journalisee (sans le numero complet), et le fidele sait qu'il peut reessayer.
+            Log::log($e->isAboutThePhone() ? 'warning' : 'error', 'OTP : envoi Twilio Verify impossible', [
+                'phone' => '…'.substr($phone, -4), 'http' => $e->httpStatus, 'twilio_code' => $e->twilioCode, 'error' => $e->getMessage(),
+            ]);
+            abort_unless($e->isAboutThePhone(), 503, $e->userMessage());
+            throw ValidationException::withMessages(['phone' => $e->userMessage()]);
+        }
+
+        Monitor::event('info', 'auth', 'auth.otp_requested', 'Code de connexion demandé', ['phone' => '…'.substr($phone, -4)], 'success');
 
         $payload = [
             'message' => 'Un code de vérification a été envoyé par SMS.',
             'phone' => $phone,
         ];
 
-        // En dev, ou en phase de test (EXPOSE_OTP=true) : on renvoie le code pour se
-        // connecter sans vrai SMS. A desactiver des que Twilio est en place.
-        if (app()->environment('local') || config('app.expose_otp')) {
+        // Le code de test n'est renvoye qu'en mode local/log, jamais pour Twilio Verify.
+        if ($code !== null && (app()->environment('local') || config('app.expose_otp'))) {
             $payload['dev_code'] = $code;
         }
 
@@ -61,14 +83,26 @@ class AuthController extends Controller
     {
         $data = $request->validate([
             'phone' => ['required', 'string'],
-            'code' => ['required', 'string'],
+            'code' => ['required', 'string', 'regex:/^\d{6}$/'],
         ]);
 
         $phone = Phone::normalize($data['phone']);
-        if (! $phone || ! $this->otp->verify($phone, $data['code'])) {
+        try {
+            $valid = $phone && $this->otp->verify($phone, $data['code']);
+        } catch (TwilioVerifyException $e) {
+            Log::error('OTP : vérification Twilio Verify impossible', ['http' => $e->httpStatus, 'twilio_code' => $e->twilioCode, 'error' => $e->getMessage()]);
+            abort(503, 'La vérification du code est momentanément indisponible. Réessayez dans quelques minutes.');
+        }
+        if (! $valid) {
+            Monitor::event('notice', 'auth', 'auth.otp_failed', 'Code de connexion erroné ou expiré', ['phone' => $phone ? '…'.substr($phone, -4) : null], 'failure');
             throw ValidationException::withMessages([
                 'code' => 'Code invalide ou expiré.',
             ]);
+        }
+
+        if (User::where('phone', $phone)->whereNotNull('blocked_at')->exists()) {
+            Monitor::event('warning', 'security', 'auth.blocked', 'Connexion refusée : compte bloqué', ['phone' => '…'.substr($phone, -4)], 'denied');
+            abort(403, 'Ce compte est suspendu. Contactez un responsable de l\'église.');
         }
 
         // Cree le compte au premier passage, sinon le retrouve.
@@ -100,6 +134,7 @@ class AuthController extends Controller
         $this->applyPredefinedRoles($user, $phone);
 
         $isNewAccount = $user->wasRecentlyCreated;
+        Monitor::event('info', 'auth', 'auth.login', $isNewAccount ? 'Première connexion (nouveau compte)' : 'Connexion', [], 'success', $user->id);
 
         $token = $user->createToken('mobile')->plainTextToken;
 

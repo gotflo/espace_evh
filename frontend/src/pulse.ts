@@ -6,7 +6,7 @@ import { useEffect, useRef } from 'react'
 import { api, auth } from './api/client'
 import { setUnread } from './notifications'
 
-export type PulseKey = 'announcements' | 'events' | 'exercises' | 'requests' | 'members' | 'validations' | 'fiss' | 'attendance' | 'unread'
+export type PulseKey = 'announcements' | 'events' | 'exercises' | 'requests' | 'members' | 'validations' | 'fiss' | 'attendance' | 'leader_reports' | 'gem_reports' | 'unread'
 
 type Versions = Partial<Record<PulseKey, string>>
 type Listener = (v: Versions) => void

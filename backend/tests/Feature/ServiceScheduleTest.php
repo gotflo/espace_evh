@@ -48,7 +48,7 @@ class ServiceScheduleTest extends TestCase
     public function test_weekly_services_are_in_everyones_calendar(): void
     {
         $events = Event::where('remind_all', true)->orderBy('starts_at')->get();
-        $this->assertCount(5, $events);
+        $this->assertCount(6, $events); // mercredi, samedi des miracles, 4 rendez-vous du dimanche
         $this->assertTrue($events->every(fn (Event $e) => $e->recurrence === 'weekly' && $e->isForWholeChurch()));
 
         $member = $this->member('+14185557001');

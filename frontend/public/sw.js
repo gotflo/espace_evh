@@ -1,9 +1,9 @@
-// Service worker de la PWA Vases d'Honneur.
+// Service worker de la PWA My vasesdhonneur (Vases d'Honneur Chicoutimi).
 // - Fichiers /assets/ (JS/CSS au nom horodate, donc immuables) : cache d'abord,
 //   l'application s'ouvre donc instantanement une fois installee.
 // - Navigation (routes) : reseau d'abord, repli sur le cache hors-ligne.
 // - L'API et les medias /storage passent toujours par le reseau (jamais en cache).
-const CACHE = 'evh-app-v4'
+const CACHE = 'evh-app-v5'
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/logo-vh.png', '/icon-192.png']
 
 self.addEventListener('install', (event) => {
@@ -78,7 +78,7 @@ self.addEventListener('push', (event) => {
   let data = {}
   try { data = event.data ? event.data.json() : {} } catch { data = { title: event.data ? event.data.text() : '' } }
 
-  const title = data.title || "Vases d'Honneur"
+  const title = data.title || "My vasesdhonneur"
   const options = {
     body: data.body || '',
     icon: '/icon-192.png',

@@ -19,8 +19,16 @@ class PushOutbox extends Command
 
     public function handle(): int
     {
-        $sent = Notifier::flushOutbox();
+        $started = microtime(true);
+        try {
+            $sent = Notifier::flushOutbox();
+        } catch (\Throwable $e) {
+            \App\Services\Monitoring\Monitor::jobRun('app:push-outbox', $started, 'failed', ['error' => $e->getMessage()]);
+            throw $e;
+        }
+        // Passages a vide (chaque minute) non enregistres : seulement ceux qui ont rattrape un envoi.
         if ($sent) {
+            \App\Services\Monitoring\Monitor::jobRun('app:push-outbox', $started, 'ok', ['sent' => $sent]);
             $this->info("{$sent} envoi(s) push rattrapé(s).");
         }
 

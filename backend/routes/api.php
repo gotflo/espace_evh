@@ -9,6 +9,9 @@ use App\Http\Controllers\Api\Admin\EventController;
 use App\Http\Controllers\Api\Admin\ExerciseController;
 use App\Http\Controllers\Api\Admin\FissController;
 use App\Http\Controllers\Api\Admin\GemController;
+use App\Http\Controllers\Api\Admin\GemReportController;
+use App\Http\Controllers\Api\Admin\LeaderDirectoryController;
+use App\Http\Controllers\Api\Admin\LeaderReportController;
 use App\Http\Controllers\Api\Admin\MemberController;
 use App\Http\Controllers\Api\Admin\NewMemberController;
 use App\Http\Controllers\Api\Admin\OrgController;
@@ -21,6 +24,8 @@ use App\Http\Controllers\Api\Admin\ValidationController;
 use App\Http\Controllers\Api\Admin\VerseController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CalendarController;
+use App\Http\Controllers\Api\ClientErrorController;
+use App\Http\Controllers\Api\AgentController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\MyAnnouncementController;
 use App\Http\Controllers\Api\MyEvaluationController;
@@ -41,7 +46,9 @@ use App\Http\Controllers\Api\MyWelcomeController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\PulseController;
 use App\Http\Controllers\Api\ReferenceController;
+use App\Http\Middleware\EnsureNotBlocked;
 use App\Http\Middleware\TrackActivity;
+use App\Http\Middleware\VerifyAgentSignature;
 use Illuminate\Support\Facades\Route;
 
 // --- Authentification par telephone (OTP SMS) ---
@@ -60,8 +67,27 @@ Route::get('/health', HealthController::class)->middleware('throttle:30,1');
 // l'adresse d'abonnement, connue seulement du navigateur et du serveur, identifie l'appareil.
 Route::post('/push/receipt', [MyNotificationController::class, 'receipt'])->middleware('throttle:60,1');
 
+// Erreurs d'affichage remontees par le navigateur (supervision), sans session obligatoire.
+Route::post('/monitor/client-errors', [ClientErrorController::class, 'store'])->middleware('throttle:client-errors');
+
+// --- Agent de supervision : API de controle appelee par la console (projet evh_monitoring) ---
+// Chaque requete est signee (HMAC-SHA256, secret partage MONITOR_AGENT_SECRET, horodatage, anti-rejeu).
+Route::prefix('agent')->middleware([VerifyAgentSignature::class, 'throttle:agent'])->group(function () {
+    Route::get('/health', [AgentController::class, 'health']);
+    Route::get('/packages', [AgentController::class, 'packages']);
+    Route::get('/logs/files', [AgentController::class, 'logFiles']);
+    Route::get('/logs/files/{name}', [AgentController::class, 'logFile'])->where('name', '[A-Za-z0-9._-]+');
+    Route::get('/users/{user}/impact', [AgentController::class, 'impact'])->whereNumber('user');
+    Route::post('/users/{user}/block', [AgentController::class, 'block'])->whereNumber('user');
+    Route::post('/users/{user}/unblock', [AgentController::class, 'unblock'])->whereNumber('user');
+    Route::post('/users/{user}/revoke-sessions', [AgentController::class, 'revokeSessions'])->whereNumber('user');
+    Route::delete('/users/{user}', [AgentController::class, 'destroy'])->whereNumber('user');
+    Route::post('/actions/{action}', [AgentController::class, 'action'])->where('action', '[a-z_]+');
+    Route::post('/notify', [AgentController::class, 'notify']);
+});
+
 // --- Routes protegees (jeton Sanctum requis) ---
-Route::middleware(['auth:sanctum', 'throttle:150,1', TrackActivity::class])->group(function () {
+Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, TrackActivity::class])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
@@ -184,6 +210,22 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', TrackActivity::class])->gro
             Route::get('/reports/members', [ReportController::class, 'members']);
             Route::post('/reports/exported', [ReportController::class, 'logExport']);
         });
+
+        // Rapports mensuels des responsables (patriarche : tribu ; responsables : departement).
+        // Droits verifies dans le controleur : auteurs, AP de la tribu, autorites pastorales.
+        Route::get('/leader-reports', [LeaderReportController::class, 'index']);
+        Route::get('/leader-reports/form', [LeaderReportController::class, 'form']);
+        Route::put('/leader-reports', [LeaderReportController::class, 'save']);
+        Route::get('/leader-reports/{report}', [LeaderReportController::class, 'show'])->whereNumber('report');
+        Route::post('/leader-reports/{report}/exported', [LeaderReportController::class, 'logExport'])->whereNumber('report');
+
+        // Rapport hebdomadaire des Gardes (presences du GEM), transmis au patriarche et a l'AP.
+        Route::get('/gem-reports', [GemReportController::class, 'index']);
+        Route::put('/gem-reports/{gem}', [GemReportController::class, 'save']);
+
+        // Annuaire des responsables et fiche d'un Garde (pasteurs : tous ; AP, patriarches : leurs tribus).
+        Route::get('/leaders', [LeaderDirectoryController::class, 'index']);
+        Route::get('/leaders/gems/{gem}', [LeaderDirectoryController::class, 'gem']);
 
         // Journal d'audit (lecture seule).
         Route::get('/audit', [AuditLogController::class, 'index'])->middleware('permission:audit.view');

@@ -2,7 +2,8 @@
 // pdfmake est charge a la demande : aucun poids ajoute au demarrage de l'application.
 import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces'
 import { columnChartSvg, hbarChartSvg, lineChartSvg, VIZ } from '../components/charts'
-import type { ReportData, ReportMemberRow } from '../types'
+import type { LeaderReportDetail, ReportAnswer, ReportData, ReportMemberRow, ReportQuestion } from '../types'
+import { isEmpty, isVisible, KIND_LABEL } from '../utils/leaderReports'
 
 const TEAL = '#0d5f57'
 const GOLD = '#d9a400'
@@ -54,7 +55,9 @@ function header(logo: string | null, title: string, subtitle: string): Content {
   }
 }
 
-const rule: Content = { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1.5, lineColor: GOLD }], margin: [0, 4, 0, 14] }
+// Un nouvel objet a chaque document : pdfmake modifie les coordonnees du trait en le placant
+// (reutilise, il se decalait au deuxieme export de la session).
+const rule = (): Content => ({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1.5, lineColor: GOLD }], margin: [0, 4, 0, 14] })
 
 function section(title: string): Content {
   return { text: title, fontSize: 12, bold: true, color: TEAL, margin: [0, 14, 0, 6] }
@@ -124,7 +127,7 @@ export function buildReportDoc(report: ReportData, logo: string | null): TDocume
   const labels = report.monthly.map((m) => m.label)
   const content: Content[] = [
     header(logo, `Rapport — ${report.scope.label}`, `Période : ${date(report.period.from)} au ${date(report.period.to)} · généré le ${date(report.generated_at)}`),
-    rule,
+    rule(),
     section('Chiffres clés'),
     kpiGrid([
       { label: 'Membres', value: String(k.members), sub: `${k.active} actifs · ${k.inactive} inactifs` },
@@ -244,4 +247,65 @@ export function buildMembersDoc(label: string, filterLabel: string, rows: Report
 export async function downloadMembersPdf(label: string, filterLabel: string, rows: ReportMemberRow[]): Promise<void> {
   const [pdfMake, logo] = await Promise.all([loadPdfMake(), logoDataUrl()])
   pdfMake.createPdf(buildMembersDoc(label, filterLabel, rows, logo)).download(`membres-${fileSafe(label)}.pdf`)
+}
+
+/** Reponse d'une question du rapport mensuel, mise en forme pour le PDF. */
+function answerContent(q: ReportQuestion, value: ReportAnswer | undefined): Content {
+  if (isEmpty(value)) return { text: 'Non renseigné', italics: true, color: MUTED, fontSize: 9.5 }
+  if (q.type === 'choice') return { text: q.options?.find((o) => o.key === value)?.label ?? String(value), bold: true, fontSize: 9.5 }
+  if (q.type === 'checks' && value && typeof value === 'object' && !Array.isArray(value)) {
+    return {
+      ul: (q.options ?? []).filter((o) => o.key in value).map((o) => ({
+        text: [{ text: o.label, bold: true }, { text: value[o.key] ? ` : ${value[o.key]}` : '' }], fontSize: 9.5, margin: [0, 1, 0, 1],
+      })),
+    }
+  }
+  if (Array.isArray(value)) return { text: value.join(', '), fontSize: 9.5 }
+  return { text: String(value), fontSize: 9.5 }
+}
+
+/** Document d'un rapport mensuel de tribu ou de departement (questions posees et leurs reponses). */
+export function buildLeaderReportDoc(report: LeaderReportDetail, logo: string | null): TDocumentDefinitions {
+  const label = `${KIND_LABEL[report.kind]} ${report.scope_name}`
+  const others = Array.isArray(report.answers.ames_autres) ? report.answers.ames_autres : []
+  const sent = report.submitted_at ? `envoyé le ${date(report.submitted_at)}${report.author ? ` par ${report.author}` : ''}` : 'brouillon, pas encore envoyé'
+  const content: Content[] = [
+    header(logo, `Rapport mensuel — ${label}`, `${report.period_label.charAt(0).toUpperCase()}${report.period_label.slice(1)} · ${sent}`),
+    rule(),
+  ]
+
+  report.steps.forEach((step, i) => {
+    content.push(section(`${i + 1}. ${step.title}`))
+    if (step.context === 'souls') {
+      const total = report.souls.length + others.length
+      content.push({ text: `${total} âme(s) gagnée(s) durant le mois`, bold: true, fontSize: 11, margin: [0, 0, 0, 6] })
+      if (report.souls.length > 0) {
+        content.push(table(['Nom', 'Date', 'Accueil'],
+          report.souls.map((p) => [p.name, p.date ? date(p.date) : '', p.integrated === null ? '' : p.integrated ? 'Accueilli(e)' : 'À accueillir']),
+          ['*', 110, 90]), { text: '', margin: [0, 0, 0, 6] })
+      }
+    }
+    for (const q of step.questions) {
+      if (!isVisible(q, report.answers) || (!q.required && isEmpty(report.answers[q.key]))) continue
+      content.push({ stack: [
+        { text: q.label, fontSize: 8, bold: true, color: MUTED, margin: [0, 4, 0, 2] },
+        answerContent(q, report.answers[q.key]),
+      ], unbreakable: true })
+    }
+  })
+
+  return {
+    pageSize: 'A4',
+    pageMargins: [40, 40, 40, 44],
+    info: { title: `Rapport mensuel ${label} ${report.period}`, author: "Vases d'Honneur Chicoutimi" },
+    defaultStyle: { font: 'Roboto', fontSize: 9, color: '#17211f' },
+    footer: footer(`Rapport mensuel — ${label} — ${report.period_label}`),
+    content,
+  }
+}
+
+/** Rapport mensuel telecharge en PDF. */
+export async function downloadLeaderReportPdf(report: LeaderReportDetail): Promise<void> {
+  const [pdfMake, logo] = await Promise.all([loadPdfMake(), logoDataUrl()])
+  pdfMake.createPdf(buildLeaderReportDoc(report, logo)).download(`rapport-mensuel-${fileSafe(`${report.kind === 'tribe' ? 'tribu' : 'departement'}-${report.scope_name}`)}-${report.period}.pdf`)
 }
