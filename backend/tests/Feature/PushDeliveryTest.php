@@ -191,6 +191,8 @@ class PushDeliveryTest extends TestCase
         $iphone = collect($res['devices'])->firstWhere('ok', false);
         $this->assertSame('iPhone / iPad · Safari', $iphone['device']);
         $this->assertStringContainsString('la clé du serveur ne correspond plus', $iphone['explanation']);
+        // Un envoi de test n'apparait pas dans la page Notifications du membre.
+        $this->assertSame(0, \App\Models\UserNotification::where('user_id', $member->id)->count());
 
         // Sans appareil abonne : message clair au lieu d'un faux « envoye ».
         Sanctum::actingAs($this->member('+14187100005'));
@@ -238,5 +240,17 @@ class PushDeliveryTest extends TestCase
     {
         Carbon::setTestNow();
         parent::tearDown();
+    }
+
+    public function test_test_notifications_already_listed_are_removed(): void
+    {
+        $member = $this->member('+14187100009');
+        \App\Models\UserNotification::create(['user_id' => $member->id, 'type' => 'system', 'title' => 'Notification de test', 'body' => 'Si vous lisez ceci...']);
+        \App\Models\UserNotification::create(['user_id' => $member->id, 'type' => 'announcement', 'title' => 'Culte de dimanche']);
+        \App\Models\UserNotification::create(['user_id' => $member->id, 'type' => 'system', 'title' => 'Bienvenue']);
+
+        (require database_path('migrations/2026_10_03_100010_remove_test_notifications.php'))->up();
+
+        $this->assertSame(['Culte de dimanche', 'Bienvenue'], \App\Models\UserNotification::orderBy('id')->pluck('title')->all());
     }
 }

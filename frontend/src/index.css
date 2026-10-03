@@ -450,7 +450,7 @@ h1, h2, h3 { font-family: var(--font-serif); font-weight: 600; line-height: 1.15
 }
 .sidebar-logo img { width: 80%; height: 80%; object-fit: contain; }
 .sidebar-brand-text { display: flex; flex-direction: column; line-height: 1.2; }
-.sidebar-brand-text span { font-family: var(--font-serif); font-weight: 600; font-size: 1.1rem; }
+.sidebar-brand-text span { font-family: var(--font-serif); font-weight: 600; font-size: 1.1rem; color: #fff; }
 .sidebar-brand-text small { color: var(--accent); font-size: 0.68rem; letter-spacing: 0.18em; text-transform: uppercase; }
 
 .sidebar-nav { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.5rem; }

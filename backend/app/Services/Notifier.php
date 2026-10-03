@@ -38,6 +38,8 @@ class Notifier
         'wedding' => 'Anniversaire de mariage',
         'activity' => 'Suivi',
         'report' => 'Rapport',
+        'leader_report' => 'Rapport mensuel',
+        'gem_report' => 'Rapport de GEM',
         'system' => 'Information',
     ];
 
@@ -260,6 +262,7 @@ class Notifier
 
         $row = DB::table('push_outbox')->find($id);
         $payload = json_decode((string) $row->payload, true) ?: [];
+        $startedAt = microtime(true);
         $stats = ['sent' => 0, 'expired' => 0, 'failed' => 0];
         $webPush = app(WebPush::class);
         try {
@@ -273,12 +276,16 @@ class Notifier
         } catch (\Throwable $e) {
             // Erreur generale (cle, chiffrement...) : journalisee ; le cron retentera (3 essais au plus).
             Log::error('Push : envoi impossible', ['outbox' => $id, 'error' => $e->getMessage()]);
+            \App\Services\Monitoring\Monitor::integration('webpush', 'envoi', false, (int) round((microtime(true) - $startedAt) * 1000));
             DB::table('push_outbox')->where('id', $id)->update(['result' => json_encode(['error' => mb_substr($e->getMessage(), 0, 300)])]);
 
             return false;
         }
 
         DB::table('push_outbox')->where('id', $id)->update(['sent_at' => now(), 'result' => json_encode($stats)]);
+        // Supervision : appareils atteints / en echec (les abonnements expires ne sont pas des pannes).
+        \App\Services\Monitoring\Monitor::integrationCounts('webpush', 'envoi', (int) $stats['sent'], (int) $stats['failed'],
+            (int) round((microtime(true) - $startedAt) * 1000));
 
         return true;
     }

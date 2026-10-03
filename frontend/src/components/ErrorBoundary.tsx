@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { isStaleBuildError, reloadOnce } from '../utils/reload'
+import { reportClientError } from '../monitoring'
 import { Icon } from './Icon'
 
 /**
@@ -16,6 +17,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
   componentDidCatch(error: Error, info: ErrorInfo) {
     if (isStaleBuildError(error) && reloadOnce()) return
     console.error('Erreur d\'affichage', error, info.componentStack)
+    reportClientError('render', error, { component: info.componentStack ?? undefined })
   }
 
   render() {

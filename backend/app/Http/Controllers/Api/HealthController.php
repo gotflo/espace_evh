@@ -2,13 +2,9 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Console\Commands\AutomationTick;
 use App\Http\Controllers\Controller;
-use App\Services\Push\WebPush;
+use App\Services\Monitoring\HealthService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Etat de sante de la plateforme, pour une surveillance externe (ex. UptimeRobot) :
@@ -18,75 +14,14 @@ use Illuminate\Support\Facades\DB;
  */
 class HealthController extends Controller
 {
-    /** Au-dela, les automatismes (rappels, anniversaires...) sont consideres en retard. */
-    private const AUTOMATION_MAX_MINUTES = 20;
-
     public function __invoke(): JsonResponse
     {
-        $checks = [];
-
-        $t = microtime(true);
-        try {
-            DB::select('select 1');
-            $checks['database'] = ['ok' => true, 'ms' => (int) round((microtime(true) - $t) * 1000)];
-        } catch (\Throwable $e) {
-            report($e);
-            $checks['database'] = ['ok' => false];
-        }
-
-        try {
-            Cache::put('health:probe', 1, 60);
-            $checks['cache'] = ['ok' => Cache::get('health:probe') === 1];
-        } catch (\Throwable) {
-            $checks['cache'] = ['ok' => false];
-        }
-
-        $checks['storage'] = ['ok' => is_writable(storage_path('logs')) && is_writable(storage_path('framework/cache'))];
-
-        $free = @disk_free_space(storage_path());
-        $total = @disk_total_space(storage_path());
-        $checks['disk'] = ['ok' => ! $free || ! $total || $free / $total > 0.05];
-
-        // Notifications push : activees, cles et chiffrement utilisables (verification locale,
-        // sans envoi), aucun envoi bloque dans la boite d'envoi, dernier message recu par un appareil.
-        try {
-            $enabled = (bool) config('services.webpush.enabled');
-            $error = $enabled ? app(WebPush::class)->selfCheck() : 'desactivees (WEBPUSH_ENABLED)';
-            $stuck = DB::table('push_outbox')->whereNull('sent_at')->where('created_at', '<', now()->subMinutes(5))->count();
-            $last = DB::table('push_subscriptions')->max('last_used_at');
-            $checks['push'] = array_filter([
-                'ok' => $enabled && $error === null && $stuck === 0,
-                'devices' => DB::table('push_subscriptions')->count(),
-                'waiting' => $stuck,
-                'last_delivery_hours' => $last ? (int) Carbon::parse($last)->diffInHours(now(), true) : null,
-                'error' => $error,
-            ], fn ($v) => $v !== null);
-        } catch (\Throwable $e) {
-            report($e);
-            $checks['push'] = ['ok' => false, 'error' => 'verification impossible'];
-        }
-
-        try {
-            $last = Cache::get(AutomationTick::STATUS_KEY);
-        } catch (\Throwable) {
-            $last = null;
-        }
-        $minutes = isset($last['at']) ? (int) Carbon::parse($last['at'])->diffInMinutes(now(), true) : null;
-        $failed = isset($last['steps']) ? count(array_filter($last['steps'], 'is_string')) : 0;
-        $checks['automation'] = [
-            'ok' => $minutes !== null && $minutes <= self::AUTOMATION_MAX_MINUTES && $failed === 0,
-            'last_run_minutes' => $minutes,
-            'failed_steps' => $failed,
-        ];
-
-        // Seules la base et le cache sont indispensables pour servir les membres.
-        $essential = $checks['database']['ok'] && $checks['cache']['ok'];
-        $status = ! $essential ? 'down' : (collect($checks)->every(fn ($c) => $c['ok']) ? 'ok' : 'degraded');
+        $health = HealthService::run();
 
         return response()->json([
-            'status' => $status,
-            'checks' => $checks,
+            'status' => $health['status'],
+            'checks' => $health['checks'],
             'time' => now()->toIso8601String(),
-        ], $essential ? 200 : 503);
+        ], $health['essential'] ? 200 : 503);
     }
 }

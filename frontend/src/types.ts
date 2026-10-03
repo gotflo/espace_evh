@@ -100,7 +100,8 @@ export interface MemberListItem {
   last_seen: string | null
   roles: string[]
   can_manage: boolean
-  fiss_current: boolean
+  /** null : cet utilisateur ne voit pas les FISS de ce membre (Garde, responsable de departement...) */
+  fiss_current: boolean | null
 }
 
 export interface RoleOption {
@@ -460,6 +461,7 @@ export interface MemberDetailData {
   completion: ProfileCompletion | null
   family: FamilyOverview
   can_manage: boolean
+  can_view_fiss: boolean
   led_departments: { id: number; name: string }[]
   roles: RoleAssignment[]
 }
@@ -470,7 +472,8 @@ export interface Stats {
   inactive: number
   completed: number
   incomplete_profiles: number
-  fiss_filled: number
+  /** null : FISS non visibles pour cet utilisateur */
+  fiss_filled: number | null
   fiss_rate: number | null
   by_tribe: { name: string; total: number }[]
   recent: NewMember[]
@@ -751,4 +754,154 @@ export interface AuditEntry {
   context: Record<string, unknown> | null
   ip?: string | null
   created_at: string | null
+}
+
+// ---------------------------------------------------------------- Rapports mensuels des responsables
+export type LeaderReportKind = 'tribe' | 'department'
+export type LeaderReportStatus = 'missing' | 'draft' | 'submitted'
+/** Reponse : texte, choix, nombre, activites cochees (cle => precision) ou liste de noms. */
+export type ReportAnswer = string | number | string[] | Record<string, string> | null
+export type ReportAnswers = Record<string, ReportAnswer | undefined>
+export interface ReportOption { key: string; label: string; placeholder?: string; exclusive?: boolean }
+export interface ReportQuestion {
+  key: string
+  type: 'text' | 'choice' | 'number' | 'checks' | 'names'
+  label: string
+  required: boolean
+  placeholder?: string
+  min?: number
+  max?: number
+  options?: ReportOption[]
+  show_if?: { key: string; in?: string[]; min?: number; max?: number }
+}
+export interface ReportStep {
+  key: string
+  title: string
+  intro?: string
+  context?: 'gems' | 'indicators' | 'souls'
+  questions: ReportQuestion[]
+}
+export interface ReportSoul { user_id: number; name: string; date: string | null; integrated: boolean | null }
+export interface LeaderReportContext {
+  souls: ReportSoul[]
+  gems: { id: number; name: string; leader: string | null; members_count: number }[]
+  indicators: { label: string; value: string }[]
+}
+export interface LeaderReportScope { kind: LeaderReportKind; scope_id: number; scope_name: string }
+export interface LeaderReportMine extends LeaderReportScope {
+  periods: { period: string; label: string; status: LeaderReportStatus; report_id: number | null; submitted_at: string | null }[]
+}
+export interface LeaderReportReceived extends LeaderReportScope {
+  leaders: string[]
+  status: 'missing' | 'submitted'
+  report_id: number | null
+  submitted_at: string | null
+  author: string | null
+  souls_count: number | null
+}
+export interface LeaderReportsData {
+  due_period: string
+  due_label: string
+  mine: LeaderReportMine[]
+  can_review: boolean
+  period: string
+  period_label: string
+  periods: { period: string; label: string }[]
+  received: LeaderReportReceived[]
+}
+export interface LeaderReportForm extends LeaderReportScope {
+  period: string
+  period_label: string
+  open: boolean
+  closes_on: string
+  status: LeaderReportStatus
+  report_id: number | null
+  answers: ReportAnswers
+  steps: ReportStep[]
+  context: LeaderReportContext
+}
+export interface LeaderReportDetail extends LeaderReportScope {
+  id: number
+  period: string
+  period_label: string
+  status: LeaderReportStatus
+  author: string | null
+  submitted_at: string | null
+  updated_at: string | null
+  can_edit: boolean
+  answers: ReportAnswers
+  steps: ReportStep[]
+  souls: ReportSoul[]
+}
+
+// ---------------------------------------------------------------- Rapport hebdomadaire des Gardes
+export interface GemReportRow { user_id: number; name: string; culte: boolean; rencontre: boolean }
+export interface GemWeekReport {
+  id: number
+  week_start: string
+  label: string
+  meeting_held: boolean
+  attendance: GemReportRow[]
+  members_count: number
+  culte_count: number
+  meeting_count: number
+  comment: string | null
+  submitted_at: string | null
+}
+export interface GemReportGem {
+  gem_id: number
+  name: string
+  tribe: string | null
+  members: { user_id: number; name: string; photo_url: string | null }[]
+  current: GemWeekReport | null
+  culte_prefill: number[]
+  history: GemWeekReport[]
+}
+export interface GemReportsData { due_week: string; due_label: string; closes_on: string; gems: GemReportGem[] }
+
+// ---------------------------------------------------------------- Annuaire des responsables
+export interface LeaderPerson { user_id: number; name: string; photo_url: string | null; phone: string | null }
+export interface LeaderGarde {
+  gem_id: number
+  gem: string
+  tribe: string | null
+  members_count: number
+  garde: LeaderPerson | null
+  week_report: 'submitted' | 'missing' | null
+}
+export interface LeadersData {
+  scope: 'church' | 'tribes'
+  tribes: { id: number; name: string }[]
+  week_label: string
+  assistants: (LeaderPerson & { tribes: string[] })[]
+  patriarchs: (LeaderPerson & { tribes: string[] })[]
+  tribes_without_patriarch: string[]
+  department_leaders: (LeaderPerson & { departments: string[] })[]
+  gardes: LeaderGarde[]
+}
+export type GardeWeek = (GemWeekReport & { status: 'submitted' }) | { week_start: string; label: string; status: 'missing' }
+export interface GardePage {
+  gem: { id: number; name: string; tribe: string | null }
+  garde: (LeaderPerson & { since: string | null }) | null
+  indicators: {
+    members: number
+    active: number
+    reports_expected: number
+    reports_sent: number
+    culte_rate: number | null
+    meetings_held: number
+    meeting_rate: number | null
+    fiss_filled: number | null
+    fiss_previous: number | null
+    activity_days: number
+    followups: number
+    evaluations: number
+    attendance_sheets: number
+    requests: number
+    welcomed: number
+  }
+  members: { user_id: number; name: string; photo_url: string | null; phone: string | null; is_garde: boolean; status: Activity; fiss_current: boolean | null; culte: number; rencontre: number }[]
+  reports_count: number
+  weeks: GardeWeek[]
+  timeline: { kind: string; at: string; label: string }[]
 }

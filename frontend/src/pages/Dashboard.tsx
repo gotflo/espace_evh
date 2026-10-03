@@ -13,11 +13,13 @@ import { VerseBanner } from '../components/VerseBanner'
 import { WelcomeBack } from '../components/WelcomeBack'
 import { DashRequests } from '../components/DashRequests'
 import { FissReminder } from '../components/FissReminder'
+import { GemReportReminder, LeaderReportReminder } from '../components/LeaderReportReminder'
 import { FissSummary } from '../components/FissSummary'
 import { Skeleton } from '../components/Skeleton'
 import { NewMembersPanel } from '../components/NewMembersPanel'
 import { PushSettings } from '../components/PushSettings'
 import type { Stats } from '../types'
+import { APP_NAME } from '../config'
 
 export default function Dashboard() {
   const { profile, roles, hasPermission } = useAuth()
@@ -76,7 +78,7 @@ export default function Dashboard() {
         <div className="welcome-banner" role="status">
           <div className="welcome-text">
             <strong>Bienvenue dans votre famille spirituelle{profile?.first_name ? `, ${profile.first_name}` : ''} !</strong>
-            <span>Nous sommes heureux de vous accueillir dans l'espace Vases d'Honneur Chicoutimi.</span>
+            <span>Nous sommes heureux de vous accueillir sur {APP_NAME}, l'espace des Vases d'Honneur Chicoutimi.</span>
           </div>
           <button className="welcome-close" onClick={() => setWelcome(false)} aria-label="Fermer">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
@@ -89,6 +91,8 @@ export default function Dashboard() {
 
       <PushSettings variant="prompt" />
       <FissReminder />
+      <LeaderReportReminder />
+      <GemReportReminder />
       <FissSummary />
       {canViewMembers ? (
         <>
@@ -110,10 +114,12 @@ export default function Dashboard() {
                 <span className="stat-value">{stats?.inactive ?? '-'}</span>
                 <span className="stat-label">Inactifs</span>
               </button>
-              <button className={`stat-tile ${stats.fiss_rate !== null && stats.fiss_rate < 50 ? 'stat-warn' : ''}`} onClick={() => navigate('/admin/membres?statut=sans-fiss')}>
-                <span className="stat-value">{stats.fiss_rate !== null ? `${stats.fiss_rate} %` : '-'}</span>
-                <span className="stat-label">FISS du mois ({stats.fiss_filled})</span>
-              </button>
+              {stats.fiss_filled !== null && (
+                <button className={`stat-tile ${stats.fiss_rate !== null && stats.fiss_rate < 50 ? 'stat-warn' : ''}`} onClick={() => navigate('/admin/membres?statut=sans-fiss')}>
+                  <span className="stat-value">{stats.fiss_rate !== null ? `${stats.fiss_rate} %` : '-'}</span>
+                  <span className="stat-label">FISS du mois ({stats.fiss_filled})</span>
+                </button>
+              )}
               <button className="stat-tile" onClick={() => navigate('/admin/membres?statut=incomplet')}>
                 <span className="stat-value">{stats.incomplete_profiles}</span>
                 <span className="stat-label">Profils incomplets</span>

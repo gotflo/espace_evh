@@ -4,8 +4,10 @@ namespace App\Services;
 
 use App\Models\OtpCode;
 use App\Services\Sms\SmsSender;
+use App\Services\Sms\TwilioVerifyClient;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
+use Throwable;
 
 /**
  * Gestion des codes OTP : generation, envoi par SMS, verification.
@@ -17,23 +19,37 @@ class OtpService
     public const MAX_ATTEMPTS = 5;       // essais max avant blocage
     public const RESEND_COOLDOWN_SEC = 45; // delai mini entre deux envois
 
-    public function __construct(private SmsSender $sms) {}
+    public function __construct(private SmsSender $sms, private TwilioVerifyClient $twilioVerify) {}
 
     /**
-     * Genere un code, l'enregistré (hache) et l'envoie par SMS.
-     * Retourne le code en clair (utilise seulement en local pour faciliter les tests).
+     * Envoie le code avec Twilio Verify, ou genere/enregistre le code pour le mode log.
+     * Retourne le code uniquement pour le mode local de test.
      */
-    public function sendCode(string $phone): string
+    public function sendCode(string $phone): ?string
     {
-        $code = str_pad((string) random_int(0, 999999), self::CODE_LENGTH, '0', STR_PAD_LEFT);
+        $usesTwilioVerify = config('services.sms.driver') === 'twilio_verify';
+        $code = $usesTwilioVerify
+            ? null
+            : str_pad((string) random_int(0, 999999), self::CODE_LENGTH, '0', STR_PAD_LEFT);
 
-        OtpCode::create([
+        $otp = OtpCode::create([
             'phone' => $phone,
-            'code_hash' => Hash::make($code),
+            // Twilio owns the real code; this random hash keeps the existing
+            // required column populated without storing that code locally.
+            'code_hash' => Hash::make($code ?? bin2hex(random_bytes(32))),
             'expires_at' => Carbon::now()->addMinutes(self::TTL_MINUTES),
         ]);
 
-        $this->sms->send($phone, "Votre code de connexion Vases d'Honneur Chicoutimi est : {$code}");
+        try {
+            if ($usesTwilioVerify) {
+                $this->twilioVerify->sendVerification($phone);
+            } else {
+                $this->sms->send($phone, "Votre code de connexion Vases d'Honneur Chicoutimi est : {$code}");
+            }
+        } catch (Throwable $exception) {
+            $otp->delete();
+            throw $exception;
+        }
 
         return $code;
     }
@@ -53,7 +69,11 @@ class OtpService
             return false;
         }
 
-        if (! Hash::check($code, $otp->code_hash)) {
+        $valid = config('services.sms.driver') === 'twilio_verify'
+            ? $this->twilioVerify->checkVerification($phone, $code)
+            : Hash::check($code, $otp->code_hash);
+
+        if (! $valid) {
             $otp->increment('attempts');
             return false;
         }

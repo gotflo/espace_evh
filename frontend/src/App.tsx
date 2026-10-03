@@ -36,6 +36,9 @@ const Validations = lazy(() => import('./pages/admin/Validations'))
 const MyExercisesPage = lazy(() => import('./pages/Exercises'))
 const ExerciseDetail = lazy(() => import('./pages/ExerciseDetail'))
 const Reports = lazy(() => import('./pages/admin/Reports'))
+const LeaderReports = lazy(() => import('./pages/admin/LeaderReports'))
+const Leaders = lazy(() => import('./pages/admin/Leaders'))
+const GemReport = lazy(() => import('./pages/admin/GemReport'))
 const AuditLog = lazy(() => import('./pages/admin/AuditLog'))
 const Verses = lazy(() => import('./pages/admin/Verses'))
 
@@ -160,7 +163,11 @@ export default function App() {
       <Route path="/admin/demandes" element={<RequireAuth requireComplete anyPermission={['requests.handle']}><Requests /></RequireAuth>} />
       <Route path="/admin/validations" element={<RequireAuth requireComplete anyPermission={['fiss.review', 'tribes.transfer']}><Validations /></RequireAuth>} />
       <Route path="/admin/rapports" element={<RequireAuth requireComplete anyPermission={['reports.view']}><Reports /></RequireAuth>} />
-      <Route path="/admin/versets" element={<RequireAuth requireComplete anyPermission={['content.manage']}><Verses /></RequireAuth>} />
+      {/* Patriarches et responsables de departement n'ont pas de permission commune : l'API decide. */}
+      <Route path="/admin/rapports-mensuels" element={<RequireAuth requireComplete><LeaderReports /></RequireAuth>} />
+      <Route path="/admin/rapport-gem" element={<RequireAuth requireComplete><GemReport /></RequireAuth>} />
+      <Route path="/admin/responsables" element={<RequireAuth requireComplete anyPermission={MEMBER_PERMS}><Leaders /></RequireAuth>} />
+      <Route path="/admin/versets"element={<RequireAuth requireComplete anyPermission={['content.manage']}><Verses /></RequireAuth>} />
       <Route path="/admin/journal" element={<RequireAuth requireComplete anyPermission={['audit.view']}><AuditLog /></RequireAuth>} />
       <Route path="*" element={<RedirectWithMessage to="/" message="Cette page n'existe pas (ou plus). Retour à l'accueil." />} />
     </Routes>

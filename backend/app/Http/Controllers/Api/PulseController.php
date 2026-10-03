@@ -26,6 +26,8 @@ class PulseController extends Controller
         'validations' => ['fiss_edit_requests', 'tribe_change_requests'],
         'fiss' => ['spiritual_health_forms'],
         'attendance' => ['attendances'],
+        'leader_reports' => ['leader_reports'],
+        'gem_reports' => ['gem_weekly_reports'],
     ];
 
     public function show(Request $request): JsonResponse

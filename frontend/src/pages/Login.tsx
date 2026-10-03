@@ -4,6 +4,7 @@ import { api, ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import type { AuthPayload } from '../types'
 import { Brand } from '../components/Brand'
+import { APP_NAME } from '../config'
 import { DEFAULT_COUNTRY, type Country } from '../data/countries'
 import { CountrySelect } from '../components/CountrySelect'
 import { LoginBackdrop } from '../components/LoginBackdrop'
@@ -78,7 +79,7 @@ export default function Login() {
     <div className="screen login-screen">
       <LoginBackdrop />
       <div className="card login-card">
-        <Brand subtitle="Espace membre" />
+        <Brand subtitle={APP_NAME} />
 
         {step === 'phone' && (
           <form onSubmit={requestCode}>

@@ -1,22 +1,18 @@
 import { useEffect, useState } from 'react'
-import { api, ApiError } from '../api/client'
-import { currentEndpoint, disablePush, enablePush, getPushState, PushError, type PushState } from '../push'
+import { disablePush, enablePush, getPushState, PushError, type PushState } from '../push'
 import { toast } from '../toast'
 import { Icon } from './Icon'
 
 const DISMISS_KEY = 'evh_push_prompt_dismissed'
 
-type TestReport = { message: string; devices: { device: string; this_device: boolean; ok: boolean; explanation: string }[] }
-
 /**
  * Activation des notifications push sur cet appareil.
- * - variant "card" : reglage complet (page Notifications)
+ * - variant "card" : reglage complet (page Notifications), sans envoi de test (diagnostic : php artisan app:push-check)
  * - variant "prompt" : invitation discrete sur le tableau de bord, masquee une fois traitee
  */
 export function PushSettings({ variant = 'card' }: { variant?: 'card' | 'prompt' }) {
   const [state, setState] = useState<PushState | null>(null)
   const [busy, setBusy] = useState(false)
-  const [report, setReport] = useState<TestReport | null>(null)
   const [dismissed, setDismissed] = useState(() => {
     try { return localStorage.getItem(DISMISS_KEY) === '1' } catch { return false }
   })
@@ -47,34 +43,20 @@ export function PushSettings({ variant = 'card' }: { variant?: 'card' | 'prompt'
     toast.info('Cet appareil ne recevra plus de notifications push.', { title: 'Notifications désactivées' })
   }
 
-  // Test reel : reenregistre cet appareil aupres du serveur, envoie tout de suite, puis affiche
-  // ce que le service de notification a repondu pour chaque appareil du compte.
-  async function test(delayed = false) {
-    setBusy(true); setReport(null)
-    try {
-      await enablePush()
-      const endpoint = await currentEndpoint()
-      setReport(await api<TestReport>('/me/push/test', { method: 'POST', body: { endpoint, delayed }, toast: false }))
-    } catch (e) {
-      const message = e instanceof PushError ? e.message : e instanceof ApiError ? e.firstMessage : "Le test n'a pas pu être lancé."
-      setReport({ message, devices: [] })
-    } finally { setBusy(false) }
-  }
-
-  // Abonnement neuf : supprime celui de cet appareil (telephone et serveur), en recree un, puis
-  // envoie un test differe. Regle le cas d'un abonnement devenu obsolete (reinstallation...).
+  // Abonnement neuf : supprime celui de cet appareil (telephone et serveur) puis en recree un.
+  // Regle le cas d'un abonnement devenu obsolete (reinstallation, changement de telephone...).
   async function reset() {
-    setBusy(true); setReport(null)
+    setBusy(true)
     try {
       await disablePush()
       const next = await enablePush()
       setState(next)
-      if (next !== 'on') { setReport({ message: 'Les notifications ne sont pas autorisées pour cette application.', devices: [] }); return }
+      if (next === 'on') toast.success('Cet appareil est de nouveau abonné aux notifications.', { title: 'Notifications réinitialisées' })
+      else toast.warning('Les notifications ne sont pas autorisées pour cette application.', { title: 'Réinitialisation incomplète' })
     } catch (e) {
-      setReport({ message: e instanceof PushError ? e.message : 'La réinitialisation a échoué.', devices: [] })
-      return
+      toast.error(e instanceof PushError ? e.message : 'La réinitialisation a échoué.', { title: 'Réinitialisation impossible' })
+      setState(await getPushState())
     } finally { setBusy(false) }
-    await test(true)
   }
 
   function dismiss() {
@@ -123,40 +105,18 @@ export function PushSettings({ variant = 'card' }: { variant?: 'card' | 'prompt'
       )}
       {state === 'off' && <p className="helper">Activez les notifications pour être prévenu même lorsque l'application est fermée.</p>}
       {state === 'on' && <p className="helper">Vous recevez les annonces, rappels d'événements, tâches et réponses sur cet appareil.
-        Quand l'application est ouverte, elles s'affichent dans l'application ; pour voir la notification du téléphone,
-        choisissez « Tester dans 10 s » puis revenez à l'écran d'accueil.</p>}
+        Quand l'application est ouverte, elles s'affichent dans l'application. Si elles n'arrivent plus, choisissez « Réinitialiser ».</p>}
 
 
       <div className="push-actions">
         {state === 'off' && <button className="btn btn-primary small" disabled={busy} onClick={enable}>{busy ? <span className="spinner" /> : 'Activer les notifications'}</button>}
         {state === 'on' && (
           <>
-            <button className="btn btn-ghost small" disabled={busy} onClick={() => test()}>Envoyer un test</button>
-            <button className="btn btn-ghost small" disabled={busy} onClick={() => test(true)}>Tester dans 10 s</button>
             <button className="btn btn-ghost small" disabled={busy} onClick={reset}>Réinitialiser</button>
             <button className="btn-link" disabled={busy} onClick={disable}>Désactiver sur cet appareil</button>
           </>
         )}
       </div>
-      {report && (
-        <div className="push-report" role="status">
-          <p>{report.message}</p>
-          {report.devices.length > 0 && (
-            <ul>
-              {report.devices.map((d, i) => (
-                <li key={i} className={d.ok ? 'ok' : 'ko'}>
-                  <strong>{d.ok ? '✓' : '✗'} {d.device}{d.this_device ? ' (cet appareil)' : ''}</strong>
-                  <span>{d.explanation}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {report.devices.some((d) => d.ok) && (
-            <p className="helper">Acceptée mais rien ne s'affiche ? Vérifiez dans les réglages du téléphone que les notifications
-              du navigateur (ou de l'application installée) sont autorisées, et que le mode « Ne pas déranger » est coupé.</p>
-          )}
-        </div>
-      )}
     </section>
   )
 }

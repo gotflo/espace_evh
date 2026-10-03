@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsurePermission;
+use App\Http\Middleware\MonitorRequests;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\TriggerAutomation;
 use Illuminate\Database\LostConnectionDetector;
@@ -27,6 +28,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'permission' => EnsurePermission::class,
         ]);
+
+        // Supervision : identifiant et mesure de chaque requete de l'API (y compris les refus).
+        $middleware->prepend(MonitorRequests::class);
 
         // En-tetes de securite sur toutes les reponses.
         $middleware->append(SecurityHeaders::class);

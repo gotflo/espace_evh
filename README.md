@@ -1,7 +1,7 @@
 <div align="center">
   <img src="frontend/public/logo-vh.png" alt="Vases d'Honneur Chicoutimi" width="110" />
 
-  # Espace Vases d'Honneur Chicoutimi
+  # My vasesdhonneur
 
   Plateforme de suivi des membres de l'église Vases d'Honneur Chicoutimi.
   Chaque fidèle a son espace personnel ; les responsables suivent la vie de l'église
@@ -25,13 +25,14 @@
 11. [Automatismes (tâches planifiées)](#automatismes-tâches-planifiées)
 12. [Tenue en charge](#tenue-en-charge)
 13. [Journal d'audit](#journal-daudit)
-14. [Sécurité et confidentialité](#sécurité-et-confidentialité)
-15. [Tests et vérifications](#tests-et-vérifications)
-16. [Déploiement](#déploiement)
-17. [Hébergement Hostinger](#hébergement-hostinger)
-18. [Maintenance, sauvegarde et restauration](#maintenance-sauvegarde-et-restauration)
-19. [Limites connues](#limites-connues)
-20. [Documentation complémentaire](#documentation-complémentaire)
+14. [Agent de supervision](#agent-de-supervision)
+15. [Sécurité et confidentialité](#sécurité-et-confidentialité)
+16. [Tests et vérifications](#tests-et-vérifications)
+17. [Déploiement](#déploiement)
+18. [Hébergement Hostinger](#hébergement-hostinger)
+19. [Maintenance, sauvegarde et restauration](#maintenance-sauvegarde-et-restauration)
+20. [Limites connues](#limites-connues)
+21. [Documentation complémentaire](#documentation-complémentaire)
 
 ## Fonctionnalités
 
@@ -43,7 +44,7 @@
 - **Ma vie spirituelle** : cartes interactives (FISS, Vertumètre, Assiduité, Ponctualité, Parcours) qui ouvrent le détail.
 - **Fiche de santé spirituelle (FISS)** mensuelle, **verrouillée après envoi** ; modification sur demande validée (2 demandes par fiche au maximum).
 - **Calendrier** (mois, semaine, liste) : événements, jours fériés, anniversaires, anniversaires de mariage, échéances.
-- **Horaires des cultes** (mercredi et dimanche) dans le calendrier et sur le tableau de bord, avec le programme
+- **Horaires des cultes** (mercredi, Samedi des miracles et dimanche) dans le calendrier et sur le tableau de bord, avec le programme
   la veille au soir et un rappel 30 minutes avant chaque rendez-vous.
 - **« Content de vous revoir »** après quelques jours d'absence : nouveautés depuis la dernière visite.
 - **Choix des notifications** reçues sur le téléphone, par catégorie ; brouillons conservés hors ligne.
@@ -67,6 +68,20 @@
 - **Versets du tableau de bord** (PR et PA) : bibliothèque de textes bibliques, brouillon, programmation,
   rotation quotidienne, mise en avant, aperçu et historique.
 - **Rapport mensuel automatique** : chiffres clés du mois écoulé envoyés le 1er à chaque responsable.
+- **Rapports mensuels des responsables** : le patriarche (pour sa tribu) et le responsable de département
+  remplissent chaque mois un **questionnaire guidé** (rencontres d'échanges, activités menées, GEMs, santé
+  spirituelle, mois à venir, âmes gagnées et intégrées avec leurs **noms listés automatiquement**) ;
+  l'AP de la tribu et les pasteurs voient les rapports reçus et ceux qui manquent, et les exportent en **PDF**.
+- **Rapport hebdomadaire des Gardes** : présence de chaque membre du GEM au culte du dimanche et à la rencontre
+  du GEM, envoyé automatiquement au patriarche et à l'AP de la tribu.
+- **Responsables** : annuaire toujours à jour des AP, patriarches, responsables de département et Gardes avec leur
+  appartenance (pasteurs : toute l'église ; AP et patriarches : leurs tribus) ; la **fiche d'un Garde** montre comment
+  il mène son GEM (rapports, présences, FISS des membres, activité de suivi).
+
+**Supervision** (console séparée, projet evh_monitoring sur son propre sous-domaine)
+- La plateforme embarque un **agent** : mesure de chaque requête, erreurs et journaux, erreurs des navigateurs,
+  appels Twilio et push, automatismes ; blocage des comptes ; API de contrôle signée `/api/agent/*` utilisée par la
+  console. Voir [Agent de supervision](#agent-de-supervision).
 
 ## Pile technique et architecture
 
@@ -137,7 +152,26 @@ npm run dev                    # http://localhost:5173 (proxy /api et /storage v
 ```
 
 En local, `SMS_DRIVER=log` écrit le code de connexion dans `storage/logs/laravel.log`
-(et `EXPOSE_OTP=true` l'affiche à l'écran de connexion).
+(et `EXPOSE_OTP=true` l'affiche à l'écran de connexion). En production, `SMS_DRIVER=twilio_verify`
+envoie et valide les codes avec un service Twilio Verify.
+
+### Connecter Twilio Verify
+
+1. Dans Twilio Console, ouvre **Identity → Verify → Overview**, crée un service et copie son SID (`VA...`).
+2. Dans **API keys & auth tokens**, crée une clé API standard avec accès à Verify. Renseigne côté serveur `TWILIO_ACCOUNT_SID`,
+   `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET` et `TWILIO_VERIFY_SERVICE_SID`. Garde le secret de la clé
+   dans le `.env` du serveur; ne le colle pas dans le dépôt ni dans un message.
+3. Mets `SMS_DRIVER=twilio_verify`, puis vide le cache de configuration Laravel (`php artisan config:clear`
+   ou `php artisan config:cache` après avoir modifié le `.env`).
+4. Avec un compte d'essai, commence par un numéro de téléphone que Twilio a vérifié sur ce compte. Twilio
+   limite les destinataires pendant l'essai; il faudra mettre le compte à niveau avant d'envoyer des OTP
+   aux numéros des membres.
+5. Vérifie sans envoyer de SMS : `php artisan app:sms-check` (identifiants, nom du service, longueur du code : 6).
+   Pour envoyer un vrai code de test : `php artisan app:sms-check +1418XXXXXXX`.
+
+Le SMS est envoyé en français avec le nom du service Verify. Un numéro refusé par Twilio (ligne fixe, pays non
+activé, numéro non vérifié en phase d'essai) donne un message clair à l'écran ; une panne ou une mauvaise
+configuration donne « momentanément indisponible » et une ligne dans les journaux (sans le numéro complet).
 
 ## Variables d'environnement
 
@@ -149,11 +183,13 @@ Modèle complet : `backend/.env.production.example`. Les principales :
 | `APP_TIMEZONE` | `America/Toronto` : heures des événements, rappels, anniversaires |
 | `DB_*` | connexion MySQL |
 | `SANCTUM_EXPIRATION` | durée de validité des sessions (minutes) |
-| `SMS_DRIVER`, `TWILIO_SID`, `TWILIO_TOKEN`, `TWILIO_FROM` | envoi des codes de connexion |
+| `SMS_DRIVER`, `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_VERIFY_SERVICE_SID` | envoi et validation des codes OTP avec Twilio Verify |
 | `EXPOSE_OTP` | phase de test uniquement : affiche le code à l'écran (`false` en production réelle) |
 | `WEBPUSH_ENABLED` | active les notifications push (défaut `true`) |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | clés push (facultatives : générées automatiquement dans `storage/app/webpush-vapid.json`) |
 | `AUTO_TICK` | déclenche les automatismes depuis l'application si le cron manque (défaut `true`) |
+| `MONITOR_AGENT_SECRET` | secret partagé avec la console de supervision (vide : API de contrôle fermée) |
+| `MONITOR_*` | collecte et agent de supervision : voir [`docs/AGENT-SUPERVISION.md`](docs/AGENT-SUPERVISION.md) |
 
 Aucun secret n'est versionné : `.env`, bases SQLite et clés VAPID sont exclus par `.gitignore`.
 
@@ -172,6 +208,7 @@ Tables principales :
 | Publication | `announcements`, `events` (dont `remind_all` : rendez-vous réguliers), `exercises` (vidéo YouTube, `closes_at`), `publication_scopes` (portée multiple : église, tribus, GEM, départements) |
 | Exercices | `exercise_responses`, `exercise_video_views` (passages regardés, avances rapides, terminé) |
 | Notifications | `user_notifications` (priorité, lien), `push_subscriptions`, `notification_dispatches` (anti-doublon) |
+| Rapports des responsables | `leader_reports` (mensuel : tribu ou département, réponses, âmes figées à l'envoi), `gem_weekly_reports` (hebdomadaire : présences du GEM) |
 | Traçabilité | `audit_logs` (qui, quoi, avant/après, contexte, IP) |
 
 Toutes les migrations de cette version ont une méthode `down()` testée (retour arrière possible).
@@ -185,7 +222,7 @@ Toutes les migrations de cette version ont une méthode `down()` testée (retour
 | Administrateur | église | attribution et gestion des rôles |
 | Assistant Pasteur (AP) | **une ou plusieurs tribus assignées** | suivi, rapports, validations **uniquement sur ses tribus** |
 | Patriarche | sa tribu | suivi, rapports, validation des FISS et changements de tribu |
-| Garde (responsable de GEM) | son GEM (dans sa tribu) | présences, notes, suivi, demandes |
+| Garde (responsable de GEM) | son GEM (dans sa tribu) | présences, notes, suivi, demandes, rapport hebdomadaire — **sans les FISS** |
 | Communication | église | annonces et événements pour toute l'église |
 | Accompagnateur d'un fidèle | un fidèle | suivi de ce fidèle uniquement |
 | Membre | soi-même | son espace |
@@ -249,6 +286,37 @@ Service unique `App\Services\Notifier` :
 - **PDF** : rapport complet (A4) et liste des membres filtrée (A4 paysage), générés sur l'appareil
   à partir des seules données autorisées ; chaque export est tracé dans l'audit.
 
+### Rapports mensuels des responsables
+
+`/admin/rapports-mensuels` — aucun nouveau rôle ni nouvelle permission :
+
+- **Qui remplit** : le patriarche de la tribu (rôle Patriarche sur cette tribu) ; les responsables du département
+  (désignés dans Organisation). Un seul rapport par tribu / département et par mois, partagé entre co-responsables.
+- **Quand** : le rapport d'un mois s'ouvre le 25 de ce mois et reste modifiable jusqu'à la fin du mois suivant,
+  puis il est figé. Brouillon gardé sur l'appareil et sur le serveur (on peut finir sur un autre appareil).
+- **Questionnaire** : défini à un seul endroit, `App\Support\LeaderReportCatalog` (questions, choix, conditions) ;
+  l'application l'affiche et le serveur valide avec la même définition. Pour modifier une question, c'est ce fichier.
+- **Âmes gagnées et intégrées** : tribu = nouveaux inscrits du mois dans la tribu (« accueilli » ou « à accueillir ») ;
+  département = membres ayant rejoint le département dans le mois. Liste figée à l'envoi ; des noms de personnes
+  pas encore inscrites peuvent être ajoutés à la main.
+- **Qui lit** : les auteurs, l'AP de la tribu, les autorités pastorales (permission `reports.view`). Les rapports
+  de département ne sont lus que par les pasteurs (PR, PA). Un brouillon n'est visible que de ses auteurs.
+- **Notifications** : à l'envoi (AP de la tribu, pasteurs) ; rappel aux auteurs du 1er au 4, relance du 5 au 10.
+- **PDF** : un rapport envoyé s'exporte en PDF depuis sa page (généré sur l'appareil, export tracé dans l'audit).
+
+### Rapport hebdomadaire des Gardes et annuaire des responsables
+
+- `/admin/rapport-gem` (Garde) : une semaine va du lundi au dimanche ; son rapport se remplit à partir du dimanche et
+  reste modifiable jusqu'au samedi suivant. Présence de chaque membre au culte du dimanche et à la rencontre du GEM,
+  plus un mot facultatif. Les présences déjà pointées dans Présences sont précochées. À l'envoi : notification au
+  patriarche et à l'AP de la tribu.
+- `/admin/responsables` : annuaire lu dans les rôles et l'organisation (aucune saisie). Autorité pastorale : AP,
+  patriarches, responsables de département, Gardes ; AP et patriarches : patriarches et Gardes de leurs tribus.
+  Un Garde, un responsable de département ou un membre n'y ont pas accès (contrôle serveur).
+- Fiche d'un Garde (`/admin/responsables?gem=ID`) : rapports envoyés sur les semaines attendues (depuis sa nomination,
+  8 au plus), taux de présence, FISS des membres, activité de suivi des 60 derniers jours. Visible du Garde lui-même,
+  des responsables de sa tribu et des pasteurs.
+
 ## Automatismes (tâches planifiées)
 
 Une seule commande idempotente, planifiée toutes les 5 minutes : `php artisan app:tick`
@@ -262,11 +330,14 @@ Une seule commande idempotente, planifiée toutes les 5 minutes : `php artisan a
 | `tasks` | exercices non terminés : relance à J+2, la veille et 3 h avant la fermeture (8 h – 21 h) ; bilan à l'auteur à la fermeture |
 | `fiss` | rappels FISS, récapitulatif des FISS manquantes, reverrouillage des modifications expirées |
 | `profiles` | recalcul quotidien de la complétion, rappels de profil incomplet |
+| `leader-reports` | du 1er au 10 : rappel puis relance aux patriarches et responsables de département sans rapport envoyé |
+| `gem-reports` | dimanche dès 18 h (ou lundi) : rappel aux Gardes sans rapport de la semaine ; relance mardi ou mercredi |
 | `followups` | relances des demandes sans réponse |
 | `prune` | nettoyage (anciennes notifications, clés d'envoi) |
 
-Cron recommandé (toutes les minutes) : `php artisan schedule:run`. Sans cron, l'application déclenche
-elle-même `app:tick` au plus toutes les 5 minutes quand quelqu'un l'utilise (`AUTO_TICK`).
+Cron recommandé (toutes les minutes) : `php artisan schedule:run`. Il lance aussi `app:push-outbox` (chaque minute).
+Sans cron, l'application déclenche elle-même `app:tick` au plus
+toutes les 5 minutes quand quelqu'un l'utilise (`AUTO_TICK`).
 
 ## Tenue en charge
 
@@ -288,8 +359,30 @@ Conçue pour 200 à 500 membres connectés en même temps sur un hébergement mu
 ## Journal d'audit
 
 `/admin/journal` (permission `audit.view`) : FISS, changements de tribu, statuts d'activité, famille, profils,
-rôles, départements, publications, notes, exports PDF. Chaque entrée : auteur, membre concerné, valeurs avant/après,
+rôles, départements, publications, notes, exports PDF, rapports mensuels (envoi, corrections, export) et hebdomadaires des Gardes. Chaque entrée : auteur, membre concerné, valeurs avant/après,
 contexte, IP, date. **Aucune route ne permet de modifier ou supprimer** une entrée.
+
+Les actions décidées dans la console de supervision (blocage, suppression...) y apparaissent aussi, avec la mention
+« console de supervision » et le nom de la personne ; la console garde en plus son propre journal d'audit.
+
+## Agent de supervision
+
+La console de supervision et d'administration est un **projet séparé** (dépôt `evh_monitoring`, sous-domaine
+distinct, base et connexion propres). La plateforme n'en contient que l'agent :
+
+- **Collecte** (tables `monitor_*`) : compteurs de requêtes par tranche de 5 minutes avec des routes génériques,
+  requêtes notables (erreurs, refus, limites, lenteurs), journaux et exceptions (niveau `MONITOR_LOG_LEVEL` et plus),
+  requêtes SQL lentes sans leurs valeurs, erreurs des navigateurs (`POST /api/monitor/client-errors`), connexions et
+  codes erronés, appels Twilio Verify et envois push, passages des automatismes. Identifiant `X-Request-Id` sur
+  chaque réponse. Masquage systématique : jamais de code, de jeton, de numéro complet ni de contenu privé.
+- **API de contrôle** `/api/agent/*` : état détaillé, paquets installés, fichiers journaux masqués, bloquer,
+  débloquer, fermer les sessions, supprimer un compte, lancer les automatismes, renvoyer les notifications,
+  diagnostic SMS, recharger la configuration, alerte dans l'application. Chaque requête est signée (HMAC-SHA256,
+  secret partagé `MONITOR_AGENT_SECRET`, horodatage, anti-rejeu) ; sans secret, l'API est fermée.
+- **Comptes bloqués** : plus de code envoyé, sessions fermées, toute requête refusée.
+- Nettoyage de sécurité : mesures supprimées au-delà de `MONITOR_AGENT_MAX_DAYS` (120 jours).
+
+Détail : [`docs/AGENT-SUPERVISION.md`](docs/AGENT-SUPERVISION.md).
 
 ## Sécurité et confidentialité
 
@@ -298,6 +391,9 @@ contexte, IP, date. **Aucune route ne permet de modifier ou supprimer** une entr
 - Permissions et périmètres vérifiés sur chaque route ; tests automatisés dédiés (AP limité à ses tribus, etc.).
 - En-têtes de sécurité, HTTPS forcé en production, anti-escalade des rôles.
 - Données spirituelles et familiales visibles uniquement des responsables du périmètre ; PDF marqués « confidentiel ».
+- **FISS d'un membre** (contenu, fiche du mois remplie ou non, historique, taux) : réservées aux pasteurs et aux
+  responsables de **sa tribu** (patriarche, AP). Un Garde, un responsable de département ou un accompagnateur suivent
+  le membre sans voir ses fiches (`User::canViewFissOf`, appliqué à toutes les routes ; matrice de tests `RoleAccessMatrixTest`).
 - Les photos de l'écran de connexion ne montrent aucun visage identifiable.
 
 **Injections** (audit complet, tests `InjectionTest`) :
@@ -337,14 +433,18 @@ complète : [`docs/A-FAIRE-DE-VOTRE-COTE.md`](docs/A-FAIRE-DE-VOTRE-COTE.md), é
 
 ## Déploiement
 
-**Mise en ligne de tout ce qui a été fait depuis le 20 septembre 2026, en une fois** :
+**Mise en ligne d'octobre 2026 (paquets complets, Twilio compris)** :
+[`docs/MISE-EN-LIGNE-HOSTINGER-2026-10.md`](docs/MISE-EN-LIGNE-HOSTINGER-2026-10.md).
+
+Procédure précédente (20 septembre 2026) :
 [`docs/MISE-EN-LIGNE-HOSTINGER.md`](docs/MISE-EN-LIGNE-HOSTINGER.md) (paquets prêts dans `deployment/`).
 
 Détail par évolution (fichiers, migrations, variables, cron, retour arrière) :
 - [`docs/MISE-A-JOUR-EVOLUTION-PLATEFORME.md`](docs/MISE-A-JOUR-EVOLUTION-PLATEFORME.md) : rapports, validations, périmètres, famille, audit ;
 - [`docs/MISE-A-JOUR-VIDEOS-CULTES-CHARGE.md`](docs/MISE-A-JOUR-VIDEOS-CULTES-CHARGE.md) : exercices vidéo, horaires des cultes, tenue en charge, sécurité ;
 - [`docs/MISE-A-JOUR-AUDIT-ROBUSTESSE.md`](docs/MISE-A-JOUR-AUDIT-ROBUSTESSE.md) : audit, versets administrables, hébergement, robustesse ;
-- [`docs/MISE-A-JOUR-PUSH.md`](docs/MISE-A-JOUR-PUSH.md) : notifications push fiables (boîte d'envoi, test par appareil, diagnostic).
+- [`docs/MISE-A-JOUR-PUSH.md`](docs/MISE-A-JOUR-PUSH.md) : notifications push fiables (boîte d'envoi, test par appareil, diagnostic) ;
+- [`docs/MISE-A-JOUR-RAPPORTS-MENSUELS.md`](docs/MISE-A-JOUR-RAPPORTS-MENSUELS.md) : rapports mensuels (patriarche, responsable de département) et hebdomadaires (Gardes), annuaire des responsables, Samedi des miracles, nom de l'application.
 
 En résumé : sauvegarde de la base → envoi des fichiers `backend/` modifiés → `php artisan migrate --force`
 → `php artisan config:cache && php artisan route:cache && php artisan event:cache` → build React copié dans `public/` → vérifications.
@@ -392,6 +492,8 @@ OPcache, cron disponible. Pas de Redis ni de worker permanent supposés : l'appl
 - **Rapport « toute l'église » sur 12 mois** : calculé à la demande (≈ 2 s à 5 000 membres en local), puis en cache 10 min.
 - **Push sur iPhone** : uniquement avec l'application installée sur l'écran d'accueil (iOS 16.4+).
 - **SMS** : tant que `SMS_DRIVER=log`, aucun SMS n'est envoyé (phase de test).
+- **Supervision** : les mesures commencent à la mise en service de l'agent ; la console (projet séparé) a ses propres
+  limites, décrites dans son README.
 - **Vertumètre** : actuellement la moyenne des notes des responsables ; version remplie par le membre en attente des questionnaires.
 
 ## Documentation complémentaire
@@ -399,5 +501,6 @@ OPcache, cron disponible. Pas de Redis ni de worker permanent supposés : l'appl
 - [`docs/AUDIT-2026-09.md`](docs/AUDIT-2026-09.md) : audit complet (architecture, sécurité, performance, hébergement, mesures).
 - [`docs/A-FAIRE-DE-VOTRE-COTE.md`](docs/A-FAIRE-DE-VOTRE-COTE.md) : ce que l'équipe doit faire (mise en ligne, hPanel, surveillance, restauration, test de charge).
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) : modèle de données et choix techniques.
+- [`docs/AGENT-SUPERVISION.md`](docs/AGENT-SUPERVISION.md) : agent de supervision (collecte, API signée pour la console evh_monitoring).
 - [`docs/IA-ARCHITECTURE.md`](docs/IA-ARCHITECTURE.md) : proposition d'architecture pour de futures fonctions d'IA (non implémentées).
 - `docs/MISE-A-JOUR-*.md` : procédures des mises à jour successives.

@@ -80,7 +80,8 @@ class ValidationController extends Controller
     public function fissHistory(Request $request, User $user): JsonResponse
     {
         $viewer = $request->user();
-        abort_unless($viewer->canViewMember($user) && ($viewer->hasPermission('fiss.review') || $viewer->hasPermission('audit.view')), 403, 'Accès refusé.');
+        abort_unless($viewer->canViewMember($user) && $viewer->canViewFissOf($user)
+            && ($viewer->hasPermission('fiss.review') || $viewer->hasPermission('audit.view')), 403, 'Accès refusé.');
 
         $formIds = SpiritualHealthForm::where('user_id', $user->id)->pluck('period', 'id');
         $requestIds = FissEditRequest::where('user_id', $user->id)->pluck('id');

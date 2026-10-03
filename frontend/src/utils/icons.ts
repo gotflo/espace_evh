@@ -44,6 +44,7 @@ export const ICONS = {
   music: 'M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM21 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
   forward: 'M13 19l9-7-9-7zM2 19l9-7-9-7z',
   check: 'M20 6 9 17l-5-5',
+  clipboard: 'M9 2h6a1 1 0 0 1 1 1v2H8V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 12h6M9 16h4',
 }
 
 export type IconName = keyof typeof ICONS
