@@ -10,7 +10,8 @@ import { FissEvolution } from '../components/FissEvolution'
 import { FissDetail } from '../components/FissDetail'
 import type { FissData, FissForm, FissIndex, InnerLifeKey, InnerLifeQuestion } from '../types'
 import { Icon } from '../components/Icon'
-import { de } from '../utils/french'
+import { de } from '../utils/french'import { ModalLayer } from '../components/ModalLayer'
+
 
 const SANCT = [['bien', 'Bien'], ['moyen', 'Moyen'], ['mal', 'Mal']]
 
@@ -376,7 +377,7 @@ export default function MyFiss() {
       )}
 
       {requestFor && (
-        <div className="modal-overlay" onClick={() => setRequestFor(null)}>
+        <ModalLayer className="modal-overlay" onClick={() => setRequestFor(null)}>
           <div className="modal-box" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <div className="panel-head">
               <h3>Demander une modification</h3>
@@ -395,7 +396,7 @@ export default function MyFiss() {
               {busy ? <span className="spinner" /> : 'Envoyer la demande'}
             </button>
           </div>
-        </div>
+        </ModalLayer>
       )}
     </AppLayout>
   )

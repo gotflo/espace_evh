@@ -22,7 +22,9 @@ export function InstallPrompt() {
   const [show, setShow] = useState(false)
 
   useEffect(() => {
-    if (isStandalone() || localStorage.getItem(DISMISS_KEY)) return
+    let dismissed = false
+    try { dismissed = !!localStorage.getItem(DISMISS_KEY) } catch { /* stockage indisponible */ }
+    if (isStandalone() || dismissed) return
 
     const onBip = (e: Event) => {
       e.preventDefault()
@@ -43,7 +45,7 @@ export function InstallPrompt() {
 
   function dismiss() {
     setShow(false)
-    localStorage.setItem(DISMISS_KEY, '1')
+    try { localStorage.setItem(DISMISS_KEY, '1') } catch { /* stockage indisponible */ }
   }
 
   async function install() {

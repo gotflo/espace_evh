@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, peek } from '../api/client'
 import { usePulse } from '../pulse'
-import type { MyOverviewData } from '../types'
+import type { MyOverviewData } from '../types'import { ModalLayer } from './ModalLayer'
+
 
 type Mood = 'great' | 'good' | 'meh' | 'bad' | 'idle'
 const FACE: Record<Mood, string> = { great: '😄', good: '🙂', meh: '😐', bad: '😞', idle: '🌱' }
@@ -82,7 +83,7 @@ export function MyOverview() {
       </section>
 
       {sheet && (
-        <div className="modal-overlay" onClick={() => setSheet(null)}>
+        <ModalLayer className="modal-overlay" onClick={() => setSheet(null)}>
           <div className="modal-box" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <div className="panel-head">
               <h3>{sheet === 'attendance' ? 'Mon assiduité' : 'Ma ponctualité aux répétitions'}</h3>
@@ -120,7 +121,7 @@ export function MyOverview() {
               </>
             )}
           </div>
-        </div>
+        </ModalLayer>
       )}
     </>
   )

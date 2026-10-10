@@ -100,11 +100,17 @@ class PlatformSettingsTest extends TestCase
         $this->getJson('/api/admin/settings')->assertForbidden();
         $this->putJson('/api/admin/settings', ['values' => ['automation.birthdays' => false]])->assertForbidden();
 
-        // Administrateur (gere les roles) : oui ; patriarche : non.
-        $admin = $this->member('+14185580020', 'Admin');
-        $admin->roles()->attach(Role::where('key', 'administrateur')->value('id'));
-        $this->actAs($admin);
+        // Reserves au Pasteur Resident et au compte de gestion : ni l'Administrateur, ni le PA, ni un patriarche.
+        $this->actAs($this->pastor);
         $this->getJson('/api/admin/settings')->assertOk()->assertJsonPath('groups.0.settings.0.key', 'module.vertumetre');
+        foreach (['administrateur', 'pasteur_assistant'] as $i => $roleKey) {
+            $someone = $this->member('+1418558002'.$i, 'Role'.$i);
+            $someone->roles()->attach(Role::where('key', $roleKey)->value('id'));
+            $this->actAs($someone);
+            $this->getJson('/api/admin/settings')->assertForbidden();
+            $this->getJson('/api/me')->assertOk();
+            $this->assertNotContains('settings.manage', $this->getJson('/api/me')->json('permissions'));
+        }
         $patriarche = $this->member('+14185580030', 'Patriarche');
         $patriarche->roles()->attach(Role::where('key', 'patriarche')->value('id'), ['scope_kind' => 'tribe', 'scope_id' => Tribe::value('id')]);
         $this->actAs($patriarche);

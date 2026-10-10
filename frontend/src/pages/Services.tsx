@@ -6,7 +6,8 @@ import { AppLayout } from '../components/AppLayout'
 import { SkeletonCard } from '../components/Skeleton'
 import type { ServiceItem } from '../types'
 import { Icon } from '../components/Icon'
-import { toast } from '../toast'
+import { toast } from '../toast'import { ModalLayer } from '../components/ModalLayer'
+
 
 /** Servir : le fidele demande a rejoindre un ou plusieurs departements ; le responsable valide chaque demande. */
 export default function Services() {
@@ -88,7 +89,7 @@ export default function Services() {
       )}
 
       {confirmJoin && (
-        <div className="modal-overlay" onClick={() => setConfirmJoin(null)}>
+        <ModalLayer className="modal-overlay" onClick={() => setConfirmJoin(null)}>
           <div className="modal-box" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <div className="panel-head"><h3>Servir dans {confirmJoin.name}</h3></div>
             <p className="event-desc">Votre demande est envoyée au responsable du service, qui la valide :</p>
@@ -102,7 +103,7 @@ export default function Services() {
               <button className="btn btn-ghost" onClick={() => setConfirmJoin(null)}>Annuler</button>
             </div>
           </div>
-        </div>
+        </ModalLayer>
       )}
     </AppLayout>
   )

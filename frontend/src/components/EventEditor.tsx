@@ -5,6 +5,7 @@ import type { AudienceScope, EventCategory, EventOccurrence, Recurrence } from '
 import { CAT_LABEL, parseYmd, ymd } from '../utils/events'
 import { AudiencePicker } from './AudiencePicker'
 import { useDirty } from '../utils/dirty'
+import { ModalLayer } from './ModalLayer'
 
 const RECURRENCES: { key: Recurrence; label: string }[] = [
   { key: 'none', label: 'Une seule fois' },
@@ -125,7 +126,7 @@ export function EventEditor({ date, event, onClose, onSaved }: {
   }
 
   return (
-    <div className="modal-overlay" onMouseDown={onClose}>
+    <ModalLayer className="modal-overlay" onMouseDown={onClose}>
       <div className="modal-box editor-modal" role="dialog" aria-modal="true" aria-label={editing ? 'Modifier' : 'Programmer'}
         onMouseDown={(e) => e.stopPropagation()}>
         <div className="panel-head">
@@ -247,6 +248,6 @@ export function EventEditor({ date, event, onClose, onSaved }: {
           {editing && <button className="btn btn-ghost danger" disabled={busy} onClick={remove}>Supprimer</button>}
         </div>
       </div>
-    </div>
+    </ModalLayer>
   )
 }

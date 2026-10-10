@@ -13,6 +13,7 @@ import { syncPush } from './push'
 import { setUnread, getUnread } from './notifications'
 import { pollNow } from './pulse'
 import { rememberDestination } from './utils/afterLogin'
+import { applyPendingUpdate } from './utils/appUpdate'
 
 // Chargement a la demande : chaque page arrive dans son propre paquet,
 // le demarrage de l'application est donc beaucoup plus rapide.
@@ -145,6 +146,9 @@ function PushBridge() {
   const { isAuthenticated } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+
+  // Nouvelle version mise en ligne pendant que l'application etait ouverte : chargee en changeant de page.
+  useEffect(() => { applyPendingUpdate() }, [location.pathname])
 
   // Lecture automatique : ouvrir la page visee par une notification la marque comme lue.
   useEffect(() => {

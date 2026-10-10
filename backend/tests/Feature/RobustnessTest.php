@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\LeaderReport;
 use App\Models\Profile;
 use App\Models\PushSubscription;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\LeaderReportService;
 use App\Services\Notifier;
 use App\Services\Push\WebPush;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -122,6 +124,15 @@ class RobustnessTest extends TestCase
         // Refus (validation) : rien n'a change, le cache est garde.
         $this->postJson('/api/me/requests', ['message' => ''])->assertStatus(422);
         $this->assertTrue(Cache::has('pulse:versions'));
+    }
+
+    public function test_a_monthly_report_with_an_old_answer_format_never_breaks_the_count(): void
+    {
+        $report = new LeaderReport(['souls' => [['user_id' => 1]], 'answers' => ['ames_autres' => "Jean\nMarie, Paul;"]]);
+        $this->assertSame(4, LeaderReportService::soulsCount($report));
+        $report = new LeaderReport(['souls' => null, 'answers' => ['ames_autres' => ['Jean', '', 'Marie']]]);
+        $this->assertSame(2, LeaderReportService::soulsCount($report));
+        $this->assertSame(0, LeaderReportService::soulsCount(new LeaderReport(['answers' => []])));
     }
 
     public function test_contact_message_sent_twice_by_a_double_tap_is_recorded_once(): void

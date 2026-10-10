@@ -118,7 +118,7 @@ class PermissionsByModuleTest extends TestCase
     public function test_the_migration_converts_old_roles_and_rolls_back_cleanly(): void
     {
         // Reglages, lectures des ressources, services, appareils de confiance, puis permissions.
-        Artisan::call('migrate:rollback', ['--step' => 5]);
+        Artisan::call('migrate:rollback', ['--step' => 6]);
         $this->assertNotNull(Permission::where('key', 'content.manage')->first());
         $this->assertNull(Permission::where('key', 'verses.view')->first());
         $this->assertNull(Permission::where('key', 'settings.manage')->first());
@@ -138,10 +138,11 @@ class PermissionsByModuleTest extends TestCase
         }
         $this->assertNull(Permission::where('key', 'content.manage')->first());
         $this->assertTrue($holder->fresh()->roles()->where('key', 'redaction')->exists());
-        // Reglages : donnes aux roles qui gerent les roles (PA, Administrateur).
-        $this->assertContains('settings.manage', $this->keysOf('pasteur_assistant'));
-        $this->assertContains('settings.manage', $this->keysOf('administrateur'));
-        $this->assertNotContains('settings.manage', $this->keysOf('patriarche'));
+        // Reglages : reserves au Pasteur Resident (et au compte de gestion), retires des autres roles.
+        $this->assertContains('settings.manage', $this->keysOf('super_admin'));
+        foreach (['pasteur_assistant', 'administrateur', 'patriarche', 'assistant_pasteur'] as $key) {
+            $this->assertNotContains('settings.manage', $this->keysOf($key), $key);
+        }
 
         $this->actAs($holder);
         $this->getJson('/api/admin/verses')->assertOk();

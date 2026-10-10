@@ -4,7 +4,8 @@ import { usePulse } from '../../pulse'
 import { AppLayout } from '../../components/AppLayout'
 import { VerseCard, type VerseContent } from '../../components/VerseBanner'
 import { Icon } from '../../components/Icon'
-import { useDirty } from '../../utils/dirty'
+import { useDirty } from '../../utils/dirty'import { ModalLayer } from '../../components/ModalLayer'
+
 
 type VerseState = 'draft' | 'scheduled' | 'live' | 'expired'
 
@@ -70,7 +71,7 @@ function VerseEditor({ verse, can, onClose, onSaved }: { verse: Verse | null; ca
   const valid = label.trim() && text.trim().length >= 5 && reference.trim()
 
   return (
-    <div className="modal-overlay" onMouseDown={onClose}>
+    <ModalLayer className="modal-overlay" onMouseDown={onClose}>
       <div className="modal-box verse-editor" role="dialog" aria-modal="true" aria-label={verse ? 'Modifier le texte' : 'Nouveau texte'} onMouseDown={(e) => e.stopPropagation()}>
         <div className="panel-head">
           <h3>{verse ? 'Modifier le texte' : 'Nouveau texte'}</h3>
@@ -131,7 +132,7 @@ function VerseEditor({ verse, can, onClose, onSaved }: { verse: Verse | null; ca
           </button>}
         </div>
       </div>
-    </div>
+    </ModalLayer>
   )
 }
 
@@ -244,7 +245,7 @@ export default function Verses() {
       {editing && <VerseEditor verse={editing === 'new' ? null : editing} can={can} onClose={() => setEditing(null)} onSaved={load} />}
 
       {history && (
-        <div className="modal-overlay" onMouseDown={() => setHistory(null)}>
+        <ModalLayer className="modal-overlay" onMouseDown={() => setHistory(null)}>
           <div className="modal-box" role="dialog" aria-modal="true" aria-label="Historique" onMouseDown={(e) => e.stopPropagation()}>
             <div className="panel-head"><h3>Historique · {history.verse.reference}</h3><button className="btn-link" onClick={() => setHistory(null)}>Fermer</button></div>
             {history.items.length === 0 ? <p className="helper">Aucune modification enregistrée.</p> : (
@@ -259,7 +260,7 @@ export default function Verses() {
               </ul>
             )}
           </div>
-        </div>
+        </ModalLayer>
       )}
     </AppLayout>
   )

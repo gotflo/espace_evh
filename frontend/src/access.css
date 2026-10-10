@@ -172,7 +172,7 @@
 .settings-savebar {
   position: sticky; bottom: 1rem; z-index: 15; display: flex; align-items: center; justify-content: space-between; gap: 0.6rem 1rem; flex-wrap: wrap;
   padding: 0.75rem 1rem; border-radius: var(--radius-lg); background: #0d3f3a; color: #fff; box-shadow: 0 16px 40px rgba(6, 30, 27, 0.35);
-  animation: pageIn 0.2s ease both;
+  animation: pageIn 0.2s ease backwards;
 }
 .settings-savebar > span { font-weight: 600; font-size: 0.9rem; min-width: 0; overflow-wrap: anywhere; }
 .settings-savebar-actions { display: flex; gap: 0.5rem; margin-left: auto; }
@@ -195,3 +195,19 @@
 }
 .fiss-prefill-text { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: #0d5f57; min-width: 0; flex: 1 1 260px; overflow-wrap: anywhere; }
 .fiss-prefill-text svg { flex-shrink: 0; }
+
+/* Barres d'enregistrement collantes : bouton inactif sans transparence (le texte du dessous ne transparait plus). */
+.rm-save .btn:disabled, .settings-savebar .btn:disabled { opacity: 1; filter: saturate(0.55) brightness(1.05); }
+
+/* Telephone : les fenetres s'ouvrent en volet depuis le bas, sur toute la largeur, au-dessus de la barre d'onglets. */
+@media (max-width: 560px) {
+  .modal-overlay { place-items: end center; padding: 0; }
+  .modal-overlay > .modal-box {
+    width: 100%; max-width: 100%; border-radius: 20px 20px 0 0;
+    max-height: 88vh; max-height: 88dvh;
+    padding-bottom: calc(1.4rem + env(safe-area-inset-bottom, 0px));
+    animation: sheetUp 0.22s ease-out backwards;
+  }
+}
+@keyframes sheetUp { from { transform: translateY(32px); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .modal-overlay > .modal-box { animation: none; } }

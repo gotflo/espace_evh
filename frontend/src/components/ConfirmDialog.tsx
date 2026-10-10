@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ModalLayer } from './ModalLayer'
 
 /**
  * Fenetre de confirmation, avec un motif facultatif ou obligatoire (communique a la personne
@@ -24,7 +25,7 @@ export function ConfirmDialog({ title, text, confirmLabel, danger = false, reaso
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalLayer className="modal-overlay" onClick={onClose}>
       <div className="modal-box confirm-dialog" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <h3>{title}</h3>
         {text && <p className="helper">{text}</p>}
@@ -41,6 +42,6 @@ export function ConfirmDialog({ title, text, confirmLabel, danger = false, reaso
           </button>
         </div>
       </div>
-    </div>
+    </ModalLayer>
   )
 }

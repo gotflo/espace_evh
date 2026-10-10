@@ -5,7 +5,8 @@ import { Icon } from './Icon'
 import { SkeletonCard } from './Skeleton'
 import { toast } from '../toast'
 import type { ResolutionResource, ResolutionResourceGroup } from '../types'
-import { isYouTubeLink, useYouTubePreview } from '../utils/youtubePreview'
+import { isYouTubeLink, useYouTubePreview } from '../utils/youtubePreview'import { ModalLayer } from './ModalLayer'
+
 
 interface Can { edit: boolean; publish: boolean; delete: boolean }
 type Status = 'draft' | 'published'
@@ -48,7 +49,7 @@ function ResourceEditor({ item, themes, can, onClose, onSaved }: {
   const err = (k: string) => errors[k]?.[0] && <p className="helper editor-error">{errors[k][0]}</p>
 
   return (
-    <div className="modal-overlay" onMouseDown={onClose}>
+    <ModalLayer className="modal-overlay" onMouseDown={onClose}>
       <div className="modal-box modal-wide" role="dialog" aria-modal="true" aria-label={item ? 'Modifier la ressource' : 'Nouvelle ressource'} onMouseDown={(e) => e.stopPropagation()}>
         <div className="panel-head">
           <h3>{item ? 'Modifier la ressource' : 'Nouvelle ressource'}</h3>
@@ -109,7 +110,7 @@ function ResourceEditor({ item, themes, can, onClose, onSaved }: {
           {busy ? <span className="spinner" /> : status === 'published' ? 'Publier' : 'Enregistrer'}
         </button>
       </div>
-    </div>
+    </ModalLayer>
   )
 }
 

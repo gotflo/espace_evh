@@ -61,7 +61,7 @@ class LeaderReportController extends Controller
                     'report_id' => $sent ? $r->id : null,
                     'submitted_at' => $sent ? $r->submitted_at?->toIso8601String() : null,
                     'author' => $sent ? $r->author?->profile?->full_name : null,
-                    'souls_count' => $sent ? count($r->souls ?? []) + count($r->answers['ames_autres'] ?? []) : null,
+                    'souls_count' => $sent ? LeaderReportService::soulsCount($r) : null,
                 ];
             }, $review),
         ]);

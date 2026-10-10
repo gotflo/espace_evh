@@ -8,7 +8,8 @@ import { Icon } from '../../components/Icon'
 import { usePulse } from '../../pulse'
 import type { Assignment } from '../../types'
 import { de } from '../../utils/french'
-import { useYouTubePreview } from '../../utils/youtubePreview'
+import { useYouTubePreview } from '../../utils/youtubePreview'import { ModalLayer } from '../../components/ModalLayer'
+
 
 const fmt = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' }) : '')
 const initial = (name: string) => name.trim()[0]?.toUpperCase() ?? '?'
@@ -57,7 +58,7 @@ function AssignmentEditor({ item, maxMb, onClose, onSaved }: { item: Assignment 
   const err = (k: string) => errors[k]?.[0] && <p className="helper editor-error">{errors[k][0]}</p>
 
   return (
-    <div className="modal-overlay" onMouseDown={onClose}>
+    <ModalLayer className="modal-overlay" onMouseDown={onClose}>
       <div className="modal-box gr-modal" role="dialog" aria-modal="true" aria-label={item ? 'Modifier le devoir' : 'Publier un devoir'} onMouseDown={(e) => e.stopPropagation()}>
         <div className="panel-head">
           <h3>{item ? 'Modifier le devoir' : 'Publier un devoir'}</h3>
@@ -124,7 +125,7 @@ function AssignmentEditor({ item, maxMb, onClose, onSaved }: { item: Assignment 
           {busy ? <span className="spinner" /> : item ? 'Enregistrer' : 'Publier le devoir'}
         </button>
       </div>
-    </div>
+    </ModalLayer>
   )
 }
 
@@ -155,7 +156,7 @@ function Responses({ id, onClose }: { id: number; onClose: () => void }) {
   useEffect(() => { api<ResponsesData>(`/admin/assignments/${id}/responses`).then(setData).catch(() => onClose()) }, [id, onClose])
 
   return (
-    <div className="modal-overlay" onMouseDown={onClose}>
+    <ModalLayer className="modal-overlay" onMouseDown={onClose}>
       <div className="modal-box gr-modal" role="dialog" aria-modal="true" aria-label="Réponses au devoir" onMouseDown={(e) => e.stopPropagation()}>
         <div className="panel-head">
           <h3>{data?.assignment.title ?? 'Réponses'}</h3>
@@ -202,7 +203,7 @@ function Responses({ id, onClose }: { id: number; onClose: () => void }) {
           </>
         )}
       </div>
-    </div>
+    </ModalLayer>
   )
 }
 

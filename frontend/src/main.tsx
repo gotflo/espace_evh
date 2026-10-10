@@ -22,6 +22,8 @@ import { AuthProvider } from './auth/AuthContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { isStaleBuildError, reloadOnce } from './utils/reload'
 import { installClientErrorReporting } from './monitoring'
+import { installIosViewportFix } from './utils/iosViewport'
+import { startAppUpdates } from './utils/appUpdate'
 
 // Apres une mise a jour du site, un ancien ecran peut chercher un fichier qui n'existe plus :
 // on recharge une fois pour obtenir la nouvelle version (au lieu d'une page blanche).
@@ -29,6 +31,10 @@ window.addEventListener('vite:preloadError', (e) => { e.preventDefault(); reload
 window.addEventListener('unhandledrejection', (e) => { if (isStaleBuildError(e.reason)) reloadOnce() })
 // Erreurs d'affichage remontees a la supervision (sans donnee personnelle).
 installClientErrorReporting()
+// iPhone : barre du bas et menu remis en place apres la fermeture du clavier.
+installIosViewportFix()
+// Nouvelle version en ligne : chargee au prochain changement de page ou au retour dans l'application.
+startAppUpdates()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -42,7 +48,7 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
-// PWA : enregistre le service worker (installation sur l'ecran d'accueil + hors-ligne).
+// PWA : enregistre le service worker (installation sur l'écran d'accueil + hors-ligne).
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => { /* silencieux */ })

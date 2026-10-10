@@ -7,7 +7,8 @@ import { YouTubePlayer } from '../components/YouTubePlayer'
 import { clearDraft, readDraft, useDraft } from '../utils/drafts'
 import { usePulse } from '../pulse'
 import type { MonthlyResolution, ResolutionKey, ResolutionOutcome, ResolutionResource, ResolutionsData } from '../types'
-import { de } from '../utils/french'
+import { de } from '../utils/french'import { ModalLayer } from '../components/ModalLayer'
+
 
 type Texts = Record<ResolutionKey, string>
 
@@ -126,7 +127,7 @@ function Resources({ groups, theme, onTheme }: { groups: ResolutionsData['resour
         ))}
       </ul>
       {video?.youtube_id && (
-        <div className="modal-overlay" onClick={() => setVideo(null)}>
+        <ModalLayer className="modal-overlay" onClick={() => setVideo(null)}>
           <div className="modal-box media-modal" role="dialog" aria-modal="true" aria-label={video.title} onClick={(e) => e.stopPropagation()}>
             <div className="panel-head">
               <h3>{video.title}</h3>
@@ -145,7 +146,7 @@ function Resources({ groups, theme, onTheme }: { groups: ResolutionsData['resour
               </p>
             </div>
           </div>
-        </div>
+        </ModalLayer>
       )}
     </section>
   )

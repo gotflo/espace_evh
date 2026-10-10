@@ -7,7 +7,8 @@ import { Icon } from '../components/Icon'
 import { VertumetreAnswers } from '../components/VertumetreAnswers'
 import { clearDraft, readDraft, useDraft } from '../utils/drafts'
 import type { VertumetreAnswers as Answers, VertumetreData, VertumetreForm, VertumetreQuestion } from '../types'
-import { de } from '../utils/french'
+import { de } from '../utils/french'import { ModalLayer } from '../components/ModalLayer'
+
 
 const fmt = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' }) : '')
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
@@ -266,7 +267,7 @@ export default function MyVertumetre() {
       )}
 
       {confirming && (
-        <div className="modal-overlay" onClick={() => setConfirming(false)}>
+        <ModalLayer className="modal-overlay" onClick={() => setConfirming(false)}>
           <div className="modal-box" role="dialog" aria-modal="true" aria-label="Confirmer l'enregistrement" onClick={(e) => e.stopPropagation()}>
             <div className="panel-head"><h3>Enregistrer le Vertumètre {de(label)} ?</h3></div>
             <p className="event-desc">Une fois enregistré, il sera <strong>verrouillé</strong>. Une modification restera possible sur demande à votre patriarche.</p>
@@ -275,11 +276,11 @@ export default function MyVertumetre() {
               <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? <span className="spinner" /> : 'Confirmer'}</button>
             </div>
           </div>
-        </div>
+        </ModalLayer>
       )}
 
       {asking && form && (
-        <div className="modal-overlay" onClick={() => setAsking(false)}>
+        <ModalLayer className="modal-overlay" onClick={() => setAsking(false)}>
           <div className="modal-box" role="dialog" aria-modal="true" aria-label="Demander une modification" onClick={(e) => e.stopPropagation()}>
             <div className="panel-head"><h3>Demander une modification</h3><button className="btn-link" onClick={() => setAsking(false)}>Fermer</button></div>
             <p className="event-desc">Vertumètre {de(form.period_label)}. Votre patriarche recevra votre demande ({form.requests_left} demande(s) restante(s)).</p>
@@ -289,7 +290,7 @@ export default function MyVertumetre() {
             </div>
             <button className="btn btn-primary" disabled={busy || reason.trim().length < 5} onClick={sendRequest}>{busy ? <span className="spinner" /> : 'Envoyer la demande'}</button>
           </div>
-        </div>
+        </ModalLayer>
       )}
     </AppLayout>
   )

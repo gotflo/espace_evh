@@ -7,6 +7,7 @@ import { usePulse } from '../pulse'
 import type { CalendarData, CalendarItem, EventOccurrence } from '../types'
 import { CAT_LABEL, hhmm, longDay, optimisticRsvp, parseYmd, rsvpOccurrence, timeRange, ymd } from '../utils/events'
 import { Icon } from '../components/Icon'
+import { ModalLayer } from '../components/ModalLayer'
 
 type View = 'month' | 'week' | 'list'
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
@@ -399,7 +400,7 @@ export default function Calendar() {
       )}
 
       {modal && (
-        <div className="modal-overlay" onClick={() => setModal(null)}>
+        <ModalLayer className="modal-overlay" onClick={() => setModal(null)}>
           <div className="modal-box cal-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <div className="panel-head">
               <h3>{modal.kind === 'birthday' ? 'Anniversaire' : modal.kind === 'wedding' ? 'Anniversaire de mariage' : modal.title}</h3>
@@ -461,7 +462,7 @@ export default function Calendar() {
               <p className="event-meta">{longDay(modal.date)} · {modal.holiday_kind === 'ferie' ? 'Jour férié' : modal.holiday_kind === 'chretien' ? 'Fête chrétienne' : 'Journée spéciale'}</p>
             )}
           </div>
-        </div>
+        </ModalLayer>
       )}
     </AppLayout>
   )

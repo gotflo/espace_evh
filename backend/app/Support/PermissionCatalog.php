@@ -110,7 +110,6 @@ class PermissionCatalog
      */
     public const SPLITS = [
         'roles.assign' => ['accounts.view'],
-        'roles.manage' => ['settings.manage'],
         'departments.manage' => ['departments.approve'],
         'exercises.assign' => ['exercises.create', 'exercises.delete', 'exercises.view_responses'],
         'announcements.publish' => ['announcements.delete'],

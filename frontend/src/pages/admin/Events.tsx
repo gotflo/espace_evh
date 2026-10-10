@@ -7,7 +7,8 @@ import { SkeletonCard } from '../../components/Skeleton'
 import { AudiencePicker } from '../../components/AudiencePicker'
 import type { AudienceScope, EventAdminItem, EventCategory, EventParticipants, Recurrence } from '../../types'
 import { Icon } from '../../components/Icon'
-import { useDirty } from '../../utils/dirty'
+import { useDirty } from '../../utils/dirty'import { ModalLayer } from '../../components/ModalLayer'
+
 
 const RECURRENCES: { key: Recurrence; label: string }[] = [
   { key: 'none', label: 'Une seule fois' },
@@ -136,7 +137,7 @@ export default function Events() {
       {error && <div className="alert alert-error">{error}</div>}
 
       {participants && (
-        <div className="modal-overlay" onClick={() => setParticipants(null)}>
+        <ModalLayer className="modal-overlay" onClick={() => setParticipants(null)}>
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
             <div className="panel-head">
               <h3>Participants , {participants.title}</h3>
@@ -158,7 +159,7 @@ export default function Events() {
               </>
             )}
           </div>
-        </div>
+        </ModalLayer>
       )}
 
       {mode === 'form' ? (

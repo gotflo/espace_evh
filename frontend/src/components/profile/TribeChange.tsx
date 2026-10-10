@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import type { MyTribeRequest, Tribe } from '../../types'
 import { Icon } from '../Icon'
+import { ModalLayer } from '../ModalLayer'
 
 const STATUS: Record<string, string> = { pending: 'En attente', approved: 'Validée', rejected: 'Refusée', cancelled: 'Annulée' }
 
@@ -73,7 +74,7 @@ export function TribeChange({ currentTribe, tribes }: { currentTribe: Tribe | nu
       {!pending && <p className="helper">Le changement de tribu est validé par les responsables des deux tribus.</p>}
 
       {open && (
-        <div className="modal-overlay" onClick={() => setOpen(false)}>
+        <ModalLayer className="modal-overlay" onClick={() => setOpen(false)}>
           <div className="modal-box" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <div className="panel-head"><h3>Changer de tribu</h3><button className="btn-link" onClick={() => setOpen(false)}>Fermer</button></div>
             <div className="field">
@@ -92,7 +93,7 @@ export function TribeChange({ currentTribe, tribes }: { currentTribe: Tribe | nu
               {busy ? <span className="spinner" /> : 'Envoyer la demande'}
             </button>
           </div>
-        </div>
+        </ModalLayer>
       )}
     </div>
   )

@@ -923,10 +923,11 @@ h1, h2, h3 { font-family: var(--font-serif); font-weight: 600; line-height: 1.15
 
 /* Animations d'entree : les pages respirent (desactive si l'utilisateur prefere) */
 @keyframes riseIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-@keyframes pageIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+/* Fondu seul (aucun deplacement) : un bloc transforme capturerait les fenetres et volets « fixes » qu'il contient. */
+@keyframes pageIn { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: no-preference) {
   /* Changement de page : apparition breve et douce (le cadre, lui, ne bouge pas). */
-  .app .content > * { animation: pageIn 0.22s ease both; }
+  .app .content > * { animation: pageIn 0.22s ease backwards; }
 }
 
 @media (max-width: 860px) {
@@ -982,7 +983,7 @@ h1, h2, h3 { font-family: var(--font-serif); font-weight: 600; line-height: 1.15
   background: linear-gradient(135deg, #0d5f57, #06302c); color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 16px;
   padding: 0.7rem 0.9rem; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.32);
-  animation: riseIn 0.35s ease both;
+  animation: riseIn 0.35s ease backwards;
 }
 .install-icon { width: 42px; height: 42px; border-radius: 11px; flex-shrink: 0; }
 .install-text { flex: 1; display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
@@ -1348,7 +1349,7 @@ h1, h2, h3 { font-family: var(--font-serif); font-weight: 600; line-height: 1.15
   border-radius: var(--radius-sm);
   background: var(--accent-soft);
   border: 1px solid var(--border);
-  animation: welcomeIn 0.4s ease both;
+  animation: welcomeIn 0.4s ease backwards;
 }
 .welcome-text { display: flex; flex-direction: column; gap: 3px; flex: 1; }
 .welcome-text strong { color: #0d5f57; font-size: 1.02rem; }

@@ -5,7 +5,8 @@ import { useAuth } from '../../auth/AuthContext'
 import { AppLayout } from '../../components/AppLayout'
 import { SkeletonCard } from '../../components/Skeleton'
 import { Icon } from '../../components/Icon'
-import type { ServiceSlot } from '../../types'
+import type { ServiceSlot } from '../../types'import { ModalLayer } from '../../components/ModalLayer'
+
 
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
 const SHORT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
@@ -40,7 +41,7 @@ function Editor({ slot, onClose, onSaved }: { slot: ServiceSlot | null; onClose:
   const err = (k: string) => errors[k]?.[0] && <p className="helper editor-error">{errors[k][0]}</p>
 
   return (
-    <div className="modal-overlay" onMouseDown={onClose}>
+    <ModalLayer className="modal-overlay" onMouseDown={onClose}>
       <div className="modal-box" role="dialog" aria-modal="true" aria-label={slot ? 'Modifier le rendez-vous' : 'Nouveau rendez-vous'} onMouseDown={(e) => e.stopPropagation()}>
         <div className="panel-head">
           <h3>{slot ? 'Modifier le rendez-vous' : 'Nouveau rendez-vous'}</h3>
@@ -94,7 +95,7 @@ function Editor({ slot, onClose, onSaved }: { slot: ServiceSlot | null; onClose:
           {busy ? <span className="spinner" /> : slot ? 'Enregistrer' : 'Ajouter le rendez-vous'}
         </button>
       </div>
-    </div>
+    </ModalLayer>
   )
 }
 

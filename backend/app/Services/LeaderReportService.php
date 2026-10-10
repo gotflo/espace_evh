@@ -260,7 +260,7 @@ class LeaderReportService
 
         if ($first) {
             $what = $kind === 'tribe' ? 'Tribu '.$scopeName : 'Département '.$scopeName;
-            $souls = count($report->souls ?? []) + count($clean['ames_autres'] ?? []);
+            $souls = self::soulsCount($report);
             Notifier::send(array_diff(self::reviewerIds($kind, $scopeId), [$author->id]), 'leader_report',
                 'Rapport mensuel reçu · '.$what,
                 ucfirst(self::periodLabel($period)).' · envoyé par '.($author->profile?->full_name ?: $author->phone).' · '.$souls.' âme(s) gagnée(s).',
@@ -268,6 +268,21 @@ class LeaderReportService
         }
 
         return $report;
+    }
+
+    /**
+     * Ames gagnees d'un rapport : membres reperes automatiquement + noms ajoutes a la main. Robuste aux
+     * anciennes reponses (texte au lieu d'une liste) : une valeur inattendue ne fait jamais echouer la page.
+     */
+    public static function soulsCount(LeaderReport $report): int
+    {
+        $souls = is_array($report->souls) ? count($report->souls) : 0;
+        $others = $report->answers['ames_autres'] ?? [];
+        if (is_string($others)) {
+            $others = preg_split('/[\r\n,;]+/', $others) ?: [];
+        }
+
+        return $souls + (is_array($others) ? count(array_filter($others, fn ($n) => is_string($n) ? trim($n) !== '' : filled($n))) : 0);
     }
 
     /** @return array<int> destinataires d'un rapport envoye : AP de la tribu et autorites pastorales */
