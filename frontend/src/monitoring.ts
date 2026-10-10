@@ -1,5 +1,5 @@
 // Remontee des erreurs d'affichage vers la supervision (console > Journaux, source « Navigateur »).
-// Seulement le message, l'extrait de pile et le chemin de la page (jamais les parametres d'URL ni
+// Seulement le message, l'extrait de pile et le chemin de la page (jamais les paramètres d'URL ni
 // le contenu saisi). Bornee : au plus 10 envois par page ouverte, une meme erreur une seule fois.
 import { auth } from './api/client'
 import { isStaleBuildError } from './utils/reload'
@@ -14,7 +14,9 @@ export function reportClientError(kind: Kind, error: unknown, extra: { source?: 
     const err = error instanceof Error ? error : null
     const message = (err ? `${err.name}: ${err.message}` : String(error ?? 'Erreur inconnue')).slice(0, 1000)
     // Mise a jour du site (ancien fichier introuvable) : rechargement prevu, pas une panne.
-    if (isStaleBuildError(error) || /ResizeObserver loop/i.test(message)) return
+    // « Script error. » : erreur opaque d'un script d'un autre site (lecteur YouTube...) ou de Safari, sans aucun
+    // detail exploitable ; elle ne ferait que du bruit dans la supervision.
+    if (isStaleBuildError(error) || /ResizeObserver loop|^Error: Script error\.?$|^Script error\.?$/i.test(message)) return
     const key = `${kind}|${message}`
     if (sent.has(key) || count >= 10) return
     sent.add(key)
@@ -46,7 +48,7 @@ export function installClientErrorReporting() {
     reportClientError('error', e.error ?? e.message, { source: e.filename, line: e.lineno, column: e.colno })
   })
   window.addEventListener('unhandledrejection', (e) => {
-    // Erreurs d'API deja traitees (message a l'ecran) : seules les vraies erreurs de code remontent.
+    // Erreurs d'API déjà traitées (message a l'ecran) : seules les vraies erreurs de code remontent.
     const reason = e.reason
     if (reason && typeof reason === 'object' && 'status' in reason) return
     reportClientError('unhandledrejection', reason)
