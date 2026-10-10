@@ -211,3 +211,42 @@
 }
 @keyframes sheetUp { from { transform: translateY(32px); } to { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .modal-overlay > .modal-box { animation: none; } }
+
+/* Calque des fenetres (ModalLayer) : porte la classe « app » pour les couleurs, sans creer de boite. */
+.app.app-layer { display: contents !important; }
+
+/* Champs date / heure : sur iPhone, Safari leur impose une largeur minimale et centre le texte ; ils
+   depassaient des cartes. Ils prennent maintenant la largeur disponible, jamais plus. */
+input[type="date"], input[type="time"], input[type="datetime-local"], input[type="month"], input[type="week"] {
+  display: block; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box;
+  -webkit-appearance: none; appearance: none; min-height: 3rem; text-align: left;
+}
+input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-date-and-time-value,
+input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+input[type="date"]::-webkit-calendar-picker-indicator, input[type="time"]::-webkit-calendar-picker-indicator { margin-left: auto; }
+/* Tout champ ou liste : jamais plus large que son conteneur. */
+.input, .select, textarea.input { max-width: 100%; min-width: 0; box-sizing: border-box; }
+
+/* Page d'une video des RM. */
+.res-video-page { display: flex; flex-direction: column; gap: 0.8rem; min-width: 0; }
+.res-video-title { font-size: 1.25rem; line-height: 1.3; overflow-wrap: anywhere; }
+.res-video-author { margin-top: -0.5rem; }
+.res-video-note { font-style: italic; color: var(--text-muted); overflow-wrap: anywhere; }
+.flip { transform: scaleX(-1); }
+a.resource-card { text-decoration: none; color: inherit; }
+
+/* iPhone : recalage des elements fixes du bas quand Safari garde un affichage raccourci apres le clavier
+   (voir utils/iosViewport.ts ; --ios-gap vaut 0 en temps normal). La propriete « translate » s'ajoute aux
+   transformations existantes sans les remplacer. */
+:root { --ios-gap: 0px; }
+@media (max-width: 860px) {
+  .bottom-nav, .offline-banner, .install-banner, .rm-save, .settings-savebar, .ms-panel { translate: 0 var(--ios-gap); }
+  .sidebar, .menu-overlay { bottom: calc(0px - var(--ios-gap)); }
+}
+.modal-overlay, .ms-backdrop { bottom: calc(0px - var(--ios-gap)); }
+
+/* Choix segmentes (Toute l'eglise / Choisir des groupes...) : sur petit ecran, les libelles passent a la
+   ligne plutot que d'etre coupes ou caches par un defilement horizontal. */
+@media (max-width: 560px) {
+  .seg button { white-space: normal; line-height: 1.2; text-align: center; min-width: 0; }
+}

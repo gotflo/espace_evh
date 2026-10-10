@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, peek } from '../api/client'
+import { Link } from 'react-router-dom'
 import { AppLayout } from '../components/AppLayout'
 import { SkeletonCard } from '../components/Skeleton'
 import { Icon } from '../components/Icon'
-import { YouTubePlayer } from '../components/YouTubePlayer'
 import { clearDraft, readDraft, useDraft } from '../utils/drafts'
 import { usePulse } from '../pulse'
 import type { MonthlyResolution, ResolutionKey, ResolutionOutcome, ResolutionResource, ResolutionsData } from '../types'
-import { de } from '../utils/french'import { ModalLayer } from '../components/ModalLayer'
+import { de } from '../utils/french'
 
 
 type Texts = Record<ResolutionKey, string>
@@ -86,11 +86,8 @@ function ReviewSummary({ prev }: { prev: MonthlyResolution }) {
 /** Ressources publiees par theme ; l'onglet ouvert est choisi ici ou depuis le lien « Ressources » d'une rubrique. */
 function Resources({ groups, theme, onTheme }: { groups: ResolutionsData['resources']; theme: string | null; onTheme: (t: string) => void }) {
   const filled = groups.filter((g) => g.items.length > 0)
-  const [video, setVideo] = useState<ResolutionResource | null>(null)
-  // Avancement mis a jour pendant la lecture (sans recharger la page).
-  const [watched, setWatched] = useState<Record<number, { percent: number; completed: boolean }>>({})
-  const watchOf = (r: ResolutionResource) => watched[r.id] ?? { percent: r.watch?.percent ?? 0, completed: r.watch?.completed ?? false }
-  const onWatched = (id: number, percent: number, completed: boolean) => setWatched((w) => ({ ...w, [id]: { percent, completed } }))
+  // Avancement de lecture (mis a jour en revenant de la page de la video).
+  const watchOf = (r: ResolutionResource) => ({ percent: r.watch?.percent ?? 0, completed: r.watch?.completed ?? false })
   if (filled.length === 0) return null
   const current = filled.find((g) => g.theme === theme) ?? filled[0]
 
@@ -108,14 +105,15 @@ function Resources({ groups, theme, onTheme }: { groups: ResolutionsData['resour
         {current.items.map((r) => (
           <li key={r.id}>
             {r.youtube_id ? (
-              <button type="button" className="resource-card" onClick={() => setVideo(r)}>
+              // Video : sur sa propre page (lecture confortable sur telephone, reprise et suivi).
+              <Link className="resource-card" to={`/mes-resolutions/ressource/${r.id}`}>
                 <span className="resource-thumb"><img src={`https://i.ytimg.com/vi/${r.youtube_id}/mqdefault.jpg`} alt="" loading="lazy" /><Icon name="play" size={22} /></span>
                 <span className="resource-text"><strong>{r.title}</strong><small>par {r.author}</small>{r.note && <em>{r.note}</em>}
                   {watchOf(r).percent > 0 && (
                     <span className="res-watch"><span className="watch-bar" aria-hidden><span style={{ width: `${watchOf(r).percent}%` }} className={watchOf(r).completed ? 'done' : ''} /></span>{watchOf(r).completed ? 'Regardée' : `${watchOf(r).percent} %`}</span>
                   )}
                 </span>
-              </button>
+              </Link>
             ) : (
               <a className="resource-card" href={r.url} target="_blank" rel="noopener noreferrer">
                 <span className="resource-thumb link"><Icon name="link" size={22} /></span>
@@ -126,28 +124,6 @@ function Resources({ groups, theme, onTheme }: { groups: ResolutionsData['resour
           </li>
         ))}
       </ul>
-      {video?.youtube_id && (
-        <ModalLayer className="modal-overlay" onClick={() => setVideo(null)}>
-          <div className="modal-box media-modal" role="dialog" aria-modal="true" aria-label={video.title} onClick={(e) => e.stopPropagation()}>
-            <div className="panel-head">
-              <h3>{video.title}</h3>
-              <button className="btn-link" onClick={() => setVideo(null)}>Fermer</button>
-            </div>
-            {/* Lue dans l'application, avec le meme suivi que les exercices et les devoirs : reprise la ou l'on s'est arrete. */}
-            <YouTubePlayer key={video.id} target={{ kind: 'resource', id: video.id }} videoId={video.youtube_id}
-              resumeAt={video.watch?.resume_at ?? 0} track={!video.watch?.completed} onProgress={(r) => onWatched(video.id, r.percent, r.video_completed)} />
-            <div className="watch-progress" aria-live="polite">
-              <div className="watch-bar" role="progressbar" aria-valuenow={watchOf(video).percent} aria-valuemin={0} aria-valuemax={100} aria-label="Vidéo regardée">
-                <span style={{ width: `${watchOf(video).percent}%` }} className={watchOf(video).completed ? 'done' : ''} />
-              </div>
-              <p className="helper">
-                {watchOf(video).completed ? 'Vidéo regardée en entier.' : `Regardée à ${watchOf(video).percent} %.`} Par {video.author}.
-                {!watchOf(video).completed && (video.watch?.resume_at ?? 0) > 5 && ' La lecture reprend là où vous vous étiez arrêté.'}
-              </p>
-            </div>
-          </div>
-        </ModalLayer>
-      )}
     </section>
   )
 }

@@ -58,6 +58,7 @@ const GemReport = page(() => import('./pages/admin/GemReport'), true, '/admin/ra
 const AuditLog = page(() => import('./pages/admin/AuditLog'), true, '/admin/journal')
 const Verses = page(() => import('./pages/admin/Verses'), true, '/admin/versets')
 const MyResolutions = page(() => import('./pages/MyResolutions'), false, '/mes-resolutions')
+const ResourceVideo = page(() => import('./pages/ResourceVideo'), false, '/mes-resolutions/ressource/:id')
 const MyAssignments = page(() => import('./pages/MyAssignments'), false, '/mon-devoir')
 const Appointments = page(() => import('./pages/Appointments'), false, '/rendez-vous')
 const AdminAppointments = page(() => import('./pages/admin/Appointments'), true, '/admin/rendez-vous')
@@ -232,6 +233,7 @@ export default function App() {
         <Route path="/ma-vie-spirituelle" element={<RequireAuth module="spiritual" requireComplete memberSpace><MySpiritual /></RequireAuth>} />
         <Route path="/ma-fiche" element={<RequireAuth requireComplete memberSpace><MyFiss /></RequireAuth>} />
         <Route path="/mes-resolutions" element={<RequireAuth module="resolutions" requireComplete memberSpace><MyResolutions /></RequireAuth>} />
+        <Route path="/mes-resolutions/ressource/:id" element={<RequireAuth module="resolutions" requireComplete memberSpace><ResourceVideo /></RequireAuth>} />
         <Route path="/mon-devoir" element={<RequireAuth module="assignments" requireComplete memberSpace><MyAssignments /></RequireAuth>} />
         <Route path="/rendez-vous" element={<RequireAuth module="appointments" requireComplete memberSpace><Appointments /></RequireAuth>} />
         <Route path="/admin/rendez-vous" element={<RequireAuth module="appointments" requireComplete anyPermission={['appointments.organize', 'appointments.host']}><AdminAppointments /></RequireAuth>} />
