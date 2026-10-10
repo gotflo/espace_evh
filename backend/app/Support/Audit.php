@@ -65,13 +65,30 @@ class Audit
         $new = [];
         foreach ($after as $key => $value) {
             $prev = $before[$key] ?? null;
-            if ((string) json_encode($prev) !== (string) json_encode($value)) {
+            if ((string) json_encode(self::canonical($prev)) !== (string) json_encode(self::canonical($value))) {
                 $old[$key] = $prev;
                 $new[$key] = $value;
             }
         }
 
         return [$old, $new];
+    }
+
+    /**
+     * Valeur comparable quel que soit l'ordre des cles : MySQL range les cles des colonnes JSON a sa facon,
+     * une reponse identique relue de la base ne doit pas compter comme une modification.
+     */
+    private static function canonical(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+        $value = array_map(fn ($v) => self::canonical($v), $value);
+        if (! array_is_list($value)) {
+            ksort($value);
+        }
+
+        return $value;
     }
 
     /** Nom court et stable du type d'objet (independant des noms de classe). */

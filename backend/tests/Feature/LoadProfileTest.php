@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Assignment;
 use App\Models\Department;
+use App\Models\Exercise;
 use App\Models\Gem;
 use App\Models\ResolutionResource;
 use App\Models\Role;
@@ -55,6 +56,7 @@ class LoadProfileTest extends TestCase
     private function populate(int $count): void
     {
         $tribes = Tribe::pluck('id')->all();
+        $assignmentId = Assignment::min('id') ?? 1;
         $gems = Gem::pluck('id', 'tribe_id')->all();
         $departments = Department::pluck('id')->all();
         $fidele = Role::where('key', 'fidele')->value('id');
@@ -82,8 +84,8 @@ class LoadProfileTest extends TestCase
                 foreach (['2026-09', '2026-10'] as $period) {
                     DB::table('monthly_resolutions')->insert(['user_id' => $userId, 'period' => $period, 'priere' => 'Prier chaque soir', 'created_at' => $now, 'updated_at' => $now]);
                 }
-                DB::table('assignment_responses')->insert(['assignment_id' => 1, 'user_id' => $userId, 'summary' => 'Résumé du message', 'actions' => 'Prier', 'submitted_at' => $now, 'created_at' => $now, 'updated_at' => $now]);
-                DB::table('assignment_views')->insert(['assignment_id' => 1, 'user_id' => $userId, 'segments' => '[[0,100]]', 'watched_seconds' => 100, 'completed_at' => $n % 4 === 1 ? $now : null, 'created_at' => $now, 'updated_at' => $now]);
+                DB::table('assignment_responses')->insert(['assignment_id' => $assignmentId, 'user_id' => $userId, 'summary' => 'Résumé du message', 'actions' => 'Prier', 'submitted_at' => $now, 'created_at' => $now, 'updated_at' => $now]);
+                DB::table('assignment_views')->insert(['assignment_id' => $assignmentId, 'user_id' => $userId, 'segments' => '[[0,100]]', 'watched_seconds' => 100, 'completed_at' => $n % 4 === 1 ? $now : null, 'created_at' => $now, 'updated_at' => $now]);
             }
             DB::table('user_notifications')->insert(['user_id' => $userId, 'type' => 'system', 'title' => 'Bienvenue', 'created_at' => $now]);
         }
@@ -134,7 +136,9 @@ class LoadProfileTest extends TestCase
             '/api/admin/reports?scope=church&months=12', '/api/admin/reports/members?scope=church&filter=all', '/api/admin/attendance',
             '/api/admin/exercises', '/api/admin/events', '/api/admin/announcements', '/api/admin/validations', '/api/admin/audiences',
             '/api/admin/gems', '/api/admin/organization', '/api/admin/audit', '/api/calendar?from=2026-10-01&to=2026-10-31',
-            '/api/admin/exercises/1/tracking', '/api/admin/resolutions', '/api/admin/assignments', '/api/admin/assignments/1/responses',
+            // Identifiants reels (MySQL ne reutilise pas les identifiants d'un test a l'autre).
+            '/api/admin/exercises/'.Exercise::min('id').'/tracking', '/api/admin/resolutions', '/api/admin/assignments',
+            '/api/admin/assignments/'.Assignment::min('id').'/responses',
             '/api/admin/service-schedule', '/api/admin/resolution-resources', '/api/admin/vertumetre', '/api/admin/validations'];
 
         $this->populate(60);
