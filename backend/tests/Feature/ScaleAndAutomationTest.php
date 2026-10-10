@@ -87,7 +87,7 @@ class ScaleAndAutomationTest extends TestCase
         $this->assertCount(60, $page['members']);
         $this->assertSame(71, $page['total']);
         $this->assertTrue($page['has_more']);
-        $this->assertCount(71, $this->getJson('/api/admin/reports/members?scope=church&filter=all&all=1')->json('members'));
+        $this->assertCount(71, $this->getJson('/api/admin/reports/export?kind=members&scope=church&filter=all')->assertOk()->json('members'));
         $this->assertSame(11, $this->getJson('/api/admin/reports/members?scope=church&filter=all&q=Fidele1')->json('total'));
     }
 
@@ -208,7 +208,7 @@ class ScaleAndAutomationTest extends TestCase
         $this->artisan('app:tick', ['--only' => 'monthly-report'])->assertSuccessful();
 
         $n = UserNotification::where('user_id', $patriarch->id)->where('type', 'report')->sole();
-        $this->assertSame('Rapport de octobre 2026 · Tribu Juda', $n->title);
+        $this->assertSame('Rapport d’octobre 2026 · Tribu Juda', $n->title);
         $this->assertStringContainsString('vie spirituelle : 80 %', $n->body);
         $this->assertSame(0, UserNotification::where('user_id', $m->id)->where('type', 'report')->count());
     }

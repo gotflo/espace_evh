@@ -6,6 +6,7 @@ use App\Models\FissEditRequest;
 use App\Models\SpiritualHealthForm;
 use App\Models\User;
 use App\Support\Audit;
+use App\Support\French;
 use App\Support\Recipients;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -50,11 +51,17 @@ class FissService
     }
 
     /** Modification d'une fiche deverrouillee par une demande approuvee ; la fiche est reverrouillee. */
-    public static function update(User $member, SpiritualHealthForm $form, array $data): SpiritualHealthForm
+    /** La fiche est-elle au membre et deverrouillee (demande approuvee en cours) ? Sinon 404 / 423. */
+    public static function ensureEditable(User $member, SpiritualHealthForm $form): void
     {
         abort_unless($form->user_id === $member->id, 404);
+        abort_unless(self::openRequest($form), 423, 'Cette fiche est verrouillée. Faites une demande de modification à votre patriarche.');
+    }
+
+    public static function update(User $member, SpiritualHealthForm $form, array $data): SpiritualHealthForm
+    {
+        self::ensureEditable($member, $form);
         $request = self::openRequest($form);
-        abort_unless($request, 423, 'Cette fiche est verrouillée. Faites une demande de modification à votre patriarche.');
 
         return DB::transaction(function () use ($member, $form, $data, $request) {
             $before = self::values($form);
@@ -127,7 +134,7 @@ class FissService
             Notifier::send([$member->id], 'fiss_request',
                 $approve ? 'Modification de votre FISS approuvée' : 'Demande de modification de FISS refusée',
                 $approve
-                    ? 'Vous pouvez modifier votre fiche de '.self::periodLabel($form->period).' pendant '.FissEditRequest::UNLOCK_DAYS.' jours.'
+                    ? 'Vous pouvez modifier votre fiche '.French::de(self::periodLabel($form->period)).' pendant '.FissEditRequest::UNLOCK_DAYS.' jours.'
                     : ($comment ?: 'Votre patriarche n\'a pas accepté la demande.'),
                 '/ma-fiche', ['fiss_edit_request_id' => $req->id]);
 

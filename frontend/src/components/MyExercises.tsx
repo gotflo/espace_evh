@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, peek } from '../api/client'
 import { usePulse } from '../pulse'
 import type { MyExercise } from '../types'
 import { ExerciseRow } from './ExerciseRow'
 
 /** Tableau de bord : exercices ouverts non termines (les plus urgents d'abord). */
 export function MyExercises() {
-  const [exercises, setExercises] = useState<MyExercise[]>([])
+  const [exercises, setExercises] = useState<MyExercise[]>(() => peek<{ exercises: MyExercise[] }>('/me/exercises')?.exercises ?? [])
 
   const load = useCallback(() => {
     api<{ exercises: MyExercise[] }>('/me/exercises').then((r) => setExercises(r.exercises)).catch(() => {})

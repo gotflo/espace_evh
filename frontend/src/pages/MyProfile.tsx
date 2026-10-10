@@ -3,11 +3,12 @@ import { api, ApiError } from '../api/client'
 import { getReference } from '../api/reference'
 import { useAuth } from '../auth/AuthContext'
 import { AppLayout } from '../components/AppLayout'
-import { DepartmentPicker } from '../components/DepartmentPicker'
+import { Link } from 'react-router-dom'
 import { CompletionCard } from '../components/profile/CompletionCard'
 import { FamilySection } from '../components/profile/FamilySection'
 import { TribeChange } from '../components/profile/TribeChange'
-import type { Department, Profile, ProfileCompletion, SpiritualProfileData, Tribe } from '../types'
+import type { Profile, ProfileCompletion, SpiritualProfileData, Tribe } from '../types'
+import { PersonName } from '../components/PersonName'
 import { Icon } from '../components/Icon'
 import { useDirty } from '../utils/dirty'
 
@@ -37,7 +38,6 @@ export default function MyProfile() {
   const [tab, setTab] = useState<Tab>(() => (window.location.hash === '#famille' ? 'famille' : 'identite'))
   const [completion, setCompletion] = useState<ProfileCompletion | null>(null)
   const [tribes, setTribes] = useState<Tribe[]>([])
-  const [departments, setDepartments] = useState<Department[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -49,7 +49,6 @@ export default function MyProfile() {
   const [birthMonth, setBirthMonth] = useState(profile?.birth_month?.toString() ?? '')
   const [gender, setGender] = useState(profile?.gender === 'homme' || profile?.gender === 'femme' ? profile.gender : '')
   const [tribeId, setTribeId] = useState(profile?.tribe_id?.toString() ?? '')
-  const [deptIds, setDeptIds] = useState<number[]>(profile?.departments?.map((d) => d.id) ?? [])
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(profile?.photo_url ?? null)
   const [email, setEmail] = useState(profile?.email ?? '')
@@ -65,13 +64,13 @@ export default function MyProfile() {
   const setSpField = <K extends keyof SpiritualProfileData>(k: K, v: SpiritualProfileData[K]) => setSp((p) => ({ ...p, [k]: v }))
 
   // Boutons « Enregistrer » actifs seulement quand quelque chose a change.
-  const personal = useDirty({ firstName, lastName, birthDay, birthMonth, gender, tribeId, deptIds, email, marital, civility,
+  const personal = useDirty({ firstName, lastName, birthDay, birthMonth, gender, tribeId, email, marital, civility,
     weddingDay, weddingMonth, tshirt, yearVerse, photo: photoFile?.name ?? null })
   const spiritual = useDirty(sp)
   const resetSpiritual = spiritual.reset
 
   useEffect(() => {
-    getReference().then((r) => { setTribes(r.tribes); setDepartments(r.departments) }).catch(() => {})
+    getReference().then((r) => setTribes(r.tribes)).catch(() => {})
     api<{ spiritual: SpiritualProfileData }>('/me/spiritual-profile').then((r) => { setSp({ ...emptySpiritual, ...r.spiritual }); resetSpiritual() }).catch(() => {})
     api<{ completion: ProfileCompletion | null }>('/profile').then((r) => setCompletion(r.completion)).catch(() => {})
   }, [resetSpiritual])
@@ -98,7 +97,6 @@ export default function MyProfile() {
       fd.append('gender', gender)
       if (tribeId && !profile?.tribe_id) fd.append('tribe_id', tribeId)
       if (profile?.tribe_id) fd.append('tribe_id', String(profile.tribe_id))
-      deptIds.forEach((id) => fd.append('department_ids[]', String(id)))
       if (photoFile) fd.append('photo', photoFile)
       if (email) fd.append('email', email)
       if (marital) fd.append('marital_status', marital)
@@ -139,7 +137,7 @@ export default function MyProfile() {
           ? <img className="profile-hero-photo" src={photoPreview} alt="" />
           : <span className="profile-hero-photo">{initials || <Icon name="profile" size={28} />}</span>}
         <div className="profile-hero-info">
-          <h2>{profile?.full_name || 'Mon profil'}</h2>
+          <PersonName first={profile?.first_name} last={profile?.last_name} fallback={profile?.full_name || 'Mon profil'} />
           <div className="profile-hero-meta">
             {profile?.matricule && <span className="chip">{profile.matricule}</span>}
             <span className="chip">{mainRole}</span>
@@ -204,8 +202,12 @@ export default function MyProfile() {
               <p className="helper">Choisissez avec soin : un changement ultérieur passe par une demande validée par les responsables.</p>
             </div>
           )}
-          <div className="field"><label>Départements <span className="helper" style={{ display: 'inline' }}>(plusieurs possibles)</span></label>
-            <DepartmentPicker departments={departments} selected={deptIds} onChange={setDeptIds} />
+          {/* Services : demande depuis « Service », validee par le responsable du departement. */}
+          <div className="field"><label>Mes services</label>
+            <p className="helper service-hint">
+              {profile?.departments?.length ? profile.departments.map((d) => d.name).join(', ') : 'Aucun service pour le moment.'}{' '}
+              <Link className="btn-link" to="/servir">{profile?.departments?.length ? 'Gérer mes services' : 'Rejoindre un service'}</Link>
+            </p>
           </div>
           <button className="btn btn-primary" disabled={busy || !personal.dirty || !firstName.trim() || !lastName.trim() || !gender} onClick={savePersonal}>
             {busy ? <span className="spinner" /> : 'Enregistrer'}

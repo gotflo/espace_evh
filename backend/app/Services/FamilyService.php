@@ -162,12 +162,13 @@ class FamilyService
     /**
      * Enfants declares (remplace la liste).
      *
-     * @param  array<int, array{name: string, birth_year?: int|null, user_id?: int|null}>  $children
+     * @param  array<int, array{name: string, birth_date?: string|null, birth_year?: int|null, user_id?: int|null}>  $children
      */
     public static function setChildren(User $me, bool $hasChildren, array $children): void
     {
         DB::transaction(function () use ($me, $hasChildren, $children) {
-            $before = FamilyLink::where('user_id', $me->id)->where('relation', 'child')->get(['relative_name', 'birth_year', 'relative_user_id'])->toArray();
+            $before = FamilyLink::where('user_id', $me->id)->where('relation', 'child')->get(['relative_name', 'birth_date', 'birth_year', 'relative_user_id'])
+                ->map(fn ($l) => ['relative_name' => $l->relative_name, 'birth_date' => $l->birth_date?->toDateString(), 'birth_year' => $l->birth_year, 'relative_user_id' => $l->relative_user_id])->all();
             $existing = FamilyLink::where('user_id', $me->id)->where('relation', 'child')->get()->keyBy('id');
             FamilyLink::where('user_id', $me->id)->where('relation', 'child')->delete();
 
@@ -176,10 +177,21 @@ class FamilyService
                 $userId = ! empty($child['user_id']) ? (int) $child['user_id'] : null;
                 abort_if($userId === $me->id, 422, 'Vous ne pouvez pas vous désigner comme enfant.');
                 $wasConfirmed = $userId && $existing->contains(fn ($l) => (int) $l->relative_user_id === $userId && $l->status === 'confirmed');
+                $birthDate = $child['birth_date'] ?? null;
+                // Ancienne version de l'application (annee seule, sans champ date) : la date deja connue est gardee.
+                if (! array_key_exists('birth_date', $child)) {
+                    $prev = $existing->first(fn ($l) => ($userId && (int) $l->relative_user_id === $userId)
+                        || mb_strtolower(trim((string) $l->relative_name)) === mb_strtolower(trim($child['name'])));
+                    if ($prev?->birth_date && (empty($child['birth_year']) || (int) $child['birth_year'] === $prev->birth_date->year)) {
+                        $birthDate = $prev->birth_date->toDateString();
+                    }
+                }
                 $link = FamilyLink::create([
                     'user_id' => $me->id, 'relation' => 'child', 'relative_user_id' => $userId,
                     'relative_name' => mb_substr(trim($child['name']), 0, 150),
-                    'birth_year' => $child['birth_year'] ?? null,
+                    // Date complete ; l'annee seule reste acceptee (anciennes versions de l'application).
+                    'birth_date' => $birthDate,
+                    'birth_year' => $birthDate ? (int) substr($birthDate, 0, 4) : ($child['birth_year'] ?? null),
                     'status' => $userId && ! $wasConfirmed ? 'pending' : 'confirmed',
                     'confirmed_at' => $userId && ! $wasConfirmed ? null : now(),
                 ]);
@@ -187,7 +199,7 @@ class FamilyService
                     Notifier::send([$userId], 'family', ($me->profile?->full_name ?: 'Un membre').' vous a indiqué comme son enfant',
                         'Confirmez ce lien dans votre profil.', '/mon-profil#famille');
                 }
-                $kept[] = ['relative_name' => $link->relative_name, 'birth_year' => $link->birth_year, 'relative_user_id' => $userId];
+                $kept[] = ['relative_name' => $link->relative_name, 'birth_date' => $link->birth_date?->toDateString(), 'birth_year' => $link->birth_year, 'relative_user_id' => $userId];
             }
 
             $me->profile->forceFill(['has_children' => $hasChildren, 'children_count' => count($kept)])->save();
@@ -229,6 +241,7 @@ class FamilyService
                 'id' => $l->id,
                 'name' => $l->relative?->profile?->full_name ?: $l->relative_name,
                 'birth_year' => $l->birth_year,
+                'birth_date' => $l->birth_date?->toDateString(),
                 'user_id' => $l->relative_user_id,
                 'status' => $l->status,
             ])->values()->all(),

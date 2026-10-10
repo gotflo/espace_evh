@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Tribe;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -22,10 +23,11 @@ class ProfileGenderTest extends TestCase
     {
         $user = User::create(['phone' => '+14185550103']);
         $user->profile()->create(['gender' => 'autre']);
+        $tribe = Tribe::create(['name' => 'Juda', 'slug' => 'juda']);
         Sanctum::actingAs($user);
 
         $this->postJson('/api/profile', [
-            'first_name' => 'Test', 'last_name' => 'Profil', 'gender' => $gender,
+            'first_name' => 'Test', 'last_name' => 'Profil', 'gender' => $gender, 'tribe_id' => $tribe->id,
         ])->assertOk()->assertJsonPath('profile.gender', $gender);
         $this->assertDatabaseHas('profiles', ['user_id' => $user->id, 'gender' => $gender]);
     }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, ApiError } from '../../api/client'
+import { api, ApiError, peek } from '../../api/client'
+import { usePulse } from '../../pulse'
 import { AppLayout } from '../../components/AppLayout'
 import { VerseCard, type VerseContent } from '../../components/VerseBanner'
 import { Icon } from '../../components/Icon'
@@ -33,7 +34,9 @@ const localInput = (iso: string | null) => {
 
 // ---------------------------------------------------------------- Formulaire
 
-function VerseEditor({ verse, onClose, onSaved }: { verse: Verse | null; onClose: () => void; onSaved: () => void }) {
+interface VerseCan { edit: boolean; publish: boolean; delete: boolean }
+
+function VerseEditor({ verse, can, onClose, onSaved }: { verse: Verse | null; can: VerseCan; onClose: () => void; onSaved: () => void }) {
   const [label, setLabel] = useState(verse?.label ?? 'Parole du moment')
   const [text, setText] = useState(verse?.text ?? '')
   const [reference, setReference] = useState(verse?.reference ?? '')
@@ -112,7 +115,7 @@ function VerseEditor({ verse, onClose, onSaved }: { verse: Verse | null; onClose
         )}
         {err('starts_at')}{err('ends_at')}
         <label className="switch-line mt">
-          <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
+          <input type="checkbox" checked={pinned} disabled={!can.publish} onChange={(e) => setPinned(e.target.checked)} />
           <span>Mettre en avant : remplace la rotation {schedule ? 'pendant cette période' : 'tant qu’il est publié'}</span>
         </label>
         {err('is_pinned')}
@@ -121,10 +124,11 @@ function VerseEditor({ verse, onClose, onSaved }: { verse: Verse | null; onClose
         <VerseCard verse={{ id: null, label: label || 'Intitulé', text: text || 'Le texte apparaîtra ici.', reference: reference || 'Référence', message: message.trim() || null }} />
 
         <div className="row-actions mt">
-          <button className="btn btn-ghost" disabled={busy || !valid || sameStatus('draft')} onClick={() => save('draft')}>Enregistrer en brouillon</button>
-          <button className="btn btn-primary" disabled={busy || !valid || sameStatus('published')} onClick={() => save('published')}>
+          {/* Sans « Publier » : brouillons seulement (un texte publie se modifie avec la permission). */}
+          <button className="btn btn-ghost" disabled={busy || !valid || sameStatus('draft') || (!can.publish && verse?.status === 'published')} onClick={() => save('draft')}>Enregistrer en brouillon</button>
+          {can.publish && <button className="btn btn-primary" disabled={busy || !valid || sameStatus('published')} onClick={() => save('published')}>
             {busy ? <span className="spinner" /> : schedule && startsAt && new Date(startsAt) > new Date() ? 'Programmer' : 'Publier'}
-          </button>
+          </button>}
         </div>
       </div>
     </div>
@@ -133,19 +137,25 @@ function VerseEditor({ verse, onClose, onSaved }: { verse: Verse | null; onClose
 
 // ---------------------------------------------------------------- Page
 
+type VersesPayload = { verses: Verse[]; today: VerseContent; today_is_fallback: boolean; can?: VerseCan }
+
 export default function Verses() {
-  const [verses, setVerses] = useState<Verse[] | null>(null)
-  const [today, setToday] = useState<VerseContent | null>(null)
-  const [fallback, setFallback] = useState(false)
+  // Page deja ouverte : affichee tout de suite (derniere lecture), puis mise a jour en silence.
+  const [known] = useState(() => peek<VersesPayload>('/admin/verses'))
+  const [verses, setVerses] = useState<Verse[] | null>(known?.verses ?? null)
+  const [today, setToday] = useState<VerseContent | null>(known?.today ?? null)
+  const [fallback, setFallback] = useState(known?.today_is_fallback ?? false)
   const [editing, setEditing] = useState<Verse | null | 'new'>(null)
+  const [can, setCan] = useState<VerseCan>(known?.can ?? { edit: false, publish: false, delete: false })
   const [history, setHistory] = useState<{ verse: Verse; items: HistoryItem[] } | null>(null)
 
   const load = useCallback(() => {
-    api<{ verses: Verse[]; today: VerseContent; today_is_fallback: boolean }>('/admin/verses')
-      .then((r) => { setVerses(r.verses); setToday(r.today); setFallback(r.today_is_fallback) })
-      .catch(() => setVerses([]))
+    api<VersesPayload>('/admin/verses')
+      .then((r) => { setVerses(r.verses); setToday(r.today); setFallback(r.today_is_fallback); if (r.can) setCan(r.can) })
+      .catch(() => setVerses((p) => p ?? []))
   }, [])
   useEffect(() => { load() }, [load])
+  usePulse('verses', load)
 
   async function move(index: number, delta: number) {
     if (!verses) return
@@ -180,7 +190,7 @@ export default function Verses() {
 
   return (
     <AppLayout title="Versets du tableau de bord" subtitle="Le texte biblique affiché à tous en haut de l'accueil"
-      actions={<button className="btn btn-primary small" onClick={() => setEditing('new')}>+ Nouveau texte</button>}>
+      actions={can.edit ? <button className="btn btn-primary small" onClick={() => setEditing('new')}>+ Nouveau texte</button> : undefined}>
       <section className="panel">
         <div className="panel-head"><h3>Affiché aujourd'hui</h3></div>
         {today ? <VerseCard verse={today} /> : <div className="skeleton verse-skeleton" />}
@@ -203,10 +213,10 @@ export default function Verses() {
         <ol className="verse-list mt">
           {verses.map((v, i) => (
             <li key={v.id} className={`verse-item state-${v.state}`}>
-              <div className="verse-order">
+              {can.edit && <div className="verse-order">
                 <button className="icon-btn" aria-label="Monter" disabled={i === 0} onClick={() => move(i, -1)}>▲</button>
                 <button className="icon-btn" aria-label="Descendre" disabled={i === verses.length - 1} onClick={() => move(i, 1)}>▼</button>
-              </div>
+              </div>}
               <div className="verse-item-main">
                 <div className="verse-item-head">
                   <span className={`verse-state ${v.state}`}>{STATE_LABEL[v.state]}</span>
@@ -221,17 +231,17 @@ export default function Verses() {
                 </small>
               </div>
               <div className="verse-item-actions">
-                <button className="btn btn-ghost small" onClick={() => setEditing(v)}>Modifier</button>
-                <button className="btn btn-ghost small" onClick={() => togglePublish(v)}>{v.status === 'published' ? 'Retirer' : 'Publier'}</button>
+                {can.edit && (can.publish || v.status !== 'published') && <button className="btn btn-ghost small" onClick={() => setEditing(v)}>Modifier</button>}
+                {can.publish && <button className="btn btn-ghost small" onClick={() => togglePublish(v)}>{v.status === 'published' ? 'Retirer' : 'Publier'}</button>}
                 <button className="btn-link" onClick={() => openHistory(v)}>Historique</button>
-                <button className="org-del" onClick={() => remove(v)} aria-label={`Supprimer ${v.reference}`}>×</button>
+                {can.delete && <button className="org-del" onClick={() => remove(v)} aria-label={`Supprimer ${v.reference}`}>×</button>}
               </div>
             </li>
           ))}
         </ol>
       )}
 
-      {editing && <VerseEditor verse={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={load} />}
+      {editing && <VerseEditor verse={editing === 'new' ? null : editing} can={can} onClose={() => setEditing(null)} onSaved={load} />}
 
       {history && (
         <div className="modal-overlay" onMouseDown={() => setHistory(null)}>

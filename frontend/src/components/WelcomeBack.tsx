@@ -10,6 +10,7 @@ interface WhatsNew {
   announcements: { count: number; items: { id: number; title: string }[] }
   events: { count: number; items: { id: number; title: string; date: string }[] }
   exercises: { count: number; items: { id: number; title: string }[] }
+  assignments?: { count: number; items: { id: number; title: string }[] }
   unread: number
 }
 
@@ -20,7 +21,7 @@ const day = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('fr-
 
 /**
  * « Content de vous revoir » : apres plus de 4 jours d'absence, un resume de ce qui est
- * arrive entre-temps (annonces, evenements, exercices), avec un lien direct pour chacun.
+ * arrive entre-temps (annonces, evenements, exercices, devoirs), avec un lien direct pour chacun.
  */
 export function WelcomeBack() {
   const { profile } = useAuth()
@@ -39,7 +40,8 @@ export function WelcomeBack() {
     try { sessionStorage.setItem(DISMISSED_KEY, since ?? '') } catch { /* rien */ }
     setData(null)
   }
-  const nothing = !data.announcements.count && !data.events.count && !data.exercises.count
+  const devoirs = data.assignments ?? { count: 0, items: [] }
+  const nothing = !data.announcements.count && !data.events.count && !data.exercises.count && !devoirs.count
 
   return (
     <section className="welcome-back" role="status" aria-label="Nouveautés depuis votre dernière visite">
@@ -60,8 +62,12 @@ export function WelcomeBack() {
                 {data.events.items[0] && <small> · {data.events.items[0].title}, {day(data.events.items[0].date)}</small>}</li>
             )}
             {data.exercises.count > 0 && (
-              <li><Icon name="play" size={16} /> <Link to={data.exercises.count === 1 ? `/exercices/${data.exercises.items[0].id}` : '/exercices'} onClick={close}>{data.exercises.count} exercice(s) pour vous</Link>
+              <li><Icon name="play" size={16} /> <Link to={data.exercises.count === 1 ? `/exercices/${data.exercises.items[0].id}` : '/exercices'} onClick={close}>{data.exercises.count} vidéo(s), lecture(s) ou méditation(s) pour vous</Link>
                 {data.exercises.items[0] && <small> · {data.exercises.items[0].title}</small>}</li>
+            )}
+            {devoirs.count > 0 && (
+              <li><Icon name="devoir" size={16} /> <Link to={devoirs.count === 1 ? `/mon-devoir?d=${devoirs.items[0].id}` : '/mon-devoir'} onClick={close}>{devoirs.count} nouveau{devoirs.count > 1 ? 'x' : ''} devoir{devoirs.count > 1 ? 's' : ''} (DS)</Link>
+                {devoirs.items[0] && <small> · {devoirs.items[0].title}</small>}</li>
             )}
           </ul>
         </>

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { api } from '../../api/client'
+import { api, ApiError, peek } from '../../api/client'
+import { useAuth } from '../../auth/AuthContext'
+import { toast } from '../../toast'
 import { AppLayout } from '../../components/AppLayout'
 import { Icon } from '../../components/Icon'
 import { SkeletonCard } from '../../components/Skeleton'
@@ -221,9 +223,11 @@ function GardeRow({ g, onOpen }: { g: LeaderGarde; onOpen: () => void }) {
 export default function Leaders() {
   const [params, setParams] = useSearchParams()
   const gemId = Number(params.get('gem')) || null
-  const [data, setData] = useState<LeadersData | null>(null)
+  const [data, setData] = useState<LeadersData | null>(() => peek<LeadersData>('/admin/leaders') ?? null)
   const [denied, setDenied] = useState(false)
   const [query, setQuery] = useState('')
+  const [exporting, setExporting] = useState(false)
+  const canExport = useAuth().hasPermission('members.export')
 
   const load = useCallback(() => {
     api<LeadersData>('/admin/leaders').then((d) => { setData(d); setDenied(false) }).catch(() => setDenied(true))
@@ -248,13 +252,24 @@ export default function Leaders() {
   }
 
   const church = data?.scope === 'church'
+
+  /** Export PDF : donnees fournies et journalisees par le serveur (droit d'exporter les listes). */
+  async function exportPdf() {
+    setExporting(true)
+    try {
+      const [{ downloadLeadersPdf }, fresh] = await Promise.all([import('../../reports/pdf'), api<LeadersData>('/admin/leaders/export')])
+      await downloadLeadersPdf(fresh)
+      toast.success('La liste PDF a été téléchargée.', { title: 'PDF prêt' })
+    } catch (err) { toast.error(err instanceof ApiError ? err.firstMessage : 'La génération du PDF a échoué. Réessayez.') } finally { setExporting(false) }
+  }
   const assistants = data?.assistants.filter((p) => match(p.name, ...p.tribes)) ?? []
   const patriarchs = data?.patriarchs.filter((p) => match(p.name, ...p.tribes)) ?? []
   const respos = data?.department_leaders.filter((p) => match(p.name, ...p.departments)) ?? []
   const gardeCount = gardesByTribe.reduce((n, [, list]) => n + list.length, 0)
 
   return (
-    <AppLayout title="Responsables" subtitle={data ? (church ? "Toute l'église" : `Tribu ${data.tribes.map((t) => t.name).join(', ')}`) : undefined}>
+    <AppLayout title="Responsables" subtitle={data ? (church ? "Toute l'église" : `Tribu ${data.tribes.map((t) => t.name).join(', ')}`) : undefined}
+      actions={data && canExport ? <button className="btn btn-primary small" disabled={exporting} onClick={exportPdf}>{exporting ? <span className="spinner" /> : <><Icon name="download" size={14} /> PDF</>}</button> : undefined}>
       {denied ? (
         <div className="empty-state">
           <Icon name="roles" size={28} />

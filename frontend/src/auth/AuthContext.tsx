@@ -3,7 +3,7 @@ import { api, ApiError, auth as tokenStore } from '../api/client'
 import { forgetPushOnThisDevice } from '../push'
 import { setUnread } from '../notifications'
 import { rememberPreviousVisit } from '../utils/visit'
-import type { AuthPayload, Profile, User, UserRole } from '../types'
+import type { AppSettings, AuthPayload, Membership, ModuleName, Profile, User, UserRole } from '../types'
 
 interface AuthState {
   user: User | null
@@ -11,14 +11,25 @@ interface AuthState {
   roles: UserRole[]
   permissions: string[]
   isSuperAdmin: boolean
+  /** Compte de gestion principal (numero reserve) : gestion seulement, pas d'espace membre. */
+  isPlatformManager: boolean
   loading: boolean
   isAuthenticated: boolean
   profileCompleted: boolean
+  /** Tribu obligatoire pour terminer l'inscription ; membre deja inscrit a qui il manque une information. */
+  registration: { tribe_required: boolean; reopened: boolean }
+  /** Nouveau compte : en attente de la validation du pasteur (ou rejete). */
+  membership: Membership
+  setMembership: (m: Membership) => void
   login: (token: string, payload: AuthPayload) => void
   logout: () => Promise<void>
   refresh: () => Promise<void>
   setProfile: (p: Profile) => void
   hasPermission: (key: string) => boolean
+  /** Reglages de la plateforme utiles a l'application. */
+  settings: AppSettings
+  /** Module active dans les reglages (actif par defaut si inconnu). */
+  moduleOn: (name: ModuleName) => boolean
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -29,7 +40,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<UserRole[]>([])
   const [permissions, setPermissions] = useState<string[]>([])
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+  const [isPlatformManager, setIsPlatformManager] = useState(false)
+  const [registration, setRegistration] = useState({ tribe_required: true, reopened: false })
+  const [membership, setMembership] = useState<Membership>({ status: 'approved', submitted: true })
   const [loading, setLoading] = useState(true)
+  const [settings, setSettings] = useState<AppSettings>({ modules: {}, push_prompt_snooze_days: 3 })
 
   const apply = useCallback((p: AuthPayload) => {
     rememberPreviousVisit(p.user?.last_seen_at)
@@ -38,10 +53,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRoles(p.roles ?? [])
     setPermissions(p.permissions ?? [])
     setIsSuperAdmin(!!p.is_super_admin)
+    setIsPlatformManager(!!p.is_platform_manager)
+    setRegistration({ tribe_required: p.registration?.tribe_required ?? false, reopened: p.registration?.reopened ?? false })
+    setMembership(p.membership ?? { status: 'approved', submitted: true })
+    if (p.settings) setSettings(p.settings)
   }, [])
 
   const reset = () => {
-    setUser(null); setProfileState(null); setRoles([]); setPermissions([]); setIsSuperAdmin(false)
+    setUser(null); setProfileState(null); setRoles([]); setPermissions([]); setIsSuperAdmin(false); setIsPlatformManager(false)
+    setMembership({ status: 'approved', submitted: true })
   }
 
   const refresh = useCallback(async () => {
@@ -50,7 +70,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // requetes (429) est reessayee : le jeton est conserve.
     for (let attempt = 0; ; attempt++) {
       try {
-        apply(await api<AuthPayload>('/me'))
+        const me = await api<AuthPayload>('/me')
+        apply(me)
+        if (typeof me.unread === 'number') setUnread(me.unread)
         break
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) { tokenStore.clear(); reset(); break }
@@ -80,13 +102,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasPermission = (key: string) => isSuperAdmin || permissions.includes(key)
 
   const value: AuthState = {
-    user, profile, roles, permissions, isSuperAdmin,
+    user, profile, roles, permissions, isSuperAdmin, isPlatformManager,
     loading,
     isAuthenticated: !!user,
-    profileCompleted: !!profile?.is_completed,
+    // Meme regle que le serveur : inscription terminee ET tribu choisie (si elle est requise).
+    // Un compte en attente du pasteur n'a pas terminé son inscription (l'écran d'attente remplace le reste).
+    // Compte de gestion : pas de fiche de membre a remplir (le serveur le considere comme inscrit).
+    profileCompleted: isPlatformManager
+      || (membership.status === 'approved' && !!profile?.is_completed && (!registration.tribe_required || !!profile?.tribe_id)),
+    registration,
+    membership,
+    setMembership,
     login, logout, refresh,
     setProfile: setProfileState,
     hasPermission,
+    settings,
+    moduleOn: (name: ModuleName) => settings.modules[name] !== false,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -252,13 +252,16 @@ export function columnChartSvg(labels: string[], values: number[], color = VIZ.s
 export function hbarChartSvg(rows: { label: string; value: number | null }[], unit = '%', max = 100, color = VIZ.s1, w = 520): string {
   const rowH = 22
   const h = rows.length * rowH + 8
-  const labelW = 110
+  // Colonne des libelles a la largeur du plus long (noms composes), bornee ; au-dela, libelle abrege.
+  const maxChars = 34
+  const short = (s: string) => (s.length > maxChars ? `${s.slice(0, maxChars - 1)}…` : s)
+  const labelW = Math.min(190, Math.max(80, Math.round(Math.max(...rows.map((r) => short(r.label).length), 0) * 5.4) + 14))
   const valueW = 50
   const track = w - labelW - valueW
   let out = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`
   rows.forEach((r, i) => {
     const yy = i * rowH + 4
-    out += `<text x="0" y="${yy + 12}" font-size="9" fill="${VIZ.text}">${esc(r.label)}</text>`
+    out += `<text x="0" y="${yy + 12}" font-size="9" fill="${VIZ.text}">${esc(short(r.label))}</text>`
     out += `<rect x="${labelW}" y="${yy + 4}" width="${track}" height="10" rx="5" fill="${VIZ.grid}"/>`
     if (r.value !== null) out += `<rect x="${labelW}" y="${yy + 4}" width="${Math.max(2, (r.value / max) * track)}" height="10" rx="5" fill="${color}"/>`
     out += `<text x="${w}" y="${yy + 12}" text-anchor="end" font-size="9" font-weight="bold" fill="${VIZ.text}">${fmt(r.value, unit)}</text>`

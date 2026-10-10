@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, prefetch } from '../api/client'
+import { api, prefetch, peek } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { usePulse } from '../pulse'
 import { AppLayout } from '../components/AppLayout'
@@ -8,30 +8,33 @@ import { MyExercises } from '../components/MyExercises'
 import { AnnouncementsFeed } from '../components/AnnouncementsFeed'
 import { EventsFeed } from '../components/EventsFeed'
 import { ServiceSchedule } from '../components/ServiceSchedule'
-import { serviceSchedulePath } from '../utils/schedule'
+import { dashboardData } from '../utils/routeData'
 import { VerseBanner } from '../components/VerseBanner'
 import { WelcomeBack } from '../components/WelcomeBack'
 import { DashRequests } from '../components/DashRequests'
-import { FissReminder } from '../components/FissReminder'
+import { MonthJourney } from '../components/MonthJourney'
+import { EmailInvite } from '../components/EmailInvite'
 import { GemReportReminder, LeaderReportReminder } from '../components/LeaderReportReminder'
 import { FissSummary } from '../components/FissSummary'
 import { Skeleton } from '../components/Skeleton'
 import { NewMembersPanel } from '../components/NewMembersPanel'
-import { PushSettings } from '../components/PushSettings'
 import type { Stats } from '../types'
 import { APP_NAME } from '../config'
 
+/** Duree d'affichage du mot de bienvenue (ms). */
+const WELCOME_MS = 6000
+
 export default function Dashboard() {
-  const { profile, roles, hasPermission } = useAuth()
+  const { profile, roles, hasPermission, moduleOn } = useAuth()
   const navigate = useNavigate()
   const canViewMembers = hasPermission('members.view_all') || hasPermission('members.view_scope')
   const canViewAll = hasPermission('members.view_all')
   const canRequests = hasPermission('requests.handle')
 
   // Les lectures des blocs ci-dessous partent en un seul appel, avant leurs propres effets.
-  useState(() => prefetch(['/dashboard/verse', '/me/fiss', '/me/events?days=30', '/me/announcements', '/me/exercises', serviceSchedulePath()]))
+  useState(() => prefetch(dashboardData(moduleOn('exercises'))))
 
-  const [stats, setStats] = useState<Stats | null>(null)
+  const [stats, setStats] = useState<Stats | null>(() => (canViewMembers ? peek<Stats>('/admin/stats') ?? null : null))
   const [welcome, setWelcome] = useState(false)
 
   const loadStats = useCallback(() => {
@@ -41,18 +44,23 @@ export default function Dashboard() {
   useEffect(() => { loadStats() }, [loadStats])
   usePulse(['members', 'fiss', 'attendance'], loadStats, canViewMembers)
 
-  // Mot de bienvenue au tout premier passage, puis il disparait de lui-meme.
+  // Mot de bienvenue au tout premier passage, puis il disparait de lui-meme (fondu) apres quelques secondes.
+  // Lecture du drapeau et minuterie separees : la minuterie ne peut pas etre annulee sans etre relancee.
+  const [welcomeLeaving, setWelcomeLeaving] = useState(false)
   useEffect(() => {
-    let show = false
     try {
-      show = localStorage.getItem('evh_welcome') === '1'
-      if (show) localStorage.removeItem('evh_welcome')
+      if (localStorage.getItem('evh_welcome') === '1') {
+        localStorage.removeItem('evh_welcome')
+        setWelcome(true)
+      }
     } catch { /* ignore */ }
-    if (!show) return
-    setWelcome(true)
-    const timer = setTimeout(() => setWelcome(false), 9000)
-    return () => clearTimeout(timer)
   }, [])
+  useEffect(() => {
+    if (!welcome) return
+    const fade = window.setTimeout(() => setWelcomeLeaving(true), WELCOME_MS - 600)
+    const hide = window.setTimeout(() => setWelcome(false), WELCOME_MS)
+    return () => { window.clearTimeout(fade); window.clearTimeout(hide) }
+  }, [welcome])
 
   const maxTribe = Math.max(1, ...(stats?.by_tribe.map((t) => t.total) ?? [1]))
 
@@ -75,7 +83,7 @@ export default function Dashboard() {
   return (
     <AppLayout title="Tableau de bord" subtitle={`Bonjour ${profile?.first_name || ''}`.trim()}>
       {welcome && (
-        <div className="welcome-banner" role="status">
+        <div className={`welcome-banner ${welcomeLeaving ? 'is-leaving' : ''}`} role="status">
           <div className="welcome-text">
             <strong>Bienvenue dans votre famille spirituelle{profile?.first_name ? `, ${profile.first_name}` : ''} !</strong>
             <span>Nous sommes heureux de vous accueillir sur {APP_NAME}, l'espace des Vases d'Honneur Chicoutimi.</span>
@@ -88,9 +96,9 @@ export default function Dashboard() {
 
       <WelcomeBack />
       <VerseBanner />
+      <EmailInvite />
+      <MonthJourney />
 
-      <PushSettings variant="prompt" />
-      <FissReminder />
       <LeaderReportReminder />
       <GemReportReminder />
       <FissSummary />
@@ -137,7 +145,7 @@ export default function Dashboard() {
               {canViewAll && tribePanel}
               {canRequests && <DashRequests />}
               <AnnouncementsFeed />
-              <MyExercises />
+              {moduleOn('exercises') && <MyExercises />}
             </div>
           </div>
         </>
@@ -146,7 +154,7 @@ export default function Dashboard() {
           <div className="dash-col dash-main-col">
             <EventsFeed limit={3} />
             <AnnouncementsFeed />
-            <MyExercises />
+            {moduleOn('exercises') && <MyExercises />}
           </div>
           <div className="dash-col dash-side-col">
             <ServiceSchedule />
@@ -173,7 +181,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="editor-actions mt">
-                <button className="btn btn-primary small" onClick={() => navigate('/servir')}>Service : rejoindre un département</button>
+                <button className="btn btn-primary small" onClick={() => navigate('/servir')}>Rejoindre un département</button>
                 <button className="btn btn-ghost small" onClick={() => navigate('/mon-profil')}>Mon profil</button>
               </div>
             </section>

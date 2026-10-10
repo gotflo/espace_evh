@@ -48,6 +48,50 @@ class YouTube
         return $candidate !== null && preg_match(self::ID, $candidate) ? $candidate : null;
     }
 
+    /**
+     * Lien YouTube qui vise une video mais dont l'identifiant manque ou est abime (ex. watch?v= tronque,
+     * youtu.be/abc). Les liens de chaine (@nom, /channel/) et de liste de lecture restent valides.
+     */
+    public static function looksLikeBrokenVideoLink(string $url): bool
+    {
+        if (self::videoId($url) !== null) {
+            return false;
+        }
+        if (! preg_match('#^https?://#i', $url)) {
+            $url = 'https://'.$url;
+        }
+        $parts = parse_url($url);
+        $host = strtolower($parts['host'] ?? '');
+        if (! in_array($host, self::HOSTS, true)) {
+            return false;
+        }
+        $path = $parts['path'] ?? '';
+        if ($host === 'youtu.be') {
+            return true;
+        }
+
+        return $path === '/watch' || (bool) preg_match('#^/(embed|shorts|live|v)(/|$)#', $path);
+    }
+
+    /**
+     * Titre et auteur a pre-remplir pour une video (meme logique partout sur la plateforme) : les champs
+     * deja remplis sont gardes ; ceux laisses vides prennent le titre et la chaine YouTube.
+     *
+     * @return array{title: ?string, author: ?string}
+     */
+    public static function prefill(string $id, ?string $title, ?string $author): array
+    {
+        $title = trim((string) $title);
+        $author = trim((string) $author);
+        if ($title === '' || $author === '') {
+            $details = self::details($id);
+            $title = $title !== '' ? $title : (string) PlainText::title($details['title']);
+            $author = $author !== '' ? $author : (string) PlainText::title($details['author']);
+        }
+
+        return ['title' => $title !== '' ? $title : null, 'author' => $author !== '' ? $author : null];
+    }
+
     public static function thumbnail(string $id): string
     {
         return 'https://i.ytimg.com/vi/'.$id.'/hqdefault.jpg';

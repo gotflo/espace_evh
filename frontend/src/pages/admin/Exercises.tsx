@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { api, ApiError } from '../../api/client'
+import { api, ApiError, peek } from '../../api/client'
+import { useAuth } from '../../auth/AuthContext'
 import { AppLayout } from '../../components/AppLayout'
 import { AudiencePicker } from '../../components/AudiencePicker'
 import type { AudienceScope, ExerciseListItem, ExerciseStatus, ExerciseTracking } from '../../types'
 import { deadlineLabel } from '../../utils/exercises'
+import { isYouTubeLink, useYouTubePreview } from '../../utils/youtubePreview'
 import { Icon } from '../../components/Icon'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { toast } from '../../toast'
+import { usePulse } from '../../pulse'
 
 const WRITTEN_TYPES = [
   { key: 'reflexion', label: 'Réflexion' },
@@ -38,6 +43,15 @@ function Tracking({ id, onBack }: { id: number; onBack: () => void }) {
       && (!s || m.name.toLowerCase().includes(s)))
   }, [data, filter, q])
 
+  const [reminding, setReminding] = useState(false)
+  async function remind() {
+    setReminding(true)
+    try {
+      const r = await api<{ message: string }>(`/admin/exercises/${id}/remind`, { method: 'POST' })
+      toast.success(r.message)
+    } catch { /* toast */ } finally { setReminding(false) }
+  }
+
   const back = <button className="btn btn-ghost small" onClick={onBack}>← Exercices</button>
   if (!data) return <AppLayout title="Suivi" actions={back}><div className="skeleton skeleton-card" /></AppLayout>
 
@@ -59,9 +73,15 @@ function Tracking({ id, onBack }: { id: number; onBack: () => void }) {
         <div className="tracking-info">
           <strong>{ex.title}</strong>
           <span className="helper">{ex.type_label} · {ex.target}{ex.requires_response ? ' · réponse écrite demandée' : ''}</span>
+          {ex.author && <span className="helper">Donné par {[ex.author.name, ex.author.role].filter(Boolean).join(' · ')}</span>}
           <span className="helper">{deadlineLabel(ex.closes_at, ex.is_closed) ?? 'Sans date limite'}</span>
           <div className="completion-bar mt-sm" aria-label={`${pct} % ont terminé`}><span className="good" style={{ width: `${pct}%` }} /></div>
           <span className="helper"><strong>{sm.done}</strong> sur {sm.total} ont terminé ({pct} %)</span>
+          {!ex.is_closed && sm.done < sm.total && (
+            <button className="btn btn-ghost small tracking-remind" disabled={reminding} onClick={remind}>
+              {reminding ? <span className="spinner" /> : <><Icon name="bell" size={15} /> Relancer</>}
+            </button>
+          )}
         </div>
       </section>
 
@@ -119,9 +139,6 @@ function NewExercise({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
   const inWeek = new Date(Date.now() + 7 * 86400000)
   const [kind, setKind] = useState<'video' | 'written'>('video')
   const [url, setUrl] = useState('')
-  const [preview, setPreview] = useState<Preview | null>(null)
-  const [previewError, setPreviewError] = useState('')
-  const [checking, setChecking] = useState(false)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [writtenType, setWrittenType] = useState('reflexion')
@@ -133,21 +150,14 @@ function NewExercise({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
   const [busy, setBusy] = useState(false)
   const titleTouched = useRef(false)
 
-  // Apercu automatique du lien (titre, miniature, lecture possible dans l'application).
-  useEffect(() => {
-    if (kind !== 'video' || !url.trim()) { setPreview(null); setPreviewError(''); return }
-    const t = window.setTimeout(() => {
-      setChecking(true)
-      api<Preview>('/admin/exercises/video-preview', { method: 'POST', body: { url }, toast: false })
-        .then((p) => {
-          setPreview(p); setPreviewError('')
-          if (p.title && !titleTouched.current) setTitle(p.title.slice(0, 150))
-        })
-        .catch((err) => { setPreview(null); setPreviewError(err instanceof ApiError ? err.firstMessage : 'Lien impossible à vérifier.') })
-        .finally(() => setChecking(false))
-    }, 500)
-    return () => window.clearTimeout(t)
-  }, [url, kind])
+  // Apercu automatique du lien (meme reconnaissance YouTube partout : titre rempli, miniature, lecture dans l'application).
+  const yt = useYouTubePreview(kind === 'video' ? url : '', (p) => {
+    if (p.title && !titleTouched.current) setTitle(p.title.slice(0, 150))
+  }, 'exercises')
+  const preview = (yt.preview as Preview | null) ?? null
+  const checking = yt.status === 'loading'
+  const previewError = kind === 'video' && url.trim() && (yt.status === 'invalid' || (yt.status === 'idle' && !isYouTubeLink(url)))
+    ? 'Ce lien n\'est pas une vidéo YouTube (ex. https://www.youtube.com/watch?v=…).' : ''
 
   const closesAt = date ? `${date}T${time || '23:59'}` : null
   const pastDeadline = closesAt !== null && new Date(closesAt).getTime() <= Date.now()
@@ -260,16 +270,47 @@ function NewExercise({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
 
 // ---------------------------------------------------------------- Liste
 
+const STATUS_FILTERS = [
+  { key: 'open', label: 'En cours' },
+  { key: 'closed', label: 'Terminés' },
+  { key: 'all', label: 'Tous' },
+] as const
+type StatusFilter = typeof STATUS_FILTERS[number]['key']
+interface ExercisePage { exercises: ExerciseListItem[]; total: number; has_more: boolean }
+
 export default function Exercises() {
   const [params, setParams] = useSearchParams()
-  const [exercises, setExercises] = useState<ExerciseListItem[] | null>(null)
+  // Liste deja vue : affichee tout de suite (derniere lecture), puis mise a jour en silence.
+  const [known] = useState(() => peek<ExercisePage>('/admin/exercises?page=1&status=all'))
+  const [exercises, setExercises] = useState<ExerciseListItem[] | null>(known?.exercises ?? null)
+  const [total, setTotal] = useState(known?.total ?? 0)
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(known?.has_more ?? false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [status, setStatus] = useState<StatusFilter>('all')
+  const [mine, setMine] = useState(false)
+  const [q, setQ] = useState('')
   const [creating, setCreating] = useState(false)
-  const tracking = Number(params.get('suivi')) || null
+  const [removing, setRemoving] = useState<ExerciseListItem | null>(null)
+  // Creer ; lire les reponses de chaque membre (le compte de gestion ne voit que l'avancement global).
+  const { hasPermission } = useAuth()
+  const canCreate = hasPermission('exercises.create')
+  const canResponses = hasPermission('exercises.view_responses')
+  const tracking = canResponses ? Number(params.get('suivi')) || null : null
 
+  const url = useCallback((p: number) => `/admin/exercises?page=${p}&status=${status}${mine ? '&mine=1' : ''}${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ''}`, [status, mine, q])
   const load = useCallback(() => {
-    api<{ exercises: ExerciseListItem[] }>('/admin/exercises').then((r) => setExercises(r.exercises)).catch(() => setExercises([]))
-  }, [])
-  useEffect(() => { load() }, [load])
+    api<ExercisePage>(url(1)).then((r) => { setExercises(r.exercises); setTotal(r.total); setHasMore(r.has_more); setPage(1) })
+      .catch(() => { setExercises([]); setTotal(0); setHasMore(false) })
+  }, [url])
+  useEffect(() => { const t = window.setTimeout(load, q ? 250 : 0); return () => window.clearTimeout(t) }, [load, q])
+  usePulse('exercises', load)
+
+  function more() {
+    setLoadingMore(true)
+    api<ExercisePage>(url(page + 1)).then((r) => { setExercises((prev) => [...(prev ?? []), ...r.exercises]); setHasMore(r.has_more); setPage(page + 1) })
+      .catch(() => {}).finally(() => setLoadingMore(false))
+  }
 
   const openTracking = (id: number | null) => {
     const next = new URLSearchParams(params)
@@ -279,43 +320,71 @@ export default function Exercises() {
   const closeTracking = useCallback(() => { setParams((p) => { const n = new URLSearchParams(p); n.delete('suivi'); return n }) }, [setParams])
 
   async function remove(ex: ExerciseListItem) {
-    if (!confirm(`Supprimer « ${ex.title} » et tout son suivi ?`)) return
-    try { await api(`/admin/exercises/${ex.id}`, { method: 'DELETE' }); load() } catch { /* toast */ }
+    await api(`/admin/exercises/${ex.id}`, { method: 'DELETE' })
+    load()
   }
 
   if (tracking) return <Tracking id={tracking} onBack={closeTracking} />
 
   return (
-    <AppLayout title="Exercices" subtitle="Vidéos et exercices pour les fidèles, avec leur suivi"
-      actions={!creating ? <button className="btn btn-primary small" onClick={() => setCreating(true)}>+ Nouvel exercice</button> : undefined}>
-      {creating ? (
+    <AppLayout title="Exercices" subtitle="Historique et suivi des exercices"
+      actions={!creating && canCreate ? <button className="btn btn-primary small" onClick={() => setCreating(true)}>+ Nouvel exercice</button> : undefined}>
+      {creating && canCreate ? (
         <NewExercise onCancel={() => setCreating(false)} onDone={() => { setCreating(false); load() }} />
-      ) : exercises === null ? (
-        <div className="exercise-rows">{[0, 1, 2].map((i) => <div key={i} className="skeleton skeleton-row" />)}</div>
-      ) : exercises.length === 0 ? (
-        <div className="empty-state"><Icon name="play" size={28} /><h3>Aucun exercice</h3><p>Publiez une vidéo YouTube ou un exercice écrit pour vos fidèles.</p></div>
       ) : (
-        <div className="admin-exercises">
-          {exercises.map((e) => (
-            <article key={e.id} className={`admin-exercise ${e.is_closed ? 'is-closed' : ''}`}>
-              {e.video ? <img className="exercise-thumb" src={e.video.thumbnail} alt="" loading="lazy" /> : <span className="exercise-thumb exercise-thumb-icon"><Icon name="book" size={22} /></span>}
-              <div className="admin-exercise-main">
-                <strong>{e.title}</strong>
-                <small>{e.type_label} · {e.target}</small>
-                <small className={e.is_closed ? 'closed' : ''}>{deadlineLabel(e.closes_at, e.is_closed) ?? 'Sans date limite'}</small>
-                <small>
-                  {e.video ? `${e.views_completed_count} vue(s) complète(s) · ${e.views_count} ont commencé` : ''}
-                  {e.video && e.requires_response ? ' · ' : ''}
-                  {e.requires_response ? `${e.responses_count} réponse(s)` : ''}
-                </small>
+        <>
+          <div className="members-filters ex-filters">
+            <div className="filter-chips" role="radiogroup" aria-label="Exercices">
+              {STATUS_FILTERS.map((f) => (
+                <button key={f.key} role="radio" aria-checked={status === f.key} className={`chip-toggle ${status === f.key ? 'on' : ''}`} onClick={() => setStatus(f.key)}>{f.label}</button>
+              ))}
+              <button role="checkbox" aria-checked={mine} className={`chip-toggle ${mine ? 'on' : ''}`} onClick={() => setMine((m) => !m)}>Les miens</button>
+            </div>
+            <input aria-label="Rechercher un exercice" className="input" type="search" placeholder="Rechercher un exercice…" value={q} onChange={(e) => setQ(e.target.value)} />
+          </div>
+          {exercises === null ? (
+            <div className="exercise-rows">{[0, 1, 2].map((i) => <div key={i} className="skeleton skeleton-row" />)}</div>
+          ) : exercises.length === 0 ? (
+            <div className="empty-state"><Icon name="play" size={28} /><h3>Aucun exercice</h3>
+              <p>{status !== 'all' || mine || q ? 'Aucun exercice pour ce filtre.' : 'Publiez une vidéo YouTube ou un exercice écrit pour vos fidèles.'}</p></div>
+          ) : (
+            <>
+              <p className="helper">{total > exercises.length ? `${exercises.length} sur ${total} exercices` : `${total} exercice(s)`}</p>
+              <div className="admin-exercises">
+                {exercises.map((e) => (
+                  <article key={e.id} className={`admin-exercise ${e.is_closed ? 'is-closed' : ''}`}>
+                    {e.video ? <img className="exercise-thumb" src={e.video.thumbnail} alt="" loading="lazy" /> : <span className="exercise-thumb exercise-thumb-icon"><Icon name="book" size={22} /></span>}
+                    <div className="admin-exercise-main">
+                      <strong>{e.title}</strong>
+                      <small>{e.type_label} · {e.target}</small>
+                      {e.author && <small className="ex-author">{e.is_mine ? 'Par vous' : `Par ${[e.author.name, e.author.role].filter(Boolean).join(' · ')}`}</small>}
+                      <small className={e.is_closed ? 'closed' : ''}>{deadlineLabel(e.closes_at, e.is_closed) ?? 'Sans date limite'}</small>
+                      <span className="ex-progress" aria-label={`${e.done_count} sur ${e.audience_count} ont terminé`}>
+                        <span className="mini-progress"><span style={{ width: `${e.percent}%` }} className={e.percent >= 100 ? 'done' : ''} /></span>
+                        <small><strong>{e.done_count}</strong>/{e.audience_count} terminé{e.done_count > 1 ? 's' : ''}</small>
+                      </span>
+                    </div>
+                    <div className="admin-exercise-actions">
+                      {canResponses && <button className="btn btn-ghost small" onClick={() => openTracking(e.id)}>Suivi</button>}
+                      {e.can_delete && <button className="org-del" onClick={() => setRemoving(e)} aria-label={`Supprimer ${e.title}`}>×</button>}
+                    </div>
+                  </article>
+                ))}
               </div>
-              <div className="admin-exercise-actions">
-                <button className="btn btn-ghost small" onClick={() => openTracking(e.id)}>Suivi</button>
-                <button className="org-del" onClick={() => remove(e)} aria-label={`Supprimer ${e.title}`}>×</button>
-              </div>
-            </article>
-          ))}
-        </div>
+              {hasMore && (
+                <div className="center mt">
+                  <button className="btn btn-ghost" disabled={loadingMore} onClick={more}>
+                    {loadingMore ? <span className="spinner" /> : `Afficher plus (${total - exercises.length})`}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+      {removing && (
+        <ConfirmDialog title={`Supprimer « ${removing.title} » ?`} danger confirmLabel="Supprimer"
+          text="L’exercice et tout son suivi seront effacés." onConfirm={() => remove(removing)} onClose={() => setRemoving(null)} />
       )}
     </AppLayout>
   )

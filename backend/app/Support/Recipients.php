@@ -41,7 +41,8 @@ class Recipients
      */
     private static function staff(): Collection
     {
-        return self::$batchStaff ?? User::where(fn ($q) => $q
+        // Le compte de gestion principal n'est jamais destinataire des alertes sur les membres.
+        return self::$batchStaff ?? User::exceptPlatformManagers()->where(fn ($q) => $q
             ->whereHas('roles.permissions', fn ($p) => $p->where('key', '!=', 'exercises.respond'))
             ->orWhereHas('roles', fn ($r) => $r->where('key', 'super_admin'))
             ->orWhereHas('ledDepartments'))

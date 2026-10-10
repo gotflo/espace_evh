@@ -28,6 +28,12 @@ class Like
     }
 
     /** @param  Builder|EloquentBuilder  $query */
+    public static function whereNot($query, string $column, string $pattern): void
+    {
+        $query->whereRaw($column.' NOT LIKE ? ESCAPE \'!\'', [$pattern]);
+    }
+
+    /** @param  Builder|EloquentBuilder  $query */
     public static function contains($query, string $column, string $text, string $boolean = 'and'): void
     {
         self::where($query, $column, '%'.self::escape($text).'%', $boolean);

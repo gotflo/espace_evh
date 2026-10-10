@@ -16,8 +16,8 @@ class ProfileCompletion
      * @return array{percent: int, missing: array<int, array{key: string, label: string}>, recommended: array<int, array{key: string, label: string}>}
      */
     /**
-     * @param  array{spouse: bool, children: int}|null  $family  liens familiaux deja connus
-     *                                                        (calcul groupe) ; sinon lus en base.
+     * @param  array{spouse: bool, children: int, children_dated?: int}|null  $family  liens familiaux deja connus
+     *                                                                                 (calcul groupe) ; sinon lus en base.
      */
     public static function for(Profile $p, ?array $family = null): array
     {
@@ -39,7 +39,9 @@ class ProfileCompletion
         }
         if ($p->has_children) {
             $count = $family !== null ? $family['children'] : FamilyLink::where('user_id', $p->user_id)->where('relation', 'child')->count();
-            $checks['children'] = ['Nom et année de naissance des enfants', $count > 0 && (! $p->children_count || $count >= $p->children_count)];
+            // Date de naissance complete de chaque enfant (les enfants saisis avec la seule annee restent a completer).
+            $dated = $family !== null ? ($family['children_dated'] ?? $count) : FamilyLink::where('user_id', $p->user_id)->where('relation', 'child')->whereNotNull('birth_date')->count();
+            $checks['children'] = ['Nom et date de naissance des enfants', $count > 0 && $dated >= $count && (! $p->children_count || $count >= $p->children_count)];
         }
 
         $missing = [];
@@ -77,10 +79,11 @@ class ProfileCompletion
         $spouses = FamilyLink::whereIn('user_id', $ids)->where('relation', 'spouse')
             ->whereIn('status', ['pending', 'confirmed'])->pluck('user_id')->flip();
         $children = FamilyLink::whereIn('user_id', $ids)->where('relation', 'child')
-            ->selectRaw('user_id, count(*) as n')->groupBy('user_id')->pluck('n', 'user_id');
+            ->selectRaw('user_id, count(*) as n, count(birth_date) as d')->groupBy('user_id')->get()->keyBy('user_id');
         $changed = 0;
         foreach ($list as $p) {
-            $percent = self::for($p, ['spouse' => isset($spouses[$p->user_id]), 'children' => (int) ($children[$p->user_id] ?? 0)])['percent'];
+            $kids = $children[$p->user_id] ?? null;
+            $percent = self::for($p, ['spouse' => isset($spouses[$p->user_id]), 'children' => (int) ($kids->n ?? 0), 'children_dated' => (int) ($kids->d ?? 0)])['percent'];
             if ((int) $p->completion !== $percent) {
                 $p->forceFill(['completion' => $percent])->saveQuietly();
                 $changed++;

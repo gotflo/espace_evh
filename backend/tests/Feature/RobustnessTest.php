@@ -11,6 +11,7 @@ use App\Services\Push\WebPush;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
@@ -98,6 +99,29 @@ class RobustnessTest extends TestCase
         $this->assertSame(1, $after['unread']);
         $this->assertNotSame($first['versions']['exercises'], $after['versions']['exercises']);
         $this->assertSame($first['versions']['announcements'], $after['versions']['announcements']);
+    }
+
+    public function test_a_change_is_seen_by_the_next_pulse_without_waiting_for_the_cache(): void
+    {
+        $member = $this->member('+14185550004');
+        Sanctum::actingAs($member);
+        $first = $this->getJson('/api/me/pulse')->assertOk()->json('versions');
+        $this->assertArrayHasKey('services', $first);
+        $this->assertArrayHasKey('verses', $first);
+
+        // Signal technique frequent (notifications lues) : les signatures en cache restent valables.
+        $this->postJson('/api/me/notifications/read-all')->assertSuccessful();
+        $this->assertTrue(Cache::has('pulse:versions'));
+
+        // Vraie modification : le pouls suivant la voit aussitot (pas d'attente de 10 s).
+        $this->postJson('/api/me/requests', ['category' => 'question', 'message' => 'Une question pour le pasteur.'])->assertCreated();
+        $after = $this->getJson('/api/me/pulse')->assertOk()->json('versions');
+        $this->assertNotSame($first['requests'], $after['requests']);
+        $this->assertSame($first['announcements'], $after['announcements']);
+
+        // Refus (validation) : rien n'a change, le cache est garde.
+        $this->postJson('/api/me/requests', ['message' => ''])->assertStatus(422);
+        $this->assertTrue(Cache::has('pulse:versions'));
     }
 
     public function test_contact_message_sent_twice_by_a_double_tap_is_recorded_once(): void

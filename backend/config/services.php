@@ -44,13 +44,23 @@ return [
             'api_key_sid' => env('TWILIO_API_KEY_SID'),
             'api_key_secret' => env('TWILIO_API_KEY_SECRET'),
             'verify_service_sid' => env('TWILIO_VERIFY_SERVICE_SID'),
-            // Modele Verify (HJ...) qui affiche le nom de l'application dans le SMS ; facultatif.
-            'template_sid' => env('TWILIO_VERIFY_TEMPLATE_SID'),
+            // Modele Verify (HJ...) qui affiche le nom de l'application (« My vasesdhonneur ») dans le SMS.
+            // Modele public de Twilio (pas un secret) : utilise par defaut si le .env l'oublie.
+            'template_sid' => env('TWILIO_VERIFY_TEMPLATE_SID') ?: 'HJ4d9c5db569029bedab5b28ab79f4cc8d',
             // Delai avant le second essai d'un envoi qui a echoue pour une raison passagere.
             'retry_delay_ms' => (int) env('TWILIO_RETRY_DELAY_MS', 1500),
+            // Textos de notification (devoir, rappels) : numero Twilio achete (+1...) ou service de messagerie (MG...).
+            // Sans l'un des deux, les textos sont desactives (courriel, notification et push seulement).
+            'sms_from' => env('TWILIO_SMS_FROM'),
+            'messaging_service_sid' => env('TWILIO_MESSAGING_SERVICE_SID'),
         ],
+        // Essais : tous les textos partent vers ce numero.
+        'test_to' => env('SMS_TEST_TO'),
+        // Pas de texto la nuit : envoye a partir de 9 h, jusqu'a 20 h 30.
+        'quiet_from' => '20:30',
+        'quiet_until' => '09:00',
+        'per_minute' => (int) env('SMS_PER_MINUTE', 30),
     ],
-
 
     // Notifications push (Web Push / VAPID). Sans cles, elles sont generees automatiquement
     // dans storage/app/webpush-vapid.json lors du premier usage.

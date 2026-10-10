@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Middleware\EnsureModule;
 use App\Http\Middleware\EnsurePermission;
 use App\Http\Middleware\MonitorRequests;
+use App\Http\Middleware\RefreshPulse;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\TriggerAutomation;
 use Illuminate\Database\LostConnectionDetector;
@@ -27,6 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'permission' => EnsurePermission::class,
+            'module' => EnsureModule::class,
         ]);
 
         // Supervision : identifiant et mesure de chaque requete de l'API (y compris les refus).
@@ -37,6 +40,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Automatismes (rappels...) declenches aussi par l'activite, si le cron manque.
         $middleware->appendToGroup('api', TriggerAutomation::class);
+
+        // Temps reel : une modification reussie rend le pouls suivant immediatement a jour.
+        $middleware->appendToGroup('api', RefreshPulse::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

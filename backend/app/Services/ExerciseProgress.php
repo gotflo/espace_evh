@@ -6,6 +6,7 @@ use App\Models\Exercise;
 use App\Models\ExerciseResponse;
 use App\Models\ExerciseVideoView;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
@@ -96,49 +97,63 @@ class ExerciseProgress
         $duration = (int) ($exercise->video_duration ?: $reported);
 
         return DB::transaction(function () use ($exercise, $user, $data, $duration) {
-            $view = self::lockedView($exercise, $user);
-            $now = now();
-
-            $old = self::normalize($view->segments ?? [], $duration);
-            $incoming = self::normalize($data['segments'] ?? [], $duration);
-            $merged = self::merge(array_merge($old, $incoming));
-            $gain = self::covered($merged) - self::covered($old);
-
-            // Plus de lecture que le temps reellement ecoule (x2 max) : signal ignore.
-            $elapsed = $view->last_heartbeat_at ? $view->last_heartbeat_at->diffInSeconds($now, true) : self::FIRST_CREDIT / self::MAX_SPEED;
-            $plausible = $gain <= $elapsed * self::MAX_SPEED + 5;
-
-            if ($plausible) {
-                $view->segments = $merged;
-                $view->watched_seconds = (int) round(self::covered($merged));
-                $view->seek_count = min(65000, $view->seek_count + max(0, min(50, (int) ($data['seeks'] ?? 0))));
-                $view->skipped_seconds = $view->skipped_seconds + (int) round(max(0, min((float) ($data['skipped'] ?? 0), $duration ?: 43200)));
-                $view->max_rate = max((float) $view->max_rate, max(0.25, min(4.0, (float) ($data['rate'] ?? 1))));
-            }
-            $position = (int) round(max(0, min((float) ($data['position'] ?? 0), $duration ?: 43200)));
-            $view->last_position = $position;
-            if ($plausible) {
-                $view->max_position = max($view->max_position, $position);
-            }
-
-            // Controle independant du navigateur : tout passage non regarde avant le point le
-            // plus loin atteint a forcement ete saute (avance rapide).
-            $reached = max($view->max_position, (int) floor(max(array_merge([0], array_column($view->segments ?? [], 1)))));
-            $gap = (int) round($reached - self::covered(self::clip($view->segments ?? [], $reached)));
-            if ($gap > 3) {
-                $view->skipped_seconds = max($view->skipped_seconds, $gap);
-                $view->seek_count = max($view->seek_count, 1);
-            }
-            $view->last_heartbeat_at = $now;
-
-            if (! $view->completed_at && $duration > 0
-                && ($view->watched_seconds >= $duration * self::COMPLETION_RATIO || $duration - $view->watched_seconds <= 5)) {
-                $view->completed_at = $now;
-            }
-            $view->save();
-
-            return $view;
+            return self::apply(self::lockedView($exercise, $user), $duration, $data);
         });
+    }
+
+    /**
+     * Calcul commun a tout suivi de lecture (exercices video, devoirs video ou audio) : la ligne de
+     * suivi doit etre verrouillee par l'appelant. Memes regles partout : passages reellement lus,
+     * avances rapides, vitesse, plausibilite par rapport au temps ecoule, termine a 95 %.
+     *
+     * @template T of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  T  $view
+     * @return T
+     */
+    public static function apply(Model $view, int $duration, array $data): Model
+    {
+        $now = now();
+
+        $old = self::normalize($view->segments ?? [], $duration);
+        $incoming = self::normalize($data['segments'] ?? [], $duration);
+        $merged = self::merge(array_merge($old, $incoming));
+        $gain = self::covered($merged) - self::covered($old);
+
+        // Plus de lecture que le temps reellement ecoule (x2 max) : signal ignore.
+        $elapsed = $view->last_heartbeat_at ? $view->last_heartbeat_at->diffInSeconds($now, true) : self::FIRST_CREDIT / self::MAX_SPEED;
+        $plausible = $gain <= $elapsed * self::MAX_SPEED + 5;
+
+        if ($plausible) {
+            $view->segments = $merged;
+            $view->watched_seconds = (int) round(self::covered($merged));
+            $view->seek_count = min(65000, $view->seek_count + max(0, min(50, (int) ($data['seeks'] ?? 0))));
+            $view->skipped_seconds = $view->skipped_seconds + (int) round(max(0, min((float) ($data['skipped'] ?? 0), $duration ?: 43200)));
+            $view->max_rate = max((float) $view->max_rate, max(0.25, min(4.0, (float) ($data['rate'] ?? 1))));
+        }
+        $position = (int) round(max(0, min((float) ($data['position'] ?? 0), $duration ?: 43200)));
+        $view->last_position = $position;
+        if ($plausible) {
+            $view->max_position = max($view->max_position, $position);
+        }
+
+        // Controle independant du navigateur : tout passage non regarde avant le point le
+        // plus loin atteint a forcement ete saute (avance rapide).
+        $reached = max($view->max_position, (int) floor(max(array_merge([0], array_column($view->segments ?? [], 1)))));
+        $gap = (int) round($reached - self::covered(self::clip($view->segments ?? [], $reached)));
+        if ($gap > 3) {
+            $view->skipped_seconds = max($view->skipped_seconds, $gap);
+            $view->seek_count = max($view->seek_count, 1);
+        }
+        $view->last_heartbeat_at = $now;
+
+        if (! $view->completed_at && $duration > 0
+            && ($view->watched_seconds >= $duration * self::COMPLETION_RATIO || $duration - $view->watched_seconds <= 5)) {
+            $view->completed_at = $now;
+        }
+        $view->save();
+
+        return $view;
     }
 
     private static function lockedView(Exercise $exercise, User $user): ExerciseVideoView

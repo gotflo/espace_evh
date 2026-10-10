@@ -7,6 +7,7 @@ use App\Models\Gem;
 use App\Models\Profile;
 use App\Models\Tribe;
 use App\Models\User;
+use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -92,7 +93,7 @@ class Audience
     }
 
     /** Lit la selection envoyee (tableau, ou JSON pour les envois multipart avec image). */
-    public static function fromRequest(\Illuminate\Http\Request $request): ?array
+    public static function fromRequest(Request $request): ?array
     {
         $raw = $request->input('scopes');
         if (is_string($raw)) {
@@ -140,7 +141,8 @@ class Audience
      */
     public static function userIds(array $scopes): array
     {
-        $query = Profile::query()->whereHas('user');
+        // Inscription terminee (et validee par le pasteur) seulement.
+        $query = Profile::query()->where('is_completed', true)->whereHas('user');
         $church = collect($scopes)->contains(fn ($s) => $s['type'] === 'church');
         if (! $church) {
             $by = fn (string $type) => collect($scopes)->where('type', $type)->pluck('id')->filter()->all();

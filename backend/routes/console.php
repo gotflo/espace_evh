@@ -17,3 +17,6 @@ Schedule::command('app:tick')->everyFiveMinutes()->withoutOverlapping(10);
 // Notifications push restees en attente (envoi apres la reponse interrompu, service push
 // injoignable) : rattrapees chaque minute, sans doublon.
 Schedule::command('app:push-outbox')->everyMinute()->withoutOverlapping(10);
+
+// Courriels et textos en file (devoir, rappels, demandes de suppression) et courriel du jour des pasteurs.
+Schedule::command('app:send-outbox')->everyMinute()->withoutOverlapping(10);

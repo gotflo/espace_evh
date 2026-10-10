@@ -1,4 +1,5 @@
 import type { FissForm } from '../types'
+import { INNER_LIFE_LABELS } from '../utils/fiss'
 
 function sanctBadge(v: string | null) {
   if (!v) return <span className="fiss-detail-na">-</span>
@@ -28,6 +29,17 @@ export function FissDetail({ form }: { form: FissForm }) {
         <span>Esprit {sanctBadge(form.sanctification_esprit)}</span>
       </div>
       {form.comment && <p className="fiss-admin-comment">{form.comment}</p>}
+      {INNER_LIFE_LABELS.some(([k]) => form[k]) && (
+        <div className="inner-life-read">
+          <span className="inner-life-read-title">Vie intérieure</span>
+          {INNER_LIFE_LABELS.filter(([k]) => form[k]).map(([k, label]) => (
+            <div key={k} className="inner-life-read-item">
+              <span>{label}</span>
+              <p>{String(form[k])}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

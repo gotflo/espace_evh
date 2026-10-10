@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, peek } from '../api/client'
 import { AppLayout } from '../components/AppLayout'
 import { PushSettings } from '../components/PushSettings'
 import { NotificationPrefs } from '../components/NotificationPrefs'
@@ -26,8 +26,8 @@ export default function Notifications() {
   const navigate = useNavigate()
   const unread = useUnreadCount()
   const [filter, setFilter] = useState<'all' | 'unread'>('all')
-  const [items, setItems] = useState<AppNotification[] | null>(null)
-  const [hasMore, setHasMore] = useState(false)
+  const [items, setItems] = useState<AppNotification[] | null>(() => peek<NotificationPage>('/me/notifications?limit=30')?.notifications ?? null)
+  const [hasMore, setHasMore] = useState(() => peek<NotificationPage>('/me/notifications?limit=30')?.has_more ?? false)
   const [loadingMore, setLoadingMore] = useState(false)
 
   const load = useCallback(() => {
@@ -36,7 +36,13 @@ export default function Notifications() {
       .catch(() => setItems([]))
   }, [filter])
 
-  useEffect(() => { setItems(null); load() }, [load])
+  // Liste deja vue : affichee tout de suite, la mise a jour se fait en silence.
+  useEffect(() => {
+    const known = peek<NotificationPage>(`/me/notifications?limit=30${filter === 'unread' ? '&unread=1' : ''}`)
+    setItems(known?.notifications ?? null)
+    if (known) setHasMore(known.has_more)
+    load()
+  }, [load, filter])
   usePulse('unread', load)
 
   async function more() {

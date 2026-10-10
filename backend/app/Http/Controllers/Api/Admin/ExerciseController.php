@@ -11,7 +11,12 @@ use App\Services\ExerciseProgress;
 use App\Services\Notifier;
 use App\Support\Audience;
 use App\Support\Audit;
+use App\Support\Like;
+use App\Support\MemberScope;
+use App\Support\PlainText;
+use App\Support\PlatformManager;
 use App\Support\YouTube;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -28,36 +33,218 @@ class ExerciseController extends Controller
         'lecture' => 'Lecture',
     ];
 
-    /** Exercices que l'utilisateur peut gerer (les siens ou ceux de sa portee), avec leur avancement. */
+    /**
+     * Historique des exercices que l'utilisateur suit, du plus recent au plus ancien, avec leur avancement :
+     * les siens, tous pour les pasteurs (PR, PA), et pour un AP ou un patriarche ceux qui visent sa tribu (ou
+     * ses GEMs, departements) ou que les responsables de sa tribu ont donnes. Filtres : en cours / fermes,
+     * les miens, recherche ; 20 par page.
+     */
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $exercises = Exercise::withCount([
+        $data = $request->validate([
+            'status' => ['nullable', 'in:open,closed,all'],
+            'mine' => ['nullable', 'boolean'],
+            'q' => ['nullable', 'string', 'max:80'],
+            'page' => ['nullable', 'integer', 'min:1', 'max:1000'],
+        ]);
+        $perPage = 20;
+        $page = (int) ($data['page'] ?? 1);
+        $status = $data['status'] ?? 'all';
+        $query = self::followedBy($user)
+            ->when($status === 'open', fn ($q) => $q->where(fn ($w) => $w->whereNull('closes_at')->orWhere('closes_at', '>', now())))
+            ->when($status === 'closed', fn ($q) => $q->whereNotNull('closes_at')->where('closes_at', '<=', now()))
+            ->when($data['mine'] ?? false, fn ($q) => $q->where('created_by', $user->id))
+            ->when(filled($data['q'] ?? null), fn ($q) => Like::contains($q, 'title', trim((string) $data['q'])));
+        $total = (clone $query)->count();
+        $visible = $user->hasPermission('members.view_all') ? null : array_flip(MemberScope::visibleUserIds($user));
+        $audiences = [];
+
+        $exercises = $query->withCount([
             'responses',
             'videoViews as views_count',
             'videoViews as views_completed_count' => fn ($q) => $q->whereNotNull('completed_at'),
-        ])->with('scopes')->latest()->limit(200)->get()
-            ->filter(fn (Exercise $e) => Audience::canManage($user, $e->created_by, $e->audienceList()))
-            ->map(fn (Exercise $e) => [
+        ])->with('scopes', 'creator.profile', 'creator.roles')->latest()->latest('id')->forPage($page, $perPage)->get()
+            ->map(function (Exercise $e) use ($user, $visible, &$audiences) {
+                return self::progressOf($e, $user, $visible, $audiences) + [
+                    'id' => $e->id,
+                    'title' => $e->title,
+                    'content' => $e->content,
+                    'type' => $e->type,
+                    'type_label' => self::TYPES[$e->type] ?? $e->type,
+                    'target' => $e->audienceLabel(),
+                    'scopes' => $e->audienceList(),
+                    'video' => $e->videoPayload(),
+                    'requires_response' => $e->needsResponse(),
+                    'due_date' => $e->due_date?->toDateString(),
+                    'closes_at' => $e->closes_at?->toIso8601String(),
+                    'is_closed' => $e->isClosed(),
+                    'responses_count' => $e->responses_count,
+                    'views_count' => $e->views_count,
+                    'views_completed_count' => $e->views_completed_count,
+                    'created_at' => $e->created_at->toDateString(),
+                    'author' => self::authorOf($e),
+                    'is_mine' => (int) $e->created_by === $user->id,
+                    'can_delete' => $user->hasPermission('exercises.delete') && Audience::canManage($user, $e->created_by, $e->audienceList()),
+                ];
+            })->values();
+
+        return response()->json([
+            'exercises' => $exercises, 'types' => $this->typeList(),
+            // Actions permises (memes regles que les routes) : creer, lire les reponses de chaque membre.
+            'can' => ['create' => $user->hasPermission('exercises.create'), 'view_responses' => $user->hasPermission('exercises.view_responses')],
+            'total' => $total, 'page' => $page, 'has_more' => $page * $perPage < $total,
+        ]);
+    }
+
+    /** Exercices suivis par cet utilisateur (voir index). */
+    public static function followedBy(User $user): Builder
+    {
+        $query = Exercise::query();
+        if ($user->canBroadcastAll()) {
+            return $query;
+        }
+        $o = Audience::options($user);
+        $tribes = array_column($o['tribes'], 'id');
+        $gems = array_column($o['gems'], 'id');
+        $depts = array_column($o['departments'], 'id');
+        // Responsables (patriarche, AP, Gardes) des tribus et GEMs suivis : leurs exercices aussi.
+        $authors = DB::table('role_user')->where(fn ($q) => $q->where(fn ($t) => $t->where('scope_kind', 'tribe')->whereIn('scope_id', $tribes ?: [0]))
+            ->orWhere(fn ($g) => $g->where('scope_kind', 'gem')->whereIn('scope_id', $gems ?: [0])))->pluck('user_id')->all();
+
+        return $query->where(function ($w) use ($user, $tribes, $gems, $depts, $authors) {
+            $w->where('exercises.created_by', $user->id)
+                ->orWhereIn('exercises.created_by', $authors ?: [0])
+                ->orWhereExists(fn ($s) => $s->selectRaw('1')->from('publication_scopes as ps')
+                    ->whereColumn('ps.scopable_id', 'exercises.id')->where('ps.scopable_type', Exercise::SCOPABLE_TYPE)
+                    ->where(fn ($x) => $x->where(fn ($t) => $t->where('ps.scope_type', 'tribe')->whereIn('ps.scope_id', $tribes ?: [0]))
+                        ->orWhere(fn ($g) => $g->where('ps.scope_type', 'gem')->whereIn('ps.scope_id', $gems ?: [0]))
+                        ->orWhere(fn ($d) => $d->where('ps.scope_type', 'department')->whereIn('ps.scope_id', $depts ?: [0]))));
+        });
+    }
+
+    /** Peut-il voir cet exercice et son suivi ? */
+    public static function canFollow(User $user, Exercise $exercise): bool
+    {
+        return Audience::canManage($user, $exercise->created_by, $exercise->audienceList())
+            || self::followedBy($user)->whereKey($exercise->id)->exists();
+    }
+
+    /** Toute l'audience de l'exercice, ou seulement les membres que l'utilisateur suit ? */
+    private static function seesEveryone(User $user, Exercise $exercise): bool
+    {
+        return $user->hasPermission('members.view_all') || Audience::canManage($user, $exercise->created_by, $exercise->audienceList());
+    }
+
+    /**
+     * Fideles concernes et ceux qui ont termine, limites a ce que l'utilisateur voit ($visible : ids
+     * visibles, null = tout le monde).
+     *
+     * @param  array<int, int>|null  $visible
+     * @param  array<string, array<int>>  $audiences  audiences deja calculees pendant cette requete
+     * @return array{audience_count: int, done_count: int, percent: int}
+     */
+    private static function progressOf(Exercise $e, User $user, ?array $visible, array &$audiences): array
+    {
+        // Meme audience (ex. toute l'eglise) pour plusieurs exercices de la page : calculee une seule fois.
+        $key = json_encode($e->audienceList());
+        $audiences[$key] ??= Audience::userIds($e->audienceList());
+        $audience = array_diff($audiences[$key], [(int) $e->created_by]);
+        if ($visible !== null && ! self::seesEveryone($user, $e)) {
+            $audience = array_filter($audience, fn ($id) => isset($visible[$id]));
+        }
+        $done = count(array_intersect($audience, ExerciseProgress::doneUserIds($e)));
+
+        return ['audience_count' => count($audience), 'done_count' => $done, 'percent' => $audience ? (int) round($done / count($audience) * 100) : 0];
+    }
+
+    /** @return array{name: string, role: string|null}|null */
+    private static function authorOf(Exercise $e): ?array
+    {
+        $creator = $e->creator;
+        if (! $creator) {
+            return null;
+        }
+        $role = $creator->roles->sortByDesc('rank')->first();
+
+        return ['name' => PlatformManager::nameOf($creator) ?? 'Responsable', 'role' => $creator->isPlatformManager() ? null : $role?->name];
+    }
+
+    /**
+     * Relancer maintenant ceux qui n'ont pas termine (dans la portee de l'utilisateur), au plus une fois par
+     * jour et par personne qui relance : notification et push nominatifs.
+     */
+    public function remind(Request $request, Exercise $exercise): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless(self::canFollow($user, $exercise), 403, 'Cet exercice est hors de votre périmètre.');
+        abort_if($exercise->isClosed(), 409, 'Cet exercice est fermé.');
+        $ids = array_diff(Audience::userIds($exercise->audienceList()), ExerciseProgress::doneUserIds($exercise), [(int) $exercise->created_by]);
+        if (! self::seesEveryone($user, $exercise)) {
+            $ids = array_intersect($ids, MemberScope::visibleUserIds($user));
+        }
+        abort_if($ids === [], 422, 'Tout le monde a déjà terminé.');
+        abort_unless(Notifier::once("exercise-nudge:{$exercise->id}:{$user->id}:".now()->toDateString()), 429, 'Relance déjà envoyée aujourd\'hui.');
+        Notifier::send($ids, 'task_reminder', 'Rappel : '.$exercise->title, self::announceBody($exercise),
+            '/exercices/'.$exercise->id, ['exercise_id' => $exercise->id]);
+        Audit::log('exercise.reminded', $exercise, null, [], ['count' => count($ids)]);
+
+        return response()->json(['message' => count($ids) > 1 ? count($ids).' personnes relancées.' : '1 personne relancée.', 'count' => count($ids)]);
+    }
+
+    /** Exercices adresses a un membre, avec son avancement (pasteurs et responsables qui le suivent). */
+    public function member(Request $request, User $member): JsonResponse
+    {
+        $viewer = $request->user();
+        abort_unless($viewer->canViewMember($member), 403, 'Accès refusé.');
+        $profile = $member->profile()->with('departments:id')->first();
+        $tribes = array_filter([(int) $profile?->tribe_id]);
+        $gems = array_filter([(int) $profile?->gem_id]);
+        $depts = $profile ? $profile->departments->pluck('id')->map(fn ($id) => (int) $id)->all() : [];
+        $exercises = Exercise::where('is_active', true)->where(fn ($q) => $q->whereNull('created_by')->orWhere('created_by', '!=', $member->id))
+            ->whereExists(fn ($s) => $s->selectRaw('1')->from('publication_scopes as ps')
+                ->whereColumn('ps.scopable_id', 'exercises.id')->where('ps.scopable_type', Exercise::SCOPABLE_TYPE)
+                ->where(fn ($x) => $x->where('ps.scope_type', 'church')
+                    ->orWhere(fn ($t) => $t->where('ps.scope_type', 'tribe')->whereIn('ps.scope_id', $tribes ?: [0]))
+                    ->orWhere(fn ($g) => $g->where('ps.scope_type', 'gem')->whereIn('ps.scope_id', $gems ?: [0]))
+                    ->orWhere(fn ($d) => $d->where('ps.scope_type', 'department')->whereIn('ps.scope_id', $depts ?: [0]))))
+            ->latest()->latest('id')->limit(30)->get();
+        $views = ExerciseVideoView::where('user_id', $member->id)->whereIn('exercise_id', $exercises->pluck('id'))->get()->keyBy('exercise_id');
+        $responses = ExerciseResponse::where('user_id', $member->id)->whereIn('exercise_id', $exercises->pluck('id'))->get()->keyBy('exercise_id');
+
+        $items = $exercises->map(function (Exercise $e) use ($views, $responses) {
+            $view = $views->get($e->id);
+            $response = $responses->get($e->id);
+
+            return [
                 'id' => $e->id,
                 'title' => $e->title,
-                'content' => $e->content,
-                'type' => $e->type,
                 'type_label' => self::TYPES[$e->type] ?? $e->type,
-                'target' => $e->audienceLabel(),
-                'scopes' => $e->audienceList(),
-                'video' => $e->videoPayload(),
-                'requires_response' => $e->needsResponse(),
-                'due_date' => $e->due_date?->toDateString(),
                 'closes_at' => $e->closes_at?->toIso8601String(),
                 'is_closed' => $e->isClosed(),
-                'responses_count' => $e->responses_count,
-                'views_count' => $e->views_count,
-                'views_completed_count' => $e->views_completed_count,
-                'created_at' => $e->created_at->toDateString(),
-            ])->values();
+                'status' => ExerciseProgress::status($e, $view, $response),
+                'percent' => ExerciseProgress::percent($e, $view),
+                'is_video' => $e->isVideo(),
+                'response' => $response?->response,
+                'done_at' => collect([$view?->completed_at, $response?->completed_at])->filter()->max()?->toIso8601String(),
+                'created_at' => $e->created_at->toIso8601String(),
+            ];
+        })->values();
 
-        return response()->json(['exercises' => $exercises, 'types' => $this->typeList()]);
+        return response()->json([
+            'exercises' => $items,
+            'summary' => ['total' => $items->count(), 'done' => $items->where('status', 'done')->count()],
+        ]);
+    }
+
+    /** Apercu d'un lien YouTube pour les ressources et les devoirs (qui peut en publier). */
+    public function contentVideoPreview(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user->hasPermission('resources.edit') || $user->hasPermission('assignments.publish') || $user->hasPermission('exercises.create'),
+            403, 'Vous n\'avez pas la permission requise.');
+
+        return $this->videoPreview($request);
     }
 
     /** Apercu d'un lien YouTube avant publication (identifiant, titre, lecture possible dans l'application). */
@@ -73,8 +260,8 @@ class ExerciseController extends Controller
         return response()->json([
             'video_id' => $id,
             'thumbnail' => YouTube::thumbnail($id),
-            'title' => $details['title'],
-            'author' => $details['author'],
+            'title' => PlainText::title($details['title']),
+            'author' => PlainText::title($details['author']),
             'embeddable' => $details['embeddable'],
         ]);
     }
@@ -175,13 +362,19 @@ class ExerciseController extends Controller
      */
     public function tracking(Request $request, Exercise $exercise): JsonResponse
     {
-        $this->authorizeManage($request, $exercise);
+        $user = $request->user();
+        abort_unless(self::canFollow($user, $exercise), 403, 'Cet exercice est hors de votre périmètre.');
 
         $ids = array_values(array_diff(Audience::userIds($exercise->audienceList()), [(int) $exercise->created_by]));
         $views = ExerciseVideoView::where('exercise_id', $exercise->id)->get()->keyBy('user_id');
         $responses = ExerciseResponse::where('exercise_id', $exercise->id)->get()->keyBy('user_id');
         // Un fidele qui a commence puis change de groupe reste visible.
-        $ids = array_values(array_unique(array_merge($ids, $views->keys()->all(), $responses->keys()->all())));
+        // (l'auteur qui regarde sa propre video n'est pas compte)
+        $ids = array_values(array_diff(array_unique(array_merge($ids, $views->keys()->all(), $responses->keys()->all())), [(int) $exercise->created_by]));
+        // Exercice qui depasse la portee de l'utilisateur (AP, patriarche) : seulement les membres qu'il suit.
+        if (! self::seesEveryone($user, $exercise)) {
+            $ids = array_values(array_intersect($ids, MemberScope::visibleUserIds($user)));
+        }
 
         $members = User::whereIn('id', $ids)->with('profile.tribe:id,name')->get(['id', 'phone', 'activity_status', 'activity_override']);
         $rows = $members->map(function (User $u) use ($exercise, $views, $responses) {
@@ -219,6 +412,7 @@ class ExerciseController extends Controller
                 'closes_at' => $exercise->closes_at?->toIso8601String(),
                 'is_closed' => $exercise->isClosed(),
                 'target' => $exercise->audienceLabel(),
+                'author' => self::authorOf($exercise->load('creator.profile', 'creator.roles')),
             ],
             'summary' => [
                 'total' => $rows->count(),

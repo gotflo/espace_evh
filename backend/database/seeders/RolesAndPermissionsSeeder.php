@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Permission;
 use App\Models\Role;
+use App\Support\PermissionCatalog;
 use Illuminate\Database\Seeder;
 
 /**
@@ -14,42 +15,12 @@ class RolesAndPermissionsSeeder extends Seeder
 {
     public function run(): void
     {
-        // --- Permissions (cle => [nom, groupe]) ---
-        $permissions = [
-            'members.view_all' => ['Voir et gérer tous les membres (autorité pastorale)', 'Membres'],
-            'members.view_scope' => ['Voir les membres de sa portée (tribus, GEM, département)', 'Membres'],
-            'members.edit' => ['Modifier les membres', 'Membres'],
-            'members.export' => ['Exporter la liste des membres', 'Membres'],
-            'tribes.manage' => ['Gérer les tribus', 'Organisation'],
-            'tribes.transfer' => ['Valider les changements de tribu', 'Organisation'],
-            'departments.manage' => ['Gérer les départements', 'Organisation'],
-            'gems.manage' => ['Gérer les GEMs (groupes)', 'Organisation'],
-            'roles.assign' => ['Attribuer des rôles', 'Rôles'],
-            'roles.manage' => ['Gérer les rôles et permissions', 'Rôles'],
-            'spiritual.view' => ['Voir le suivi spirituel', 'Suivi spirituel'],
-            'spiritual.record' => ['Enregistrer un suivi spirituel', 'Suivi spirituel'],
-            'evaluations.manage' => ['Noter les fidèles (évaluations)', 'Suivi spirituel'],
-            'fiss.review' => ['Traiter les demandes de modification de FISS', 'Suivi spirituel'],
-            'attendance.view' => ['Voir les présences', 'Présences'],
-            'attendance.record' => ['Enregistrer les présences', 'Présences'],
-            'exercises.create' => ['Créer des exercices', 'Exercices'],
-            'exercises.assign' => ['Assigner des exercices', 'Exercices'],
-            'exercises.respond' => ['Répondre aux exercices', 'Exercices'],
-            'announcements.publish' => ['Publier des annonces', 'Communication'],
-            'events.manage' => ['Créer et gérer les événements', 'Communication'],
-            'broadcast.all' => ["Diffuser à toute l'église (annonces, événements, exercices)", 'Communication'],
-            'content.manage' => ['Gérer les versets du tableau de bord', 'Communication'],
-            'requests.handle' => ['Traiter les demandes des fidèles', 'Communication'],
-            'reports.view' => ['Voir les rapports et statistiques de son périmètre', 'Rapports'],
-            'audit.view' => ["Consulter le journal d'audit", 'Rapports'],
-            'platform.manage' => ['Gérer les paramètres de la plateforme', 'Plateforme'],
-        ];
-
-        foreach ($permissions as $key => [$name, $group]) {
-            Permission::updateOrCreate(['key' => $key], ['name' => $name, 'group' => $group]);
+        // --- Permissions : catalogue par module (App\Support\PermissionCatalog) ---
+        foreach (PermissionCatalog::all() as $key => $def) {
+            Permission::updateOrCreate(['key' => $key], ['name' => $def[0], 'group' => $def['module_label']]);
         }
 
-        $all = array_keys($permissions);
+        $all = PermissionCatalog::keys();
 
         // Ensemble des permissions de suivi (reutilise par plusieurs niveaux).
         $suivi = [
@@ -121,6 +92,13 @@ class RolesAndPermissionsSeeder extends Seeder
                 'scope_kind' => 'none', 'rank' => 45, 'is_system' => true,
                 'permissions' => ['announcements.publish', 'events.manage', 'broadcast.all', 'exercises.respond'],
             ],
+            // Protocole : organise les rendez-vous avec le pasteur apres les cultes.
+            'protocole' => [
+                'name' => 'Équipe du protocole',
+                'description' => 'Consulte les demandes de rendez-vous avec le pasteur et organise les rencontres après les cultes.',
+                'scope_kind' => 'none', 'rank' => 30, 'is_system' => true,
+                'permissions' => ['appointments.organize', 'exercises.respond'],
+            ],
             // Membre.
             'fidele' => [
                 'name' => 'Membre',
@@ -138,13 +116,31 @@ class RolesAndPermissionsSeeder extends Seeder
                 'rank' => $cfg['rank'],
                 'is_system' => $cfg['is_system'],
             ]);
-            $ids = Permission::whereIn('key', $cfg['permissions'])->pluck('id');
+            $ids = Permission::whereIn('key', self::expand($cfg['permissions']))->pluck('id');
             $role->permissions()->sync($ids);
         }
 
         // Roles de base devenus obsoletes (absorbes par la hierarchie actuelle).
         Role::whereIn('key', ['gestionnaire', 'assistant_responsable', 'gagneur_ame', 'responsable', 'gad'])
             ->where('is_system', true)->delete();
-        Permission::whereIn('key', ['members.view_readonly'])->delete();
+        Permission::whereIn('key', ['members.view_readonly', 'content.manage'])->delete();
+    }
+
+    /**
+     * Permissions detaillees issues du decoupage (memes regles que la migration du 2026-10-12) :
+     * content.manage devient versets + horaires.
+     *
+     * @param  array<int, string>  $keys
+     * @return array<int, string>
+     */
+    private static function expand(array $keys): array
+    {
+        foreach (PermissionCatalog::SPLITS as $parent => $children) {
+            if (in_array($parent, $keys, true)) {
+                $keys = array_merge($keys, $children);
+            }
+        }
+
+        return array_values(array_unique(array_diff($keys, ['content.manage'])));
     }
 }

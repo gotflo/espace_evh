@@ -129,7 +129,9 @@ class MyExerciseController extends Controller
 
     private function ensureOpen(Exercise $exercise): void
     {
-        abort_if($exercise->isClosed(), 422, 'Cet exercice est fermé depuis le '
-            .$exercise->closes_at->locale('fr')->isoFormat('D MMMM [à] H[h]mm').'.');
+        // Message construit seulement si l'exercice est ferme (sans date limite, closes_at est vide).
+        if ($exercise->isClosed()) {
+            abort(422, 'Cet exercice est fermé depuis le '.$exercise->closes_at->locale('fr')->isoFormat('D MMMM [à] H[h]mm').'.');
+        }
     }
 }

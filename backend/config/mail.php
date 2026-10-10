@@ -111,8 +111,22 @@ return [
     */
 
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
-        'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
+        'address' => env('MAIL_FROM_ADDRESS', 'noreply@vasesdhonneurchicoutimi.org'),
+        'name' => env('MAIL_FROM_NAME', 'My vasesdhonneur'),
     ],
+
+    // Courriels automatiques « noreply » : aucune adresse de reponse (le membre ecrit depuis « Nous contacter »).
+
+    // Essais : tous les courriels partent vers cette adresse (destinataire d'origine rappele dans le sujet).
+    'test_to' => env('MAIL_TEST_TO'),
+
+    // Courriels d'essai envoyes a de vraies personnes : sujet prefixe « [TEST] » et bandeau d'avertissement.
+    'test_banner' => (bool) env('MAIL_TEST_BANNER', false),
+
+    // Adresse publique des images des courriels (logo) : l'application en ligne, meme en essai local.
+    'asset_url' => env('MAIL_ASSET_URL', env('APP_URL')),
+
+    // Courriels envoyes par minute au plus (limite de l'hebergeur).
+    'per_minute' => (int) env('MAIL_PER_MINUTE', 20),
 
 ];

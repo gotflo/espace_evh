@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { clearDraft, readDraft, useDraft } from '../utils/drafts'
-import { api, ApiError } from '../api/client'
+import { api, ApiError, peek } from '../api/client'
+import { usePulse } from '../pulse'
 import { AppLayout } from '../components/AppLayout'
 import { SkeletonCard } from '../components/Skeleton'
 import type { MyRequest, RequestCategory } from '../types'
@@ -14,8 +15,8 @@ const CATEGORIES: { key: RequestCategory; label: string }[] = [
 ]
 
 export default function Contact() {
-  const [items, setItems] = useState<MyRequest[]>([])
-  const [loading, setLoading] = useState(true)
+  const [items, setItems] = useState<MyRequest[]>(() => peek<{ requests: MyRequest[] }>('/me/requests')?.requests ?? [])
+  const [loading, setLoading] = useState(() => !peek('/me/requests'))
   // Brouillon : un message commence n'est jamais perdu (restaure a l'ouverture).
   const [draft] = useState(() => readDraft<{ category: RequestCategory; subject: string; message: string }>('contact'))
   const [category, setCategory] = useState<RequestCategory>(draft?.category ?? 'question')
@@ -26,12 +27,13 @@ export default function Contact() {
   const [error, setError] = useState('')
 
   function load() {
-    setLoading(true)
     api<{ requests: MyRequest[] }>('/me/requests')
-      .then((r) => setItems(r.requests)).catch(() => setItems([]))
+      .then((r) => setItems(r.requests)).catch(() => {})
       .finally(() => setLoading(false))
   }
   useEffect(() => { load() }, [])
+  // Reponse d'un responsable : elle apparait sans recharger la page.
+  usePulse('requests', load)
 
   async function send() {
     setError(''); setBusy(true)

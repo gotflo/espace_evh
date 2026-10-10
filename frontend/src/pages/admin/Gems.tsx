@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, ApiError } from '../../api/client'
+import { api, ApiError, peek } from '../../api/client'
 import { invalidateReference } from '../../api/reference'
 import { AppLayout } from '../../components/AppLayout'
 import type { GemAdminItem, Tribe } from '../../types'
@@ -9,8 +9,9 @@ import { useDirty } from '../../utils/dirty'
 interface Candidate { user_id: number; full_name: string; gem: string | null; leads: string[] }
 
 export default function Gems() {
-  const [gems, setGems] = useState<GemAdminItem[]>([])
-  const [tribes, setTribes] = useState<Tribe[]>([])
+  const [known] = useState(() => peek<{ gems: GemAdminItem[]; tribes: Tribe[] }>('/admin/gems'))
+  const [gems, setGems] = useState<GemAdminItem[]>(known?.gems ?? [])
+  const [tribes, setTribes] = useState<Tribe[]>(known?.tribes ?? [])
   const [candidates, setCandidates] = useState<Candidate[] | null>(null)
   const [mode, setMode] = useState<'list' | 'form'>('list')
   const [error, setError] = useState('')

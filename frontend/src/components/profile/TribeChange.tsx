@@ -45,7 +45,7 @@ export function TribeChange({ currentTribe, tribes }: { currentTribe: Tribe | nu
           <span className="tribe-badge"><Icon name="members" size={20} /></span>
           <strong>{currentTribe?.name ?? 'Aucune'}</strong>
         </div>
-        {!pending && <button type="button" className="btn btn-ghost small" onClick={() => setOpen(true)}>Demander un changement</button>}
+        {!pending && <button type="button" className="btn btn-ghost small" onClick={() => setOpen(true)}>Changer de tribu</button>}
       </div>
 
       {pending && (

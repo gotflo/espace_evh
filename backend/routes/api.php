@@ -1,6 +1,9 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\AccountController;
 use App\Http\Controllers\Api\Admin\AnnouncementController;
+use App\Http\Controllers\Api\Admin\AppointmentController;
+use App\Http\Controllers\Api\Admin\AssignmentController;
 use App\Http\Controllers\Api\Admin\AttendanceController;
 use App\Http\Controllers\Api\Admin\AudienceController;
 use App\Http\Controllers\Api\Admin\AuditLogController;
@@ -13,40 +16,55 @@ use App\Http\Controllers\Api\Admin\GemReportController;
 use App\Http\Controllers\Api\Admin\LeaderDirectoryController;
 use App\Http\Controllers\Api\Admin\LeaderReportController;
 use App\Http\Controllers\Api\Admin\MemberController;
+use App\Http\Controllers\Api\Admin\MemberDeletionController;
 use App\Http\Controllers\Api\Admin\NewMemberController;
 use App\Http\Controllers\Api\Admin\OrgController;
+use App\Http\Controllers\Api\Admin\PlatformController;
 use App\Http\Controllers\Api\Admin\ReportController;
 use App\Http\Controllers\Api\Admin\RequestController;
+use App\Http\Controllers\Api\Admin\ResolutionController;
 use App\Http\Controllers\Api\Admin\RoleController;
+use App\Http\Controllers\Api\Admin\ServiceScheduleController;
+use App\Http\Controllers\Api\Admin\SettingsController;
 use App\Http\Controllers\Api\Admin\SpiritualController;
 use App\Http\Controllers\Api\Admin\StatsController;
 use App\Http\Controllers\Api\Admin\ValidationController;
 use App\Http\Controllers\Api\Admin\VerseController;
+use App\Http\Controllers\Api\Admin\VertumetreController;
+use App\Http\Controllers\Api\AgentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CalendarController;
 use App\Http\Controllers\Api\ClientErrorController;
-use App\Http\Controllers\Api\AgentController;
+use App\Http\Controllers\Api\EmailActionController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\MyAnnouncementController;
+use App\Http\Controllers\Api\MyAppointmentController;
+use App\Http\Controllers\Api\MyAssignmentController;
+use App\Http\Controllers\Api\MyEmailController;
 use App\Http\Controllers\Api\MyEvaluationController;
 use App\Http\Controllers\Api\MyEventController;
 use App\Http\Controllers\Api\MyExerciseController;
 use App\Http\Controllers\Api\MyFamilyController;
 use App\Http\Controllers\Api\MyFissController;
 use App\Http\Controllers\Api\MyHomeController;
+use App\Http\Controllers\Api\MyMonthController;
 use App\Http\Controllers\Api\MyNotificationController;
 use App\Http\Controllers\Api\MyNotificationPrefsController;
 use App\Http\Controllers\Api\MyOverviewController;
 use App\Http\Controllers\Api\MyRequestController;
+use App\Http\Controllers\Api\MyResolutionController;
 use App\Http\Controllers\Api\MyServiceController;
 use App\Http\Controllers\Api\MySpiritualController;
 use App\Http\Controllers\Api\MySpiritualProfileController;
 use App\Http\Controllers\Api\MyTribeChangeController;
+use App\Http\Controllers\Api\MyVertumetreController;
 use App\Http\Controllers\Api\MyWelcomeController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\PulseController;
 use App\Http\Controllers\Api\ReferenceController;
+use App\Http\Middleware\EnsureApprovedMember;
 use App\Http\Middleware\EnsureNotBlocked;
+use App\Http\Middleware\PlatformManagerGuard;
 use App\Http\Middleware\TrackActivity;
 use App\Http\Middleware\VerifyAgentSignature;
 use Illuminate\Support\Facades\Route;
@@ -55,6 +73,9 @@ use Illuminate\Support\Facades\Route;
 // Rate limiting : bride les tentatives (anti-force brute / anti-spam SMS) par IP.
 Route::post('/auth/request-otp', [AuthController::class, 'requestOtp'])->middleware('throttle:8,1');
 Route::post('/auth/verify-otp', [AuthController::class, 'verifyOtp'])->middleware('throttle:12,1');
+// Compte de gestion principal (sans code SMS) : le numero suffit sur un appareil de confiance ; un nouvel
+// appareil s'autorise une fois avec le code genere sur le serveur. Essais limites (adresse + verrouillage).
+Route::post('/auth/manager-activation', [AuthController::class, 'activateManager'])->middleware('throttle:manager-activation');
 
 // --- Abonnement calendrier (Google Agenda, iPhone, Outlook) : jeton personnel dans l'URL ---
 Route::get('/calendar/feed/{token}.ics', [CalendarController::class, 'ics'])
@@ -62,6 +83,18 @@ Route::get('/calendar/feed/{token}.ics', [CalendarController::class, 'ics'])
 
 // --- Etat de sante (surveillance externe), sans donnee sensible ---
 Route::get('/health', HealthController::class)->middleware('throttle:30,1');
+
+// --- Boutons « Accepter / Rejeter » du courriel de demande de suppression (lien signe, nominatif) ---
+// Le lien (GET) affiche une page qui envoie aussitot la decision (POST) ; signature verifiee dans le controleur.
+Route::get('/email-actions/deletion/{deletionRequest}/{decision}/{pastor}', [EmailActionController::class, 'showDeletion'])
+    ->whereIn('decision', ['approve', 'reject'])->whereNumber('pastor')->name('email.deletion')->middleware('throttle:30,1');
+Route::post('/email-actions/deletion/{deletionRequest}/{decision}/{pastor}', [EmailActionController::class, 'decideDeletion'])
+    ->whereIn('decision', ['approve', 'reject'])->whereNumber('pastor')->middleware('throttle:30,1');
+// --- Boutons « Valider / Rejeter » du courriel d'une nouvelle inscription (meme fonctionnement) ---
+Route::get('/email-actions/membership/{member}/{decision}/{pastor}', [EmailActionController::class, 'showMembership'])
+    ->whereIn('decision', ['approve', 'reject'])->whereNumber('member')->whereNumber('pastor')->name('email.membership')->middleware('throttle:30,1');
+Route::post('/email-actions/membership/{member}/{decision}/{pastor}', [EmailActionController::class, 'decideMembership'])
+    ->whereIn('decision', ['approve', 'reject'])->whereNumber('member')->whereNumber('pastor')->middleware('throttle:30,1');
 
 // Accuse de reception d'un push, envoye par l'appareil (service worker, sans session) :
 // l'adresse d'abonnement, connue seulement du navigateur et du serveur, identifie l'appareil.
@@ -87,7 +120,8 @@ Route::prefix('agent')->middleware([VerifyAgentSignature::class, 'throttle:agent
 });
 
 // --- Routes protegees (jeton Sanctum requis) ---
-Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, TrackActivity::class])->group(function () {
+// Compte pas encore valide par le pasteur : seul l'ecran d'attente repond (EnsureApprovedMember).
+Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, TrackActivity::class, EnsureApprovedMember::class, PlatformManagerGuard::class])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
@@ -111,6 +145,8 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
     Route::get('/me/welcome-back', [MyWelcomeController::class, 'show']);
     Route::get('/me/notification-prefs', [MyNotificationPrefsController::class, 'show']);
     Route::put('/me/notification-prefs', [MyNotificationPrefsController::class, 'update']);
+    // Adresse courriel ajoutee en un appui (bandeau du tableau de bord, preferences).
+    Route::put('/me/email', [MyEmailController::class, 'update'])->middleware('throttle:member-requests');
     Route::get('/me/notifications', [MyNotificationController::class, 'index']);
     Route::get('/me/notifications/unread-count', [MyNotificationController::class, 'unreadCount']);
     Route::post('/me/notifications/read-all', [MyNotificationController::class, 'markAllRead']);
@@ -156,6 +192,31 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
     Route::post('/me/fiss/{form}/edit-requests', [MyFissController::class, 'requestEdit'])->middleware('throttle:member-requests');
     Route::delete('/me/fiss/edit-requests/{editRequest}', [MyFissController::class, 'cancelRequest']);
 
+    // --- Vertumetre mensuel (verrouille a l'envoi, modification sur demande comme la FISS) ---
+    Route::get('/me/vertumetre', [MyVertumetreController::class, 'index'])->middleware('module:vertumetre');
+    Route::post('/me/vertumetre', [MyVertumetreController::class, 'store'])->middleware('module:vertumetre');
+    Route::put('/me/vertumetre/{form}', [MyVertumetreController::class, 'update'])->whereNumber('form')->middleware('module:vertumetre');
+    Route::post('/me/vertumetre/{form}/edit-requests', [MyVertumetreController::class, 'requestEdit'])->whereNumber('form')->middleware('throttle:member-requests')->middleware('module:vertumetre');
+
+    // Prendre rendez-vous avec le pasteur.
+    Route::get('/me/appointments', [MyAppointmentController::class, 'index'])->middleware('module:appointments');
+    Route::post('/me/appointments', [MyAppointmentController::class, 'store'])->middleware('throttle:member-requests')->middleware('module:appointments');
+    Route::post('/me/appointments/{appointment}/cancel', [MyAppointmentController::class, 'cancel'])->middleware('module:appointments');
+    Route::delete('/me/vertumetre/edit-requests/{editRequest}', [MyVertumetreController::class, 'cancelRequest'])->middleware('module:vertumetre');
+
+    // --- Mes RM (Résolutions du Mois) et Mon devoir (DS) ---
+    Route::get('/me/month', MyMonthController::class);
+    Route::get('/me/resolutions', [MyResolutionController::class, 'index'])->middleware('module:resolutions');
+    Route::put('/me/resolutions', [MyResolutionController::class, 'save'])->middleware('module:resolutions');
+    Route::post('/me/resolutions/review', [MyResolutionController::class, 'review'])->middleware('module:resolutions');
+    // Ressource video des RM : suivi de lecture (pourcentage regarde, reprise).
+    Route::post('/me/resources/{resource}/progress', [MyResolutionController::class, 'progress'])
+        ->whereNumber('resource')->middleware('throttle:video-progress')->middleware('module:resolutions');
+    Route::get('/me/assignments', [MyAssignmentController::class, 'index'])->middleware('module:assignments');
+    Route::put('/me/assignments/{assignment}/response', [MyAssignmentController::class, 'respond'])->whereNumber('assignment')->middleware('module:assignments');
+    Route::post('/me/assignments/{assignment}/progress', [MyAssignmentController::class, 'progress'])
+        ->whereNumber('assignment')->middleware('throttle:video-progress')->middleware('module:assignments');
+
     // --- Changement de tribu (sur demande, validee par les responsables) ---
     Route::get('/me/tribe-change', [MyTribeChangeController::class, 'index']);
     Route::post('/me/tribe-change', [MyTribeChangeController::class, 'store'])->middleware('throttle:member-requests');
@@ -177,22 +238,29 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
     Route::put('/me/spiritual-profile', [MySpiritualProfileController::class, 'update']);
 
     // --- Espace fidele : mon journal spirituel (self-service) ---
-    Route::get('/me/spiritual', [MySpiritualController::class, 'show']);
-    Route::post('/me/spiritual/entries', [MySpiritualController::class, 'storeEntry']);
-    Route::delete('/me/spiritual/entries/{entry}', [MySpiritualController::class, 'destroyEntry']);
-    Route::post('/me/spiritual/milestones', [MySpiritualController::class, 'toggleMilestone']);
+    Route::get('/me/spiritual', [MySpiritualController::class, 'show'])->middleware('module:spiritual');
+    Route::post('/me/spiritual/entries', [MySpiritualController::class, 'storeEntry'])->middleware('module:spiritual');
+    Route::delete('/me/spiritual/entries/{entry}', [MySpiritualController::class, 'destroyEntry'])->middleware('module:spiritual');
+    Route::post('/me/spiritual/milestones', [MySpiritualController::class, 'toggleMilestone'])->middleware('module:spiritual');
 
     // --- Espace fidele : mes exercices ---
-    Route::get('/me/exercises', [MyExerciseController::class, 'index']);
-    Route::get('/me/exercises/{exercise}', [MyExerciseController::class, 'show']);
+    Route::get('/me/exercises', [MyExerciseController::class, 'index'])->middleware('module:exercises');
+    Route::get('/me/exercises/{exercise}', [MyExerciseController::class, 'show'])->middleware('module:exercises');
     Route::post('/me/exercises/{exercise}/progress', [MyExerciseController::class, 'progress'])
-        ->middleware('throttle:video-progress');
+        ->middleware('throttle:video-progress')->middleware('module:exercises');
     Route::post('/me/exercises/{exercise}/respond', [MyExerciseController::class, 'respond'])
-        ->middleware('permission:exercises.respond');
+        ->middleware('permission:exercises.respond')->middleware('module:exercises');
 
     // --- Administration (gestion des membres et des roles) ---
     Route::prefix('admin')->group(function () {
         Route::get('/stats', [StatsController::class, 'index']);
+
+        // Tableau de bord de gestion (chiffres globaux, sans donnee personnelle) et liste des comptes.
+        Route::get('/platform/overview', [PlatformController::class, 'overview'])->middleware('permission:platform.manage');
+        // Reglages de la plateforme (rappels automatiques, horaires d'envoi, limites).
+        Route::get('/settings', [SettingsController::class, 'index'])->middleware('permission:settings.manage');
+        Route::put('/settings', [SettingsController::class, 'update'])->middleware('permission:settings.manage');
+        Route::get('/accounts', [AccountController::class, 'index'])->middleware('permission:accounts.view');
 
         // Destinataires possibles d'une publication (tribus / GEMs / departements de sa portee).
         Route::get('/audiences', [AudienceController::class, 'index']);
@@ -201,14 +269,56 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
         Route::get('/validations', [ValidationController::class, 'index']);
         Route::post('/validations/fiss/{editRequest}', [ValidationController::class, 'decideFiss'])->middleware('permission:fiss.review');
         Route::post('/validations/tribe/{tribeRequest}', [ValidationController::class, 'decideTribe'])->middleware('permission:tribes.transfer');
+        Route::post('/validations/vertumetre/{editRequest}', [ValidationController::class, 'decideVertumetre'])->middleware('permission:fiss.review');
+        // Inscriptions aux services : responsable du departement (portee verifiee dans le service).
+        Route::post('/validations/services/{joinRequest}', [ValidationController::class, 'decideService'])->middleware('permission:departments.approve');
+        // Demandes de suppression (PR) : droits verifies dans le controleur.
+        Route::post('/validations/deletions/{deletionRequest}', [MemberDeletionController::class, 'decide']);
+        Route::get('/deletion-requests/{deletionRequest}', [MemberDeletionController::class, 'showRequest']);
+        // Nouvelles inscriptions (pasteur : members.approve, verifie dans le service).
+        Route::post('/validations/memberships/{member}', [ValidationController::class, 'decideMembership'])->whereNumber('member');
+        Route::get('/membership-requests/{member}', [ValidationController::class, 'showMembership'])->whereNumber('member');
+
+        // Suppression d'un membre (PR) et demandes de suppression (patriarche, responsable de departement).
+        Route::get('/members/{user}/deletion', [MemberDeletionController::class, 'show']);
+        Route::delete('/members/{user}', [MemberDeletionController::class, 'destroy']);
+        Route::post('/members/{user}/deletion-requests', [MemberDeletionController::class, 'requestDeletion'])->middleware('throttle:member-requests');
+        Route::get('/blocked-phones', [MemberDeletionController::class, 'blockedPhones']);
+        Route::delete('/blocked-phones/{blockedPhone}', [MemberDeletionController::class, 'unblockPhone']);
+
+        // Vertumetre : suivi du mois et reponses d'un membre (memes lecteurs que la FISS).
+        Route::get('/vertumetre', [VertumetreController::class, 'index']);
+
+        // Rendez-vous avec le pasteur (pasteur et protocole ; droits verifies dans le service).
+        Route::get('/appointments', [AppointmentController::class, 'index'])->middleware('module:appointments');
+        Route::post('/appointments/{appointment}/assign', [AppointmentController::class, 'assign'])->middleware('module:appointments');
+        Route::post('/appointments/{appointment}/cancel', [AppointmentController::class, 'cancel'])->middleware('module:appointments');
+        Route::post('/appointments/{appointment}/outcome', [AppointmentController::class, 'outcome'])->middleware('module:appointments');
+        Route::post('/appointments/{appointment}/call', [AppointmentController::class, 'call'])->middleware('throttle:30,1')->middleware('module:appointments');
+        Route::post('/appointments/{appointment}/urgency', [AppointmentController::class, 'urgency'])->middleware('module:appointments');
+        Route::put('/appointment-availability', [AppointmentController::class, 'saveAvailability'])->middleware('module:appointments');
+        Route::post('/appointment-availability/windows', [AppointmentController::class, 'addWindow'])->middleware('module:appointments');
+        Route::delete('/appointment-availability/windows/{window}', [AppointmentController::class, 'removeWindow'])->middleware('module:appointments');
+        Route::post('/appointment-availability/blocks', [AppointmentController::class, 'block'])->middleware('module:appointments');
+        Route::delete('/appointment-availability/blocks/{block}', [AppointmentController::class, 'unblock'])->middleware('module:appointments');
+        Route::get('/members/{user}/vertumetre', [VertumetreController::class, 'member']);
         Route::get('/members/{user}/fiss-history', [ValidationController::class, 'fissHistory']);
+
+        // Mes RM et Mon devoir : lecture par les pasteurs et les responsables de la tribu (droits verifies
+        // dans les controleurs, meme confidentialite que la FISS).
+        Route::get('/resolutions', [ResolutionController::class, 'index']);
+        Route::get('/members/{user}/resolutions', [ResolutionController::class, 'member']);
+        Route::get('/assignments', [AssignmentController::class, 'index']);
+        Route::get('/assignments/{assignment}/responses', [AssignmentController::class, 'responses'])->whereNumber('assignment');
+        Route::get('/members/{user}/assignments', [AssignmentController::class, 'member']);
 
         // Rapports (tribu, mes tribus, eglise) et liste detaillee des membres.
         Route::middleware('permission:reports.view')->group(function () {
             Route::get('/reports/options', [ReportController::class, 'options']);
             Route::get('/reports', [ReportController::class, 'show']);
             Route::get('/reports/members', [ReportController::class, 'members']);
-            Route::post('/reports/exported', [ReportController::class, 'logExport']);
+            // Export PDF : donnees fournies et journalisees par le serveur (permissions d'export verifiees).
+            Route::get('/reports/export', [ReportController::class, 'export']);
         });
 
         // Rapports mensuels des responsables (patriarche : tribu ; responsables : departement).
@@ -217,7 +327,7 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
         Route::get('/leader-reports/form', [LeaderReportController::class, 'form']);
         Route::put('/leader-reports', [LeaderReportController::class, 'save']);
         Route::get('/leader-reports/{report}', [LeaderReportController::class, 'show'])->whereNumber('report');
-        Route::post('/leader-reports/{report}/exported', [LeaderReportController::class, 'logExport'])->whereNumber('report');
+        Route::get('/leader-reports/{report}/export', [LeaderReportController::class, 'export'])->whereNumber('report');
 
         // Rapport hebdomadaire des Gardes (presences du GEM), transmis au patriarche et a l'AP.
         Route::get('/gem-reports', [GemReportController::class, 'index']);
@@ -225,6 +335,7 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
 
         // Annuaire des responsables et fiche d'un Garde (pasteurs : tous ; AP, patriarches : leurs tribus).
         Route::get('/leaders', [LeaderDirectoryController::class, 'index']);
+        Route::get('/leaders/export', [LeaderDirectoryController::class, 'export']);
         Route::get('/leaders/gems/{gem}', [LeaderDirectoryController::class, 'gem']);
 
         // Journal d'audit (lecture seule).
@@ -260,7 +371,8 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
             Route::delete('/evaluations/{evaluation}', [EvaluationController::class, 'destroy']);
         });
 
-        Route::get('/roles', [RoleController::class, 'index'])->middleware('permission:roles.assign');
+        // Liste des roles : roles.assign ou roles.manage (verifie dans le controleur).
+        Route::get('/roles', [RoleController::class, 'index']);
         Route::post('/members/{user}/roles', [RoleController::class, 'assign'])->middleware('permission:roles.assign');
         Route::delete('/members/{user}/roles/{assignment}', [RoleController::class, 'remove'])->middleware('permission:roles.assign');
 
@@ -277,40 +389,57 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
         Route::post('/attendance', [AttendanceController::class, 'save'])->middleware('permission:attendance.record');
 
         // Exercices spirituels (creer / assigner / voir les reponses)
-        Route::middleware('permission:exercises.assign')->group(function () {
-            Route::get('/exercises', [ExerciseController::class, 'index']);
-            Route::post('/exercises', [ExerciseController::class, 'store']);
-            Route::delete('/exercises/{exercise}', [ExerciseController::class, 'destroy']);
+        // Exercices : onglet et avancement global, creation, suppression, reponses de chaque membre.
+        Route::get('/exercises', [ExerciseController::class, 'index'])->middleware('permission:exercises.assign');
+        Route::post('/exercises', [ExerciseController::class, 'store'])->middleware('permission:exercises.create');
+        Route::delete('/exercises/{exercise}', [ExerciseController::class, 'destroy'])->middleware('permission:exercises.delete');
+        Route::post('/exercises/video-preview', [ExerciseController::class, 'videoPreview'])->middleware(['permission:exercises.create', 'throttle:member-search']);
+        Route::middleware('permission:exercises.view_responses')->group(function () {
             Route::get('/exercises/{exercise}/responses', [ExerciseController::class, 'responses']);
             Route::get('/exercises/{exercise}/tracking', [ExerciseController::class, 'tracking']);
-            Route::post('/exercises/video-preview', [ExerciseController::class, 'videoPreview'])->middleware('throttle:member-search');
+            Route::post('/exercises/{exercise}/remind', [ExerciseController::class, 'remind'])->middleware('throttle:member-requests');
+            Route::get('/members/{member}/exercises', [ExerciseController::class, 'member'])->whereNumber('member');
         });
 
-        // Annonces / communication
-        // Versets du tableau de bord (PR, PA)
-        Route::middleware('permission:content.manage')->group(function () {
-            Route::get('/verses', [VerseController::class, 'index']);
-            Route::post('/verses', [VerseController::class, 'store']);
-            Route::post('/verses/reorder', [VerseController::class, 'reorder']);
-            Route::put('/verses/{verse}', [VerseController::class, 'update']);
-            Route::delete('/verses/{verse}', [VerseController::class, 'destroy']);
-            Route::get('/verses/{verse}/history', [VerseController::class, 'history']);
-        });
+        // Textes bibliques du tableau de bord : consulter, rediger (brouillons), publier, supprimer.
+        Route::get('/verses', [VerseController::class, 'index'])->middleware('permission:verses.view');
+        Route::get('/verses/{verse}/history', [VerseController::class, 'history'])->middleware('permission:verses.view');
+        Route::post('/verses', [VerseController::class, 'store'])->middleware('permission:verses.edit');
+        Route::post('/verses/reorder', [VerseController::class, 'reorder'])->middleware('permission:verses.edit');
+        Route::put('/verses/{verse}', [VerseController::class, 'update'])->middleware('permission:verses.edit');
+        Route::delete('/verses/{verse}', [VerseController::class, 'destroy'])->middleware('permission:verses.delete');
 
-        Route::middleware('permission:announcements.publish')->group(function () {
-            Route::get('/announcements', [AnnouncementController::class, 'index']);
-            Route::post('/announcements', [AnnouncementController::class, 'store']);
-            Route::delete('/announcements/{announcement}', [AnnouncementController::class, 'destroy']);
-        });
+        // Horaires des cultes (rendez-vous hebdomadaires de toute l'eglise).
+        Route::get('/service-schedule', [ServiceScheduleController::class, 'index'])->middleware('permission:schedule.view');
+        Route::post('/service-schedule', [ServiceScheduleController::class, 'store'])->middleware('permission:schedule.edit');
+        Route::put('/service-schedule/{event}', [ServiceScheduleController::class, 'update'])->middleware('permission:schedule.edit');
+        Route::delete('/service-schedule/{event}', [ServiceScheduleController::class, 'destroy'])->middleware('permission:schedule.delete');
+
+        // Mon devoir (DS) : publier, modifier (POST pour le fichier audio), retirer.
+        Route::post('/assignments', [AssignmentController::class, 'store'])->middleware('permission:assignments.publish');
+        Route::post('/assignments/{assignment}', [AssignmentController::class, 'update'])->whereNumber('assignment')->middleware('permission:assignments.publish');
+        Route::delete('/assignments/{assignment}', [AssignmentController::class, 'destroy'])->whereNumber('assignment')->middleware('permission:assignments.delete');
+
+        // Ressources et liens video (themes des RM : meditation, priere, jeune, culte).
+        Route::get('/resolution-resources', [ResolutionController::class, 'resources'])->middleware('permission:resources.view');
+        Route::post('/resolution-resources', [ResolutionController::class, 'storeResource'])->middleware('permission:resources.edit');
+        Route::put('/resolution-resources/{resource}', [ResolutionController::class, 'updateResource'])->middleware('permission:resources.edit');
+        Route::delete('/resolution-resources/{resource}', [ResolutionController::class, 'destroyResource'])->middleware('permission:resources.delete');
+        // Apercu d'un lien YouTube (ressources, devoirs) : droits verifies dans le controleur.
+        Route::post('/content/video-preview', [ExerciseController::class, 'contentVideoPreview'])->middleware('throttle:member-search');
+
+        Route::get('/announcements', [AnnouncementController::class, 'index'])->middleware('permission:announcements.publish');
+        Route::post('/announcements', [AnnouncementController::class, 'store'])->middleware('permission:announcements.publish');
+        Route::delete('/announcements/{announcement}', [AnnouncementController::class, 'destroy'])->middleware('permission:announcements.delete');
 
         // Evenements de l'eglise
         Route::middleware('permission:events.manage')->group(function () {
             Route::get('/events', [EventController::class, 'index']);
             Route::post('/events', [EventController::class, 'store']);
             Route::put('/events/{event}', [EventController::class, 'update']);
-            Route::delete('/events/{event}', [EventController::class, 'destroy']);
-            Route::get('/events/{event}/participants', [EventController::class, 'participants']);
         });
+        Route::delete('/events/{event}', [EventController::class, 'destroy'])->middleware('permission:events.delete');
+        Route::get('/events/{event}/participants', [EventController::class, 'participants'])->middleware('permission:events.participants');
 
         // Demandes des fideles (contact)
         Route::middleware('permission:requests.handle')->group(function () {

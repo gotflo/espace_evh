@@ -4,9 +4,9 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Gem;
+use App\Models\Profile;
 use App\Models\Tribe;
 use App\Models\User;
-use App\Models\Profile;
 use App\Support\GemRules;
 use App\Support\LeaderRole;
 use Illuminate\Http\JsonResponse;
@@ -33,10 +33,13 @@ class GemController extends Controller
         ]);
     }
 
-    /** Tribus que l'utilisateur peut gerer : null si toutes (view_all/PA), sinon ses tribus. */
+    /**
+     * Tribus que l'utilisateur peut gerer : null si toutes (view_all/PA, compte de gestion qui organise
+     * toute l'eglise sans fiche de membre), sinon ses tribus.
+     */
     private function allowedTribeIds(User $user): ?array
     {
-        return $user->hasPermission('members.view_all') ? null : $user->scopeTribeIds();
+        return $user->hasPermission('members.view_all') || $user->isPlatformManager() ? null : $user->scopeTribeIds();
     }
 
     /**

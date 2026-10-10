@@ -2,6 +2,9 @@
 
 namespace App\Services\Monitoring;
 
+use App\Models\BlockedPhone;
+use App\Models\Event;
+use App\Models\MemberDeletionRequest;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -22,14 +25,25 @@ class UserAdmin
         ['spiritual_health_forms', 'user_id', 'Fiches de santé spirituelle (FISS)'],
         ['fiss_edit_requests', 'user_id', 'Demandes de modification de FISS'],
         ['attendances', 'member_user_id', 'Présences enregistrées'],
-        ['evaluations', 'user_id', 'Notes reçues (Vertumètre)'],
+        ['evaluations', 'user_id', 'Notes reçues'],
         ['spiritual_entries', 'member_user_id', 'Entrées du journal spirituel'],
         ['milestones', 'member_user_id', 'Étapes spirituelles'],
         ['exercise_responses', 'user_id', 'Réponses aux exercices'],
         ['exercise_video_views', 'user_id', 'Suivi des vidéos'],
+        ['monthly_resolutions', 'user_id', 'Résolutions du mois (RM)'],
+        ['assignment_responses', 'user_id', 'Devoirs faits (résumés, résolutions)'],
+        ['assignment_views', 'user_id', 'Suivi de lecture des devoirs'],
+        ['resource_views', 'user_id', 'Suivi de lecture des ressources (RM)'],
+        ['department_join_requests', 'user_id', 'Demandes d\'inscription aux services'],
+        ['manager_devices', 'user_id', 'Appareils de confiance (compte de gestion)'],
         ['event_participations', 'user_id', 'Réponses aux événements'],
         ['member_requests', 'user_id', 'Demandes adressées aux responsables'],
         ['tribe_change_requests', 'user_id', 'Demandes de changement de tribu'],
+        ['vertumetre_forms', 'user_id', 'Vertumètre (questionnaires mensuels)'],
+        ['vertumetre_edit_requests', 'user_id', 'Demandes de modification du Vertumètre'],
+        ['appointments', 'user_id', 'Rendez-vous avec le pasteur'],
+        ['appointments', 'host_id', 'Rendez-vous reçus (pasteur)'],
+        ['appointment_windows', 'host_id', 'Disponibilités pour les rendez-vous'],
         ['family_links', 'user_id', 'Liens familiaux déclarés'],
         ['user_notifications', 'user_id', 'Notifications reçues'],
         ['announcement_user', 'user_id', 'Annonces reçues'],
@@ -44,6 +58,8 @@ class UserAdmin
         ['announcements', 'created_by', 'Annonces publiées'],
         ['events', 'created_by', 'Événements créés (hors agenda personnel)'],
         ['exercises', 'created_by', 'Exercices créés'],
+        ['assignments', 'created_by', 'Devoirs (DS) publiés'],
+        ['resolution_resources', 'created_by', 'Ressources des RM ajoutées'],
         ['evaluations', 'created_by', 'Notes attribuées à d\'autres membres'],
         ['spiritual_entries', 'author_user_id', 'Entrées rédigées pour d\'autres membres'],
         ['attendances', 'recorded_by', 'Présences saisies pour d\'autres membres'],
@@ -51,7 +67,10 @@ class UserAdmin
         ['gem_weekly_reports', 'author_user_id', 'Rapports de GEM rédigés'],
         ['audit_logs', 'user_id', 'Entrées du journal d\'audit (auteur)'],
         ['audit_logs', 'member_user_id', 'Entrées du journal d\'audit (membre concerné)'],
+        ['security_logs', 'user_id', 'Entrées du journal de sécurité (compte de gestion)'],
         ['family_links', 'relative_user_id', 'Liens familiaux déclarés par d\'autres (deviennent un nom libre)'],
+        ['department_join_requests', 'decided_by', 'Inscriptions aux services validées ou refusées'],
+        ['platform_settings', 'updated_by', 'Réglages de la plateforme modifiés'],
     ];
 
     /** Fonctions occupees, liberees par la suppression. */
@@ -145,14 +164,28 @@ class UserAdmin
         $user->forceFill(['blocked_at' => null, 'blocked_reason' => null])->save();
     }
 
-    public static function delete(User $user): void
+    /**
+     * Supprime le compte. Son numero est bloque pour toute nouvelle inscription (le Pasteur Resident
+     * peut le debloquer) : un compte supprime ne revient pas en se reinscrivant.
+     */
+    public static function delete(User $user, ?string $reason = null, ?int $by = null): void
     {
         $photo = $user->profile?->photo_path ?? null;
-        DB::transaction(function () use ($user) {
+        DB::transaction(function () use ($user, $reason, $by) {
+            if ($user->phone) {
+                BlockedPhone::updateOrCreate(['phone' => $user->phone], [
+                    'member_name' => $user->profile?->full_name ?: null,
+                    'reason' => $reason ? mb_substr($reason, 0, 255) : 'Compte supprimé',
+                    'blocked_by' => $by,
+                ]);
+            }
+            // Demandes de suppression encore en attente : sans objet (le compte n'existe plus).
+            MemberDeletionRequest::where('user_id', $user->id)->where('status', 'pending')
+                ->update(['status' => 'approved', 'decided_by' => $by, 'decided_at' => now(), 'updated_at' => now()]);
             self::revokeSessions($user);
             DB::table('role_user')->where('scope_kind', 'member')->where('scope_id', $user->id)->delete();
             // Agenda personnel : visible par la personne seule, il disparait avec elle.
-            \App\Models\Event::where('is_personal', true)->where('created_by', $user->id)->get()->each->delete();
+            Event::where('is_personal', true)->where('created_by', $user->id)->get()->each->delete();
             if (Schema::hasTable('sessions')) {
                 DB::table('sessions')->where('user_id', $user->id)->delete();
             }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { api } from '../../api/client'
+import { api, peek } from '../../api/client'
+import { usePulse } from '../../pulse'
 import { getReference } from '../../api/reference'
 import { useAuth } from '../../auth/AuthContext'
 import { AppLayout } from '../../components/AppLayout'
@@ -12,25 +13,34 @@ const TABS = [
   { key: '', label: 'Tous' },
   { key: 'actif', label: 'Actifs' },
   { key: 'inactif', label: 'Inactifs' },
+  { key: 'absents', label: 'Absents 7 j' },
   { key: 'incomplet', label: 'Profil incomplet' },
   { key: 'sans-fiss', label: 'FISS manquante' },
 ]
 const API_FILTER: Record<string, string> = {
-  actif: 'status=active', inactif: 'status=inactive', incomplet: 'incomplete=1', 'sans-fiss': 'fiss_missing=1',
+  actif: 'status=active', inactif: 'status=inactive', absents: 'absent=1', incomplet: 'incomplete=1', 'sans-fiss': 'fiss_missing=1',
+}
+
+/** Adresse d'une page de la liste (recherche, statut, tribu). */
+function membersPath(p: number, q: string, statut: string, tribe: string) {
+  const filter = API_FILTER[statut] ?? ''
+  return `/admin/members?page=${p}&q=${encodeURIComponent(q)}${filter ? `&${filter}` : ''}${tribe ? `&tribe_id=${tribe}` : ''}`
 }
 
 export default function Members() {
   const [params, setParams] = useSearchParams()
   const statut = params.get('statut') ?? ''
   const tribe = params.get('tribu') ?? ''
-  const [members, setMembers] = useState<MemberListItem[]>([])
-  const [total, setTotal] = useState(0)
+  // Liste deja vue (memes filtres) : affichee tout de suite, puis mise a jour en silence.
+  const [known] = useState(() => peek<MemberPage>(membersPath(1, '', statut, tribe)))
+  const [members, setMembers] = useState<MemberListItem[]>(known?.members ?? [])
+  const [total, setTotal] = useState(known?.total ?? 0)
   const [page, setPage] = useState(1)
-  const [hasMore, setHasMore] = useState(false)
+  const [hasMore, setHasMore] = useState(known?.has_more ?? false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [tribes, setTribes] = useState<Tribe[]>([])
   const [q, setQ] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!known)
   const navigate = useNavigate()
   const { hasPermission, roles } = useAuth()
   const allTribes = hasPermission('members.view_all')
@@ -42,21 +52,24 @@ export default function Members() {
     if (allTribes) getReference().then((r) => setTribes(r.tribes)).catch(() => {})
   }, [allTribes])
 
-  const url = useCallback((p: number) => {
-    const filter = API_FILTER[statut] ?? ''
-    return `/admin/members?page=${p}&q=${encodeURIComponent(q)}${filter ? `&${filter}` : ''}${tribe ? `&tribe_id=${tribe}` : ''}`
-  }, [q, statut, tribe])
+  const url = useCallback((p: number) => membersPath(p, q, statut, tribe), [q, statut, tribe])
+  // Temps reel : un membre inscrit ou modifie ailleurs apparait en silence (premiere page seulement,
+  // pour ne jamais faire perdre la position a quelqu'un qui a deja charge la suite).
+  const [refresh, setRefresh] = useState(0)
+  usePulse('members', () => { if (page === 1) setRefresh((n) => n + 1) })
 
   useEffect(() => {
+    const cached = peek<MemberPage>(url(1))
+    if (cached) { setMembers(cached.members); setTotal(cached.total); setHasMore(cached.has_more); setPage(1); setLoading(false) }
     const t = setTimeout(() => {
-      setLoading(true)
+      if (!cached) setLoading(true)
       api<MemberPage>(url(1))
         .then((r) => { setMembers(r.members); setTotal(r.total); setHasMore(r.has_more); setPage(1) })
         .catch(() => { setMembers([]); setTotal(0); setHasMore(false) })
         .finally(() => setLoading(false))
     }, 250)
     return () => clearTimeout(t)
-  }, [url])
+  }, [url, refresh])
 
   function more() {
     setLoadingMore(true)
@@ -109,6 +122,7 @@ export default function Members() {
                 <span className="member-name">{m.full_name}</span>
                 <span className="member-meta">{[m.tribe, ...m.departments].filter(Boolean).join(' · ') || 'Sans tribu ni département'}</span>
                 <span className="member-flags">
+                  {m.absent_days != null && m.activity === 'active' && <span className="flag warn" title="Aucune connexion depuis plus d'une semaine">Absent {m.absent_days} j</span>}
                   {m.completion < 100 && <span className="flag warn" title="Profil incomplet">Profil {m.completion} %</span>}
                   {m.fiss_current === false && m.activity === 'active' && <span className="flag" title="FISS du mois non remplie">FISS à remplir</span>}
                 </span>

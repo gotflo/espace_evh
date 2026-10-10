@@ -5,22 +5,27 @@ import { AppLayout } from '../../components/AppLayout'
 import type { AuditEntry } from '../../types'
 import { Icon } from '../../components/Icon'
 
-interface AuditResponse { logs: AuditEntry[]; has_more: boolean; actions: { key: string; label: string }[] }
+interface AuditResponse { logs: AuditEntry[]; has_more: boolean; actions: { key: string; label: string }[]; can_view_details?: boolean }
 
-const GROUPS: { key: string; label: string }[] = [
+/** personal : actions sur la vie ou les donnees d'un fidele (visibles avec « voir le detail » seulement). */
+const GROUPS: { key: string; label: string; personal?: boolean }[] = [
   { key: '', label: 'Toutes les actions' },
-  { key: 'fiss.', label: 'FISS' },
-  { key: 'tribe', label: 'Tribus' },
-  { key: 'member.', label: 'Membres' },
-  { key: 'family.', label: 'Famille' },
-  { key: 'profile.', label: 'Profils' },
+  { key: 'fiss.', label: 'FISS', personal: true },
+  { key: 'tribe', label: 'Tribus', personal: true },
+  { key: 'member.', label: 'Membres', personal: true },
+  { key: 'family.', label: 'Famille', personal: true },
+  { key: 'profile.', label: 'Profils', personal: true },
   { key: 'role.', label: 'Rôles' },
+  { key: 'verse.', label: 'Versets' },
+  { key: 'resolution_resource.', label: 'Ressources' },
+  { key: 'assignment.', label: 'Devoirs (DS)' },
+  { key: 'service.', label: 'Horaires' },
   { key: 'department.', label: 'Départements' },
   { key: 'announcement.', label: 'Annonces' },
   { key: 'event.', label: 'Événements' },
   { key: 'exercise.', label: 'Exercices' },
-  { key: 'evaluation.', label: 'Notes' },
-  { key: 'report.', label: 'Rapports' },
+  { key: 'evaluation.', label: 'Notes', personal: true },
+  { key: 'report.', label: 'Rapports', personal: true },
 ]
 
 function fmt(v: unknown): string {
@@ -63,6 +68,7 @@ export default function AuditLog() {
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [open, setOpen] = useState<number | null>(null)
+  const [details, setDetails] = useState(true)
 
   const query = useCallback((before?: number) => {
     const p = new URLSearchParams()
@@ -75,7 +81,7 @@ export default function AuditLog() {
 
   useEffect(() => {
     setLogs(null)
-    query().then((r) => { setLogs(r.logs); setHasMore(r.has_more) }).catch(() => setLogs([]))
+    query().then((r) => { setLogs(r.logs); setHasMore(r.has_more); setDetails(r.can_view_details !== false) }).catch(() => setLogs([]))
   }, [query])
 
   function more() {
@@ -87,10 +93,11 @@ export default function AuditLog() {
   }
 
   return (
-    <AppLayout title="Journal d'audit" subtitle="Historique des actions sensibles (lecture seule)">
+    <AppLayout title="Journal d'activité" subtitle="Historique des actions sensibles (lecture seule)">
+      {!details && <p className="helper audit-scope"><Icon name="lock" size={13} /> Opérations de gestion seulement : les actions qui concernent la vie ou les données des fidèles ne sont pas affichées.</p>}
       <div className="audit-filters">
         <select className="select" value={group} onChange={(e) => setGroup(e.target.value)} aria-label="Type d'action">
-          {GROUPS.map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}
+          {GROUPS.filter((g) => details || !g.personal).map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}
         </select>
         <label className="date-field"><span>Du</span><input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
         <label className="date-field"><span>Au</span><input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
@@ -114,8 +121,8 @@ export default function AuditLog() {
               </button>
               {open === l.id && (
                 <div className="audit-body">
-                  <Changes entry={l} />
-                  {l.member_user_id && <Link className="btn-link" to={`/admin/membres/${l.member_user_id}`}>Voir la fiche du membre</Link>}
+                  {details ? <Changes entry={l} /> : <p className="helper">Le détail des valeurs n’est pas affiché pour ce compte.</p>}
+                  {details && l.member_user_id && <Link className="btn-link" to={`/admin/membres/${l.member_user_id}`}>Voir la fiche du membre</Link>}
                 </div>
               )}
             </li>

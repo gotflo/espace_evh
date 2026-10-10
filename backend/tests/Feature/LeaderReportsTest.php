@@ -283,18 +283,18 @@ class LeaderReportsTest extends TestCase
         $this->assertSame("/admin/rapports-mensuels?remplir=tribe:{$this->juda->id}&mois=2026-09", $first->url);
         $this->assertSame("/admin/rapports-mensuels?remplir=department:{$this->chorale->id}&mois=2026-09", $reminders($leader)->sole()->url);
 
-        // Le patriarche envoie son rapport : seule la relance du departement part le 5.
+        // Milieu du mois : rien (rappel la premiere semaine, relance la derniere).
+        Carbon::setTestNow(Carbon::parse('2026-10-12 09:30:00'));
+        $this->artisan('app:tick', ['--only' => 'leader-reports'])->assertSuccessful();
+        $this->assertCount(1, $reminders($leader));
+
+        // Le patriarche envoie son rapport : seule la relance du departement part la derniere semaine.
         Sanctum::actingAs($patriarch);
         $this->putJson('/api/admin/leader-reports', $this->body('tribe', $this->juda->id, $this->answers(), true))->assertOk();
-        Carbon::setTestNow(Carbon::parse('2026-10-05 09:30:00'));
+        Carbon::setTestNow(Carbon::parse('2026-10-26 09:30:00'));
         $this->artisan('app:tick', ['--only' => 'leader-reports'])->assertSuccessful();
         $this->artisan('app:tick', ['--only' => 'leader-reports'])->assertSuccessful();
         $this->assertCount(1, $reminders($patriarch));
         $this->assertSame(['Rapport de septembre 2026 à remplir', 'Rappel : rapport de septembre 2026 à remplir'], $reminders($leader)->pluck('title')->all());
-
-        // Apres le 10 : plus de relance.
-        Carbon::setTestNow(Carbon::parse('2026-10-12 09:30:00'));
-        $this->artisan('app:tick', ['--only' => 'leader-reports'])->assertSuccessful();
-        $this->assertCount(2, $reminders($leader));
     }
 }

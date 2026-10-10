@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Models\PushSubscription;
+use App\Services\Monitoring\Monitor;
 use App\Services\Push\WebPush;
+use App\Support\PlatformSettings;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -40,6 +42,9 @@ class Notifier
         'report' => 'Rapport',
         'leader_report' => 'Rapport mensuel',
         'gem_report' => 'Rapport de GEM',
+        'assignment' => 'Devoir',
+        'resolution' => 'Résolutions',
+        'appointment' => 'Rendez-vous',
         'system' => 'Information',
     ];
 
@@ -57,7 +62,7 @@ class Notifier
         'services' => 'Rappels des cultes',
         'events' => 'Événements et leurs rappels',
         'announcements' => 'Annonces',
-        'exercises' => 'Exercices et leurs rappels',
+        'exercises' => 'Exercices, devoirs, résolutions et leurs rappels',
         'birthdays' => 'Anniversaires',
         'followup' => 'Suivi des membres (responsables)',
     ];
@@ -69,7 +74,7 @@ class Notifier
             'event_reminder' => ($data['kind'] ?? null) === 'service' ? 'services' : 'events',
             'event' => 'events',
             'announcement' => 'announcements',
-            'task', 'task_reminder' => 'exercises',
+            'task', 'task_reminder', 'assignment', 'resolution' => 'exercises',
             'birthday', 'wedding' => 'birthdays',
             'member', 'activity', 'report', 'request' => 'followup',
             default => null,
@@ -128,7 +133,7 @@ class Notifier
             foreach ($pushIds->chunk(500) as $chunk) {
                 $busy = array_merge($busy, DB::table('user_notifications')->whereIn('user_id', $chunk)
                     ->where('created_at', '>=', $now->copy()->subHour())
-                    ->groupBy('user_id')->havingRaw('count(*) > ?', [self::PUSH_HOURLY_LIMIT])->pluck('user_id')->all());
+                    ->groupBy('user_id')->havingRaw('count(*) > ?', [PlatformSettings::int('push.hourly_limit')])->pluck('user_id')->all());
             }
             $pushIds = $pushIds->diff(array_map('intval', $busy))->values();
         }
@@ -276,7 +281,7 @@ class Notifier
         } catch (\Throwable $e) {
             // Erreur generale (cle, chiffrement...) : journalisee ; le cron retentera (3 essais au plus).
             Log::error('Push : envoi impossible', ['outbox' => $id, 'error' => $e->getMessage()]);
-            \App\Services\Monitoring\Monitor::integration('webpush', 'envoi', false, (int) round((microtime(true) - $startedAt) * 1000));
+            Monitor::integration('webpush', 'envoi', false, (int) round((microtime(true) - $startedAt) * 1000));
             DB::table('push_outbox')->where('id', $id)->update(['result' => json_encode(['error' => mb_substr($e->getMessage(), 0, 300)])]);
 
             return false;
@@ -284,7 +289,7 @@ class Notifier
 
         DB::table('push_outbox')->where('id', $id)->update(['sent_at' => now(), 'result' => json_encode($stats)]);
         // Supervision : appareils atteints / en echec (les abonnements expires ne sont pas des pannes).
-        \App\Services\Monitoring\Monitor::integrationCounts('webpush', 'envoi', (int) $stats['sent'], (int) $stats['failed'],
+        Monitor::integrationCounts('webpush', 'envoi', (int) $stats['sent'], (int) $stats['failed'],
             (int) round((microtime(true) - $startedAt) * 1000));
 
         return true;

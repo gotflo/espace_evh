@@ -19,6 +19,9 @@ return [
     // A repasser a false une fois le vrai envoi de SMS (Twilio) en place.
     'expose_otp' => (bool) env('EXPOSE_OTP', false),
 
+    // Essais locaux : connexion sans code SMS (ignore hors APP_ENV=local). Jamais en production.
+    'test_direct_login' => (bool) env('TEST_DIRECT_LOGIN', false),
+
     /*
     |--------------------------------------------------------------------------
     | Application Environment

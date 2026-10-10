@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api } from '../../api/client'
+import { api, peek } from '../../api/client'
 import { AppLayout } from '../../components/AppLayout'
 import { Icon } from '../../components/Icon'
 import { SkeletonCard } from '../../components/Skeleton'
@@ -129,7 +129,7 @@ function GemCard({ gem, data, onSaved }: { gem: GemReportGem; data: GemReportsDa
 
 /** Rapport hebdomadaire du Garde : presences des membres de son GEM au culte et a la rencontre. */
 export default function GemReport() {
-  const [data, setData] = useState<GemReportsData | null>(null)
+  const [data, setData] = useState<GemReportsData | null>(() => peek<GemReportsData>('/admin/gem-reports') ?? null)
   const [denied, setDenied] = useState(false)
 
   const load = useCallback(() => {

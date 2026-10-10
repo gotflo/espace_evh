@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Department;
+use App\Models\DepartmentJoinRequest;
 use App\Models\Event;
 use App\Services\CalendarService;
+use App\Services\DepartmentJoinService;
 use App\Services\Notifier;
 use App\Support\Recipients;
 use Illuminate\Http\JsonResponse;
@@ -13,9 +15,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Servir : le fidele s'inscrit a un service (departement). L'inscription est immediate :
- * il integre le departement, recoit ses annonces / evenements / exercices, et les
- * responsables du departement sont prevenus automatiquement.
+ * Servir : le fidele demande a rejoindre un service (departement) ; le responsable du departement valide
+ * la demande (notification et courriel). Une fois valide, il recoit les annonces, evenements et exercices du
+ * departement.
  */
 class MyServiceController extends Controller
 {
@@ -26,6 +28,7 @@ class MyServiceController extends Controller
         $mine = $profile
             ? DB::table('department_profile')->where('profile_id', $profile->id)->pluck('created_at', 'department_id')
             : collect();
+        $pending = DepartmentJoinRequest::where('user_id', $user->id)->where('status', 'pending')->pluck('created_at', 'department_id');
 
         $departments = Department::where('is_active', true)
             ->withCount('members')
@@ -40,7 +43,7 @@ class MyServiceController extends Controller
             ->groupBy('dept')->map(fn ($list) => $list->first());
 
         return response()->json([
-            'services' => $departments->map(function (Department $d) use ($mine, $next) {
+            'services' => $departments->map(function (Department $d) use ($mine, $next, $pending) {
                 $upcoming = $next->get($d->id);
 
                 return [
@@ -51,6 +54,8 @@ class MyServiceController extends Controller
                     'leader' => $d->leaders->map(fn ($l) => $l->profile?->full_name)->filter()->implode(', ') ?: null,
                     'leader_photo_url' => $d->leaders->first()?->profile?->photo_url,
                     'joined' => $mine->has($d->id),
+                    // Demande envoyee, en attente du responsable du service.
+                    'pending' => ! $mine->has($d->id) && $pending->has($d->id),
                     'joined_at' => $mine->get($d->id) ? substr((string) $mine->get($d->id), 0, 10) : null,
                     'next_event' => $upcoming ? [
                         'title' => $upcoming['event']->title,
@@ -61,33 +66,18 @@ class MyServiceController extends Controller
         ]);
     }
 
-    /** S'inscrire a un service : integration immediate dans le departement. */
+    /** Demande d'inscription a un service : le responsable du departement la valide. */
     public function join(Request $request, Department $department): JsonResponse
     {
-        abort_unless($department->is_active, 422, "Ce service n'accepte pas d'inscription pour le moment.");
-        $user = $request->user();
-        $profile = $user->profile;
-        abort_unless($profile && $profile->is_completed, 422, "Complétez d'abord votre profil.");
-
-        if ($profile->departments()->whereKey($department->id)->exists()) {
-            return response()->json(['message' => "Vous servez déjà dans {$department->name}."]);
+        $joinRequest = DepartmentJoinService::request($request->user(), $department);
+        if (! $joinRequest) {
+            return response()->json(['message' => "Vous servez déjà dans {$department->name}.", 'status' => 'member']);
         }
 
-        $profile->departments()->attach($department->id);
-
-        $name = $profile->full_name ?: $user->phone;
-        Notifier::send(
-            array_diff(Recipients::departmentLeaders($department), [$user->id]),
-            'service',
-            "Nouveau serviteur : {$name}",
-            "{$name} vient de s'inscrire au service {$department->name}. Prenez contact pour l'accueillir.",
-            "/admin/membres/{$user->id}",
-        );
-        Notifier::send([$user->id], 'service', "Bienvenue au service {$department->name}",
-            'Votre inscription est enregistrée. Vous recevrez désormais les annonces et les événements de ce département.',
-            '/servir');
-
-        return response()->json(['message' => "Bienvenue dans le service {$department->name} !"]);
+        return response()->json([
+            'message' => "Demande envoyée : le responsable du service {$department->name} va la valider.",
+            'status' => 'pending',
+        ]);
     }
 
     /** Quitter un service. */
@@ -96,6 +86,11 @@ class MyServiceController extends Controller
         $user = $request->user();
         $profile = $user->profile;
         abort_unless($profile, 422);
+
+        // Demande encore en attente : elle est simplement retiree.
+        if (DepartmentJoinService::cancel($user, $department)) {
+            return response()->json(['message' => "Votre demande pour le service {$department->name} est retirée."]);
+        }
 
         if ($profile->departments()->detach($department->id)) {
             $name = $profile->full_name ?: $user->phone;

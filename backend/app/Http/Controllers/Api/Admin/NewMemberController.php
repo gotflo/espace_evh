@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Profile;
 use App\Models\User;
 use App\Support\MemberScope;
+use App\Support\PlatformSettings;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 /**
  * Nouveaux inscrits : suivi d'integration. Un inscrit reste dans la liste « a accueillir »
@@ -18,6 +20,9 @@ use Illuminate\Http\Request;
 class NewMemberController extends Controller
 {
     public const WINDOW_DAYS = 30;
+
+    /** Arrivee d'un membre : la validation par le pasteur (nouveaux comptes), sinon l'inscription. */
+    public const ARRIVAL = 'COALESCE((SELECT u.approval_decided_at FROM users u WHERE u.id = profiles.user_id AND u.approval_status = \'approved\'), profiles.created_at)';
 
     public function index(Request $request): JsonResponse
     {
@@ -31,7 +36,7 @@ class NewMemberController extends Controller
         }
 
         return response()->json([
-            'window_days' => self::WINDOW_DAYS,
+            'window_days' => PlatformSettings::int('new_members.window_days'),
             'filter' => $filter,
             'members' => $query->limit(100)->get()->map(fn (Profile $p) => self::present($p))->values(),
             'counts' => self::counts($user),
@@ -66,10 +71,11 @@ class NewMemberController extends Controller
     public static function recentQuery(User $viewer): Builder
     {
         return MemberScope::manageableProfiles(Profile::query(), $viewer)
-            ->where('profiles.created_at', '>=', now()->subDays(self::WINDOW_DAYS)->startOfDay())
+            ->select('profiles.*')->selectRaw(self::ARRIVAL.' as arrived_at')
+            ->whereRaw(self::ARRIVAL.' >= ?', [now()->subDays(PlatformSettings::int('new_members.window_days'))->startOfDay()->toDateTimeString()])
             ->where('profiles.user_id', '!=', $viewer->id)
             ->with(['tribe:id,name', 'welcomer.profile:id,user_id,first_name,last_name', 'user:id,phone'])
-            ->orderByDesc('profiles.created_at');
+            ->orderByRaw(self::ARRIVAL.' desc');
     }
 
     /** @return array{to_welcome: int, recent: int} */
@@ -91,12 +97,18 @@ class NewMemberController extends Controller
             'phone' => $p->user?->phone,
             'tribe' => $p->tribe?->name,
             'is_completed' => (bool) $p->is_completed,
-            'registered_at' => $p->created_at?->toIso8601String(),
-            'days_ago' => $p->created_at ? (int) floor($p->created_at->copy()->startOfDay()->diffInDays(now()->startOfDay())) : null,
+            'registered_at' => self::arrivedAt($p)?->toIso8601String(),
+            'days_ago' => ($at = self::arrivedAt($p)) ? (int) floor($at->copy()->startOfDay()->diffInDays(now()->startOfDay())) : null,
             'welcomed' => $p->welcomed_at !== null,
             'welcomed_at' => $p->welcomed_at?->toDateString(),
             'welcomed_by' => $p->welcomer?->profile?->full_name ?: null,
         ];
+    }
+
+    /** Date d'arrivee (validation du compte, sinon inscription). */
+    public static function arrivedAt(Profile $p): ?Carbon
+    {
+        return $p->arrived_at ? Carbon::parse($p->arrived_at) : $p->created_at;
     }
 
     private function authorizeView(User $user): void

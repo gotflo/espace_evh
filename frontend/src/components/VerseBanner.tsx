@@ -1,9 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
+import { usePulse } from '../pulse'
 
 export interface VerseContent { id: number | null; label: string; text: string; reference: string; message: string | null }
 
 const CACHE_KEY = 'evh_verse'
+
+/**
+ * Image de fond du verset (servie par le site, deux tailles : telephone et ordinateur).
+ * Un voile teal par-dessus garde le texte lisible quelle que soit la photo.
+ */
+const BACKGROUND = { small: '/verset/fond-800.jpg', large: '/verset/fond-1600.jpg', position: '62% 42%' }
 
 function cached(): VerseContent | null {
   try {
@@ -12,15 +19,55 @@ function cached(): VerseContent | null {
   } catch { return null }
 }
 
+/** Taille du texte selon sa longueur : un verset court s'affiche en grand, un long reste confortable. */
+function sizeOf(text: string): 'short' | 'medium' | 'long' | 'xlong' {
+  const n = text.trim().length
+  if (n <= 90) return 'short'
+  if (n <= 220) return 'medium'
+  if (n <= 450) return 'long'
+  return 'xlong'
+}
+
 /** Encadre du verset (tableau de bord et apercu de l'administration). */
 export function VerseCard({ verse }: { verse: VerseContent }) {
+  const size = sizeOf(verse.text)
+  const textRef = useRef<HTMLParagraphElement>(null)
+  const [expanded, setExpanded] = useState(false)
+  const [clamped, setClamped] = useState(false)
+  const [imageOk, setImageOk] = useState(true)
+
+  // Texte tres long sur petit ecran : replie avec « Lire la suite » (mesure apres affichage).
+  useLayoutEffect(() => {
+    const el = textRef.current
+    if (!el) return
+    const measure = () => setClamped(el.scrollHeight > el.clientHeight + 2)
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [verse.text, expanded])
+
   return (
-    <div className="verse-banner">
-      <span className="verse-label">{verse.label}</span>
-      <p className="verse-text">{verse.text}</p>
-      <span className="verse-ref">{verse.reference}</span>
-      {verse.message && <p className="verse-message">{verse.message}</p>}
-    </div>
+    <figure className={`verse-banner verse-${size} ${imageOk ? 'has-image' : ''}`}>
+      {imageOk && (
+        <img className="verse-bg" src={BACKGROUND.small} srcSet={`${BACKGROUND.small} 800w, ${BACKGROUND.large} 1600w`}
+          sizes="(max-width: 980px) 100vw, 70vw" alt="" aria-hidden decoding="async" style={{ objectPosition: BACKGROUND.position }}
+          onError={() => setImageOk(false)} />
+      )}
+      <span className="verse-shade" aria-hidden />
+      <div className="verse-body">
+        <span className="verse-label">{verse.label}</span>
+        <blockquote className="verse-quote">
+          <p ref={textRef} className={`verse-text ${expanded ? 'expanded' : ''}`}>{verse.text}</p>
+        </blockquote>
+        {(clamped || expanded) && size === 'xlong' && (
+          <button type="button" className="verse-more" onClick={() => setExpanded((e) => !e)} aria-expanded={expanded}>
+            {expanded ? 'Réduire' : 'Lire la suite'}
+          </button>
+        )}
+        <figcaption className="verse-ref">{verse.reference}</figcaption>
+        {verse.message && <p className="verse-message">{verse.message}</p>}
+      </div>
+    </figure>
   )
 }
 
@@ -28,12 +75,15 @@ export function VerseCard({ verse }: { verse: VerseContent }) {
 export function VerseBanner() {
   const [verse, setVerse] = useState<VerseContent | null>(cached)
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api<{ verse: VerseContent }>('/dashboard/verse').then((r) => {
       setVerse(r.verse)
       try { localStorage.setItem(CACHE_KEY, JSON.stringify(r.verse)) } catch { /* stockage indisponible */ }
     }).catch(() => { /* on garde le dernier verset connu */ })
   }, [])
+  useEffect(() => { load() }, [load])
+  // Verset publie, programme ou reordonne : il change aussitot sur l'accueil de chacun.
+  usePulse('verses', load)
 
   if (!verse) return <div className="skeleton verse-skeleton" aria-hidden />
   return <VerseCard verse={verse} />

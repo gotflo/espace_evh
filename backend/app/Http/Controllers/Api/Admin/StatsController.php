@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Profile;
+use App\Models\SpiritualHealthForm;
 use App\Support\MemberScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -36,7 +37,7 @@ class StatsController extends Controller
             ->when($fissTribes !== null, fn ($q) => $q->whereIn('tribe_id', $fissTribes ?: [0]));
         $fissMembers = $fissTribes === [] ? null : $fissScope(Profile::query())->count();
         $fissFilled = $fissTribes === [] ? null
-            : $fissScope(Profile::query())->whereIn('user_id', \App\Models\SpiritualHealthForm::where('period', now()->format('Y-m'))->select('user_id'))->count();
+            : $fissScope(Profile::query())->whereIn('user_id', SpiritualHealthForm::where('period', now()->format('Y-m'))->select('user_id'))->count();
 
         // Repartition par tribu (limitee aux tribus visibles).
         $byTribe = $scope(Profile::query())
@@ -50,7 +51,7 @@ class StatsController extends Controller
 
         // Nouveaux inscrits (30 derniers jours) : d'abord ceux qui restent a accueillir.
         $recent = NewMemberController::recentQuery($user)
-            ->reorder()->orderByRaw('CASE WHEN welcomed_at IS NULL THEN 0 ELSE 1 END')->orderByDesc('profiles.created_at')
+            ->reorder()->orderByRaw('CASE WHEN welcomed_at IS NULL THEN 0 ELSE 1 END')->orderByRaw(NewMemberController::ARRIVAL.' desc')
             ->limit(6)->get()
             ->map(fn (Profile $p) => NewMemberController::present($p))->values();
 

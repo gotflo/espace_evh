@@ -40,9 +40,23 @@
 - Connexion par téléphone avec code à usage unique (SMS), sans mot de passe.
 - Profil en onglets (Identité, Famille, Infos personnelles, Vie spirituelle) avec **indicateur de complétion** et rappels.
 - **Famille** : conjoint(e) choisi(e) parmi les membres (confirmation par la personne désignée) ou simplement nommé(e)
-  s'il/elle n'est pas inscrit(e) ; date de mariage ; enfants (nom, année de naissance, lien facultatif vers leur profil).
-- **Ma vie spirituelle** : cartes interactives (FISS, Vertumètre, Assiduité, Ponctualité, Parcours) qui ouvrent le détail.
+  s'il/elle n'est pas inscrit(e) ; date de mariage ; enfants (nom, date de naissance complète, lien facultatif vers leur profil).
+- **Ma vie spirituelle** : cartes interactives (FISS, Notes, Assiduité, Ponctualité, Parcours) qui ouvrent le détail.
 - **Fiche de santé spirituelle (FISS)** mensuelle, **verrouillée après envoi** ; modification sur demande validée (2 demandes par fiche au maximum).
+  Rubrique facultative et confidentielle **« Vie intérieure »** (addiction, victoire, saines compagnies, blessure intérieure,
+  situations difficiles, découragement).
+- **Mes RM (Résolutions du Mois)** : bilan du mois passé, résolutions par domaine (méditation, prière, jeûne,
+  sanctification, assiduité, autres) guidées par la dernière FISS, « Je renouvelle », ressources (lien ou vidéo et auteur).
+- **Mon devoir (DS)** : vidéo ou audio publié par le Pasteur Résident (devoirs de la semaine), avec le **même suivi de lecture que les exercices**
+  (passages réellement lus, avances rapides, reprise) ; résumé, actions et résolutions, rappel de prier.
+  Fait = résumé envoyé et vidéo ou audio lu en entier.
+- **Mon Vertumètre** : questionnaire mensuel (prière et jeûne, méditation de la Parole, fruit de l'Esprit et caractère),
+  pour le mois en cours seulement, verrouillé à l'envoi ; modification sur demande au patriarche (comme la FISS).
+- **Mon mois** sur le tableau de bord : FISS, Vertumètre, résolutions et devoir du mois, avec ce qui reste à faire.
+- **Prendre rendez-vous avec le pasteur** : créneau précis, première heure libre d'un jour ou « le plus tôt possible »,
+  toujours confirmé aussitôt ; priorité et message lu par le pasteur seul ; rappel le jour même, annulation libre.
+- **Inscription** : tribu obligatoire (sauf PR, PA, AP, administrateur) ; tant qu'elle n'est pas terminée, la personne
+  reste sur l'écran d'inscription et n'apparaît chez aucun responsable.
 - **Calendrier** (mois, semaine, liste) : événements, jours fériés, anniversaires, anniversaires de mariage, échéances.
 - **Horaires des cultes** (mercredi, Samedi des miracles et dimanche) dans le calendrier et sur le tableau de bord, avec le programme
   la veille au soir et un rappel 30 minutes avant chaque rendez-vous.
@@ -58,7 +72,7 @@
 - Tableau de bord : membres actifs/inactifs, FISS du mois, profils incomplets, nouveaux inscrits à accueillir.
 - Membres (filtres : actifs, inactifs, profil incomplet, FISS manquante, tribu), fiche détaillée avec famille,
   complétion, historique complet des FISS.
-- **Validations** : demandes de modification de FISS et de changement de tribu (refus motivé obligatoire).
+- **Validations** : demandes de modification de FISS et du Vertumètre, changements de tribu (refus motivé obligatoire).
 - **Rapports** : indicateurs clés, courbes (vie spirituelle, FISS, assiduité, Vertumètre), nouveaux membres,
   comparaison des tribus, listes (FISS manquantes, inactifs, nouveaux), onglet Membres filtrable, **exports PDF**.
 - Présences, notes (Vertumètre), annonces et événements ciblés (une ou plusieurs tribus, GEM, départements).
@@ -66,7 +80,16 @@
   fermeture automatique ; **suivi** par fidèle (pourcentage réellement regardé, avances rapides détectées, réponse).
 - **Journal d'audit** en lecture seule.
 - **Versets du tableau de bord** (PR et PA) : bibliothèque de textes bibliques, brouillon, programmation,
-  rotation quotidienne, mise en avant, aperçu et historique.
+  rotation quotidienne, mise en avant, aperçu et historique ; affichés sur une photo de l'église (`public/verset/`).
+- **Horaires des cultes** (PR et PA) : jour, heure de début, heure de fin facultative, avec avis à toute l'église.
+- **Rendez-vous** : le pasteur gère ses disponibilités (par défaut mercredi 21h50 – 23h00 et dimanche 12h50 – 14h00,
+  15 min ; plages en plus, séances ou créneaux bloqués, révocation) ; un rendez-vous sur un créneau bloqué est déplacé
+  automatiquement ; l'Équipe du protocole voit les rendez-vous par priorité et les organise.
+- **Suppression d'un membre** par le PR, sur demande possible du patriarche ou d'un responsable de département ;
+  le numéro d'un compte supprimé est refusé à l'inscription (déblocage par le PR).
+- **Suivi du mois** : publication des devoirs et des ressources RM (Pasteur Résident seul) ; suivi des devoirs, des
+  résolutions et du Vertumètre par les pasteurs et les responsables de la tribu (patriarche, AP), même confidentialité
+  que la FISS.
 - **Rapport mensuel automatique** : chiffres clés du mois écoulé envoyés le 1er à chaque responsable.
 - **Rapports mensuels des responsables** : le patriarche (pour sa tribu) et le responsable de département
   remplissent chaque mois un **questionnaire guidé** (rencontres d'échanges, activités menées, GEMs, santé
@@ -208,6 +231,9 @@ Tables principales :
 | Publication | `announcements`, `events` (dont `remind_all` : rendez-vous réguliers), `exercises` (vidéo YouTube, `closes_at`), `publication_scopes` (portée multiple : église, tribus, GEM, départements) |
 | Exercices | `exercise_responses`, `exercise_video_views` (passages regardés, avances rapides, terminé) |
 | Notifications | `user_notifications` (priorité, lien), `push_subscriptions`, `notification_dispatches` (anti-doublon) |
+| Croissance du mois | `monthly_resolutions` (RM, bilan `outcome`), `resolution_resources`, `assignments` (devoirs, retrait doux), `assignment_responses`, `assignment_views` (suivi de lecture), `vertumetre_forms`, `vertumetre_edit_requests` |
+| Rendez-vous | `appointments` (créneau unique `slot_key`), `appointment_windows`, `appointment_blocks`, `appointment_settings` |
+| Suppression | `member_deletion_requests`, `blocked_phones` |
 | Rapports des responsables | `leader_reports` (mensuel : tribu ou département, réponses, âmes figées à l'envoi), `gem_weekly_reports` (hebdomadaire : présences du GEM) |
 | Traçabilité | `audit_logs` (qui, quoi, avant/après, contexte, IP) |
 
@@ -331,6 +357,11 @@ Une seule commande idempotente, planifiée toutes les 5 minutes : `php artisan a
 | `fiss` | rappels FISS, récapitulatif des FISS manquantes, reverrouillage des modifications expirées |
 | `profiles` | recalcul quotidien de la complétion, rappels de profil incomplet |
 | `leader-reports` | du 1er au 10 : rappel puis relance aux patriarches et responsables de département sans rapport envoyé |
+| `resolutions` | Mes RM : invitation du 1er au 3 (dès 9 h), relance du 8 au 12 (dès 10 h) à ceux qui ne les ont pas prises |
+| `assignments` | Mon devoir : relance 3 jours après la publication (10 h – 20 h) à ceux qui ne l'ont pas fait |
+| `send-outbox` | Courriels et textos en file (aussi chaque minute par `app:send-outbox`), courriel du jour des pasteurs |
+| `appointments` | Rendez-vous : liste du jour 3 h avant la séance (pasteur, protocole), rappel au membre dès 8 h, clôture des rendez-vous passés |
+| `vertumetre` | Mon Vertumètre : rappel dès le 20 puis le dernier jour du mois (dès 8 h) à ceux qui ne l'ont pas rempli |
 | `gem-reports` | dimanche dès 18 h (ou lundi) : rappel aux Gardes sans rapport de la semaine ; relance mardi ou mercredi |
 | `followups` | relances des demandes sans réponse |
 | `prune` | nettoyage (anciennes notifications, clés d'envoi) |
@@ -445,6 +476,7 @@ Détail par évolution (fichiers, migrations, variables, cron, retour arrière) 
 - [`docs/MISE-A-JOUR-AUDIT-ROBUSTESSE.md`](docs/MISE-A-JOUR-AUDIT-ROBUSTESSE.md) : audit, versets administrables, hébergement, robustesse ;
 - [`docs/MISE-A-JOUR-PUSH.md`](docs/MISE-A-JOUR-PUSH.md) : notifications push fiables (boîte d'envoi, test par appareil, diagnostic) ;
 - [`docs/MISE-A-JOUR-RAPPORTS-MENSUELS.md`](docs/MISE-A-JOUR-RAPPORTS-MENSUELS.md) : rapports mensuels (patriarche, responsable de département) et hebdomadaires (Gardes), annuaire des responsables, Samedi des miracles, nom de l'application.
+- [`docs/MISE-A-JOUR-RM-DEVOIRS-2026-10.md`](docs/MISE-A-JOUR-RM-DEVOIRS-2026-10.md) : Mes RM, Mon devoir (DS), Mon Vertumètre, rendez-vous avec le pasteur, suppression d'un membre, FISS « Vie intérieure », tribu obligatoire, date de naissance des enfants, horaires des cultes, verset illustré (pas encore en ligne).
 
 En résumé : sauvegarde de la base → envoi des fichiers `backend/` modifiés → `php artisan migrate --force`
 → `php artisan config:cache && php artisan route:cache && php artisan event:cache` → build React copié dans `public/` → vérifications.
@@ -494,7 +526,8 @@ OPcache, cron disponible. Pas de Redis ni de worker permanent supposés : l'appl
 - **SMS** : tant que `SMS_DRIVER=log`, aucun SMS n'est envoyé (phase de test).
 - **Supervision** : les mesures commencent à la mise en service de l'agent ; la console (projet séparé) a ses propres
   limites, décrites dans son README.
-- **Vertumètre** : actuellement la moyenne des notes des responsables ; version remplie par le membre en attente des questionnaires.
+- **Vertumètre** : questionnaire mensuel rempli par le membre (`app/Support/VertumetreCatalog.php`) ; les notes /20 des
+  responsables s'appellent désormais « Notes ».
 
 ## Documentation complémentaire
 

@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\Assignment;
 use App\Models\Department;
 use App\Models\Gem;
+use App\Models\ResolutionResource;
 use App\Models\Role;
 use App\Models\Tribe;
 use App\Models\User;
@@ -75,6 +77,14 @@ class LoadProfileTest extends TestCase
                 }
             }
             DB::table('attendances')->insert(['member_user_id' => $userId, 'attended_on' => '2026-10-11', 'created_at' => $now, 'updated_at' => $now]);
+            // Resolutions du mois (RM) et devoir (DS) : la moitie des membres.
+            if ($n % 2) {
+                foreach (['2026-09', '2026-10'] as $period) {
+                    DB::table('monthly_resolutions')->insert(['user_id' => $userId, 'period' => $period, 'priere' => 'Prier chaque soir', 'created_at' => $now, 'updated_at' => $now]);
+                }
+                DB::table('assignment_responses')->insert(['assignment_id' => 1, 'user_id' => $userId, 'summary' => 'Résumé du message', 'actions' => 'Prier', 'submitted_at' => $now, 'created_at' => $now, 'updated_at' => $now]);
+                DB::table('assignment_views')->insert(['assignment_id' => 1, 'user_id' => $userId, 'segments' => '[[0,100]]', 'watched_seconds' => 100, 'completed_at' => $n % 4 === 1 ? $now : null, 'created_at' => $now, 'updated_at' => $now]);
+            }
             DB::table('user_notifications')->insert(['user_id' => $userId, 'type' => 'system', 'title' => 'Bienvenue', 'created_at' => $now]);
         }
     }
@@ -113,6 +123,8 @@ class LoadProfileTest extends TestCase
         $pastor = $this->pastor();
         $this->makeEvent(['title' => 'Culte', 'category' => 'culte', 'starts_at' => '2026-10-18 09:30', 'recurrence' => 'weekly']);
         $this->makeExercise(['title' => 'Lire Jean 3', 'content' => '...', 'type' => 'lecture', 'is_active' => true]);
+        Assignment::create(['title' => 'Devoir', 'media_type' => 'video', 'youtube_id' => 'KSvbDy7Yv7k', 'media_url' => 'https://youtu.be/KSvbDy7Yv7k', 'media_duration' => 100, 'published_at' => now()->subDay()]);
+        ResolutionResource::create(['theme' => 'priere', 'title' => 'Prier', 'author' => 'Pst', 'url' => 'https://exemple.org']);
         foreach (Tribe::limit(6)->get() as $tribe) {
             $this->makeExercise(['title' => 'Vidéo '.$tribe->name, 'content' => '', 'type' => 'video', 'video_id' => 'KSvbDy7Yv7k',
                 'requires_response' => false, 'is_active' => true], [['type' => 'tribe', 'id' => $tribe->id]]);
@@ -122,14 +134,16 @@ class LoadProfileTest extends TestCase
             '/api/admin/reports?scope=church&months=12', '/api/admin/reports/members?scope=church&filter=all', '/api/admin/attendance',
             '/api/admin/exercises', '/api/admin/events', '/api/admin/announcements', '/api/admin/validations', '/api/admin/audiences',
             '/api/admin/gems', '/api/admin/organization', '/api/admin/audit', '/api/calendar?from=2026-10-01&to=2026-10-31',
-            '/api/admin/exercises/1/tracking'];
+            '/api/admin/exercises/1/tracking', '/api/admin/resolutions', '/api/admin/assignments', '/api/admin/assignments/1/responses',
+            '/api/admin/service-schedule', '/api/admin/resolution-resources', '/api/admin/vertumetre', '/api/admin/validations'];
 
         $this->populate(60);
         Cache::flush();
         $small = $this->measure($pastor, $admin);
         $member = User::whereHas('profile', fn ($q) => $q->where('first_name', 'Membre7'))->firstOrFail();
         $mine = ['/api/me', '/api/me/overview', '/api/me/exercises', '/api/me/notifications', '/api/me/notifications/unread-count',
-            '/api/me/fiss', '/api/me/announcements', '/api/me/events', '/api/calendar?from=2026-10-01&to=2026-10-31', '/api/me/services'];
+            '/api/me/fiss', '/api/me/announcements', '/api/me/events', '/api/calendar?from=2026-10-01&to=2026-10-31', '/api/me/services',
+            '/api/me/month', '/api/me/resolutions', '/api/me/assignments', '/api/me/welcome-back?since=2026-10-01', '/api/me/vertumetre'];
         $smallMine = $this->measure($member, $mine);
 
         $this->populate(340);

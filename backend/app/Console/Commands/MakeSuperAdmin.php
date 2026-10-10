@@ -6,6 +6,7 @@ use App\Models\Profile;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\Phone;
+use App\Support\PlatformManager;
 use Illuminate\Console\Command;
 
 class MakeSuperAdmin extends Command
@@ -19,6 +20,13 @@ class MakeSuperAdmin extends Command
         $phone = Phone::normalize($this->argument('phone'));
         if (! $phone) {
             $this->error('Numéro invalide.');
+
+            return self::FAILURE;
+        }
+
+        if (PlatformManager::isReservedPhone($phone)) {
+            $this->error('Numéro réservé au compte de gestion : il ne reçoit pas de rôle (voir app:manager-activation-code).');
+
             return self::FAILURE;
         }
 
@@ -28,12 +36,14 @@ class MakeSuperAdmin extends Command
         $role = Role::where('key', User::SUPER_ADMIN)->first();
         if (! $role) {
             $this->error('Role super_admin introuvable. Lancez d\'abord les seeders.');
+
             return self::FAILURE;
         }
 
         $user->roles()->syncWithoutDetaching([$role->id]);
 
         $this->info("Super administrateur attribué à {$phone}.");
+
         return self::SUCCESS;
     }
 }

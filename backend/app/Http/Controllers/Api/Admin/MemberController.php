@@ -56,6 +56,10 @@ class MemberController extends Controller
             $query->whereHas('user', fn ($u) => $u->where(fn ($w) => $w->where('activity_override', $status)
                 ->orWhere(fn ($x) => $x->whereNull('activity_override')->where('activity_status', $status))));
         }
+        // Absents : aucune connexion depuis plus d'une semaine.
+        if ($request->query('absent')) {
+            $query->whereHas('user', fn ($u) => $u->whereRaw('COALESCE(last_seen_at, last_login_at) < ?', [now()->subDays(7)->toDateTimeString()]));
+        }
         if ($request->query('incomplete')) {
             $query->where('completion', '<', 100);
         }
@@ -96,6 +100,8 @@ class MemberController extends Controller
     {
         $viewer = $request->user();
         abort_unless($viewer->canViewMember($user), 403, 'Accès refusé.');
+        // Inscription inachevee : la personne n'apparait pas encore chez les responsables.
+        abort_unless((bool) $user->profile?->is_completed, 404, "Ce membre n'a pas encore terminé son inscription.");
 
         $user->load(['profile.tribe', 'profile.gem', 'profile.departments', 'roles.permissions', 'spiritualProfile', 'ledDepartments:id,name']);
         $lastSeen = collect([$user->last_seen_at, $user->last_login_at])->filter()->max();
@@ -221,6 +227,8 @@ class MemberController extends Controller
             'completion' => (int) $p->completion,
             'activity' => $u ? $u->activityStatus() : 'inactive',
             'last_seen' => $lastSeen?->toDateString(),
+            // Plus d'une semaine sans connexion : nombre de jours (affiche dans la liste).
+            'absent_days' => $lastSeen && $lastSeen->lt(now()->subDays(7)) ? (int) $lastSeen->copy()->startOfDay()->diffInDays(now()->startOfDay()) : null,
             'roles' => $u ? $u->roles->pluck('name')->values() : [],
         ];
     }

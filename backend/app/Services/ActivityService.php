@@ -6,6 +6,7 @@ use App\Models\Attendance;
 use App\Models\SpiritualHealthForm;
 use App\Models\User;
 use App\Support\Audit;
+use App\Support\PlatformSettings;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -70,7 +71,7 @@ class ActivityService
                         $user->forceFill(['activity_status' => $status, 'activity_changed_at' => now()])->saveQuietly();
                         Audit::log($status === 'inactive' ? 'member.inactivated' : 'member.reactivated', $user, $user->id,
                             ['activity_status' => $previous], ['activity_status' => $status],
-                            ['last_activity' => $last?->toDateString(), 'rule' => '3 mois sans connexion, FISS ni présence'], null);
+                            ['last_activity' => $last?->toDateString(), 'rule' => PlatformSettings::int('members.inactive_after_months').' mois sans connexion, FISS ni présence'], null);
                         $changes[$status === 'inactive' ? 'inactivated' : 'reactivated'][] = $user->id;
                     }
                 });

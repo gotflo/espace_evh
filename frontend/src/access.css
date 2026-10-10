@@ -1,0 +1,197 @@
+/* ============================================================
+   Gestion des acces : roles par module, comptes, tableau de gestion, ressources
+   ============================================================ */
+
+/* --- Editeur de role --- */
+.role-editor { max-width: 920px; }
+.role-editor-head { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 0 1rem; }
+.role-lock { display: inline-flex; align-items: center; gap: 0.25rem; }
+.role-card-name, .role-card-desc { overflow-wrap: anywhere; }
+
+.perm-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem 1rem; margin: 0.4rem 0 0.8rem; }
+.perm-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.7rem; font-size: 0.9rem; color: var(--text-muted); }
+.perm-summary strong { color: var(--text); font-size: 1.05rem; }
+.perm-flag { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; font-weight: 600; color: #8a4b00; background: rgba(240, 160, 25, 0.16); border-radius: 999px; padding: 0.15rem 0.55rem; }
+.perm-search { max-width: 280px; flex: 1 1 200px; }
+
+.perm-modules { display: grid; gap: 0.6rem; }
+.perm-module { border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--card-bg); }
+.perm-module.has { border-color: var(--border); }
+.perm-module-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.35rem 0.6rem 0.35rem 0.25rem; }
+.perm-module-toggle {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem; border: 0; background: none;
+  color: var(--text); font: inherit; text-align: left; cursor: pointer; border-radius: 8px;
+}
+.perm-module-toggle:hover { background: var(--hover-bg); }
+.perm-module-toggle svg { flex: none; transition: transform 0.15s; }
+.perm-module-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.perm-module-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.perm-module-count { flex: none; margin-left: auto; font-size: 0.78rem; color: var(--text-muted); background: var(--chip-bg); border-radius: 999px; padding: 0.1rem 0.5rem; }
+.perm-module-actions { flex: none; display: flex; gap: 0.6rem; font-size: 0.82rem; }
+.perm-list { padding: 0.1rem 0.9rem 0.6rem 2.2rem; display: grid; gap: 0.1rem; }
+.perm-list .perm-check { align-items: flex-start; flex-wrap: wrap; padding: 0.45rem 0; border-top: 1px dashed var(--border-subtle); }
+.perm-list .perm-check:first-child { border-top: 0; }
+.perm-list .perm-check input { margin-top: 0.15rem; flex: none; }
+.perm-check.locked { cursor: not-allowed; opacity: 0.6; }
+.perm-check.locked input { cursor: not-allowed; }
+.perm-label { flex: 1 1 260px; min-width: 0; line-height: 1.35; overflow-wrap: anywhere; }
+.perm-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-left: auto; }
+.perm-kind { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.01em; padding: 0.12rem 0.5rem; border-radius: 999px; background: var(--chip-bg); color: var(--text-muted); white-space: nowrap; }
+.perm-kind.kind-delete { background: rgba(214, 40, 40, 0.1); color: #b42318; }
+.perm-kind.kind-publish, .perm-kind.kind-send { background: rgba(13, 95, 87, 0.1); color: #0d5f57; }
+.perm-kind.kind-export { background: rgba(60, 80, 200, 0.1); color: #3946a8; }
+.perm-kind.confidential { background: rgba(240, 160, 25, 0.16); color: #8a4b00; }
+
+/* --- Comptes --- */
+.acc-toolbar { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 0.6rem; padding: 0.8rem; }
+.acc-note { display: flex; align-items: center; gap: 0.35rem; margin: 0.6rem 0 0.8rem; }
+.acc-list { list-style: none; display: grid; gap: 0.7rem; margin-top: 0.4rem; }
+.acc-row { padding: 0.9rem 1rem; }
+.acc-main { display: flex; align-items: center; gap: 0.75rem; }
+.acc-id { flex: 1; min-width: 0; display: grid; gap: 0.1rem; }
+.acc-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; line-height: 1.25; }
+.acc-id small { color: var(--text-muted); overflow-wrap: anywhere; }
+.acc-open { flex: none; }
+.acc-roles { margin-top: 0.6rem; }
+.acc-roles .role-chip { max-width: 100%; overflow-wrap: anywhere; }
+.acc-assign { margin-top: 0.8rem; }
+.acc-assign .field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 0.6rem; }
+
+/* --- Tableau de gestion --- */
+.pm-note { display: flex; align-items: center; gap: 0.45rem; }
+.pm-section { font-family: var(--font-sans); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin: 1.2rem 0 0.6rem; }
+.app .stat-tile:disabled { cursor: default; transform: none; }
+.app .stat-tile .stat-label { overflow-wrap: anywhere; }
+.pm-shortcuts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 0.7rem; }
+.pm-shortcut { display: flex; align-items: center; gap: 0.75rem; padding: 0.85rem 1rem; color: var(--text); text-decoration: none; transition: border-color 0.2s, transform 0.15s; }
+.pm-shortcut:hover { border-color: var(--border); transform: translateY(-2px); }
+.pm-shortcut-icon { flex: none; width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: rgba(13, 95, 87, 0.08); color: #0d5f57; }
+.pm-shortcut-text { min-width: 0; display: grid; }
+.pm-shortcut-text small { color: var(--text-muted); overflow-wrap: anywhere; }
+
+/* --- Ressources --- */
+.res-intro { margin: -6px 0 10px; }
+.res-filter { margin-bottom: 0.8rem; flex-wrap: wrap; overflow-x: visible; }
+.res-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.2rem; }
+.res-tag { font-size: 0.68rem; font-weight: 600; padding: 0.1rem 0.45rem; border-radius: 999px; background: var(--chip-bg); color: var(--text-muted); font-style: normal; }
+.res-tag.yt { background: rgba(214, 40, 40, 0.1); color: #b42318; }
+.res-tag.draft { background: rgba(240, 160, 25, 0.16); color: #8a4b00; }
+.gr-res-row.is-draft .resource-card { opacity: 0.75; border-style: dashed; }
+
+/* --- Journal --- */
+.audit-scope { display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.8rem; }
+
+@media (max-width: 640px) {
+  .role-editor-head, .acc-toolbar { grid-template-columns: minmax(0, 1fr); }
+  .perm-list { padding: 0.1rem 0.6rem 0.6rem 0.9rem; }
+  .perm-tags { margin-left: 1.6rem; }
+  .perm-search { max-width: none; }
+  .acc-main { flex-wrap: wrap; }
+}
+
+/* --- Mot de bienvenue : disparait en fondu --- */
+.welcome-banner.is-leaving { animation: welcomeOut 0.6s ease forwards; }
+@keyframes welcomeOut { to { opacity: 0; transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .welcome-banner.is-leaving { animation: none; opacity: 0; } }
+
+/* --- FISS : vie interieure obligatoire --- */
+.inner-life-left { color: #8a4b00; font-weight: 600; margin: -2px 0 10px; }
+
+.ex-closed-note { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.8rem; }
+.status-pill.pending { background: rgba(240, 160, 25, 0.16); color: #8a4b00; }
+.service-hint { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.res-watch { display: flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; font-weight: 600; color: var(--text-muted); margin-top: 0.25rem; font-style: normal; }
+.res-watch .watch-bar { flex: 1; max-width: 90px; }
+
+/* ---------------------------------------------------------------- Ecrans moyens (portable, tablette)
+   Moins de vide : les champs se placent cote a cote quand la largeur le permet ; le bareme de la
+   FISS est en bas de la fiche, sur toute la largeur. */
+.fiss-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr)); column-gap: 1.2rem; align-items: end; }
+.fiss-grid-wide { grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
+.fiss-grid .fiss-score { max-width: 180px; }
+.inner-life-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 0.2rem 1rem; align-items: start; }
+.fiss-layout { grid-template-columns: minmax(0, 1fr); }
+.fiss-aside .panel { position: static; }
+.fiss-indices { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 0.2rem 1.4rem; }
+
+/* Horaires des cultes : colonnes de lecture (sans trous), une seule pleine largeur si l'ecran est etroit. */
+.st-days { display: block; columns: 2 400px; column-gap: 1rem; }
+.st-days > .panel { break-inside: avoid; margin: 0 0 1rem; width: 100%; display: inline-block; }
+
+/* Fenetres d'edition plus riches : plus larges, champs courts cote a cote. */
+.modal-box.modal-wide { width: 640px; }
+
+/* ---------------------------------------------------------------- Reglages de la plateforme */
+.settings-page { display: flex; flex-direction: column; gap: 1.1rem; padding-bottom: 4.5rem; min-width: 0; }
+.settings-intro { margin: 0; max-width: 72ch; }
+.settings-group { min-width: 0; }
+.settings-group-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; margin-bottom: 0.4rem; }
+.settings-group-title { min-width: 0; flex: 1 1 260px; }
+.settings-group-title h3 { overflow-wrap: anywhere; }
+.settings-group-title .helper { margin-top: 0.15rem; }
+.settings-count { flex-shrink: 0; font-size: 0.78rem; font-weight: 700; color: #0d5f57; background: var(--accent-soft); padding: 0.2rem 0.65rem; border-radius: 999px; white-space: nowrap; }
+.settings-list { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); column-gap: 1.6rem; }
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.9rem; min-width: 0;
+  padding: 0.8rem 0.2rem; border-top: 1px solid var(--border-subtle);
+}
+.settings-row.is-pending { background: linear-gradient(90deg, rgba(240, 196, 25, 0.10), transparent 70%); border-radius: 8px; }
+.settings-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; flex: 1 1 auto; }
+.settings-label { font-weight: 600; font-size: 0.93rem; overflow-wrap: anywhere; }
+.settings-help { color: var(--text-muted); font-size: 0.82rem; line-height: 1.4; overflow-wrap: anywhere; }
+.settings-default { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.5rem; font-size: 0.78rem; color: #8a4b00; }
+.settings-default .btn-link { font-size: 0.78rem; }
+.settings-control { flex-shrink: 0; display: flex; justify-content: flex-end; }
+
+/* Interrupteur : tout le bouton est cliquable, l'etat est aussi ecrit (pas seulement la couleur). */
+.toggle-switch {
+  display: inline-flex; align-items: center; gap: 0.5rem; min-height: 40px; padding: 0.25rem 0.7rem 0.25rem 0.3rem;
+  border-radius: 999px; border: 1px solid var(--border-subtle); background: var(--field-bg); color: var(--text-muted);
+  font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.toggle-knob { position: relative; width: 38px; height: 22px; border-radius: 999px; background: #c9d3d1; transition: background 0.2s; flex-shrink: 0; }
+.toggle-knob::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); transition: transform 0.2s; }
+.toggle-switch.on { color: #0d5f57; border-color: rgba(13, 95, 87, 0.35); background: rgba(13, 95, 87, 0.06); }
+.toggle-switch.on .toggle-knob { background: #0d5f57; }
+.toggle-switch.on .toggle-knob::after { transform: translateX(16px); }
+.toggle-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.toggle-text { min-width: 5.6em; text-align: left; }
+
+/* Champ numerique avec boutons - et + (gros doigts, telephone). */
+.stepper { display: inline-flex; align-items: center; gap: 0.3rem; flex-wrap: nowrap; }
+.stepper-btn {
+  width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border-subtle); background: var(--card-bg);
+  font: inherit; font-size: 1.1rem; font-weight: 700; color: #0d5f57; cursor: pointer; flex-shrink: 0;
+}
+.stepper-btn:disabled { opacity: 0.4; cursor: default; }
+.stepper-input { width: 4.2rem; text-align: center; padding-left: 0.3rem; padding-right: 0.3rem; -moz-appearance: textfield; }
+.stepper-input::-webkit-outer-spin-button, .stepper-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.stepper-unit { font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; }
+
+/* Barre d'enregistrement : toujours visible tant qu'il reste des modifications. */
+.settings-savebar {
+  position: sticky; bottom: 1rem; z-index: 15; display: flex; align-items: center; justify-content: space-between; gap: 0.6rem 1rem; flex-wrap: wrap;
+  padding: 0.75rem 1rem; border-radius: var(--radius-lg); background: #0d3f3a; color: #fff; box-shadow: 0 16px 40px rgba(6, 30, 27, 0.35);
+  animation: pageIn 0.2s ease both;
+}
+.settings-savebar > span { font-weight: 600; font-size: 0.9rem; min-width: 0; overflow-wrap: anywhere; }
+.settings-savebar-actions { display: flex; gap: 0.5rem; margin-left: auto; }
+.settings-savebar .btn-ghost { color: #fff; border-color: rgba(255, 255, 255, 0.35); background: transparent; }
+
+@media (max-width: 560px) {
+  .settings-row { flex-direction: column; align-items: stretch; gap: 0.55rem; }
+  .settings-control { justify-content: flex-start; }
+}
+@media (max-width: 860px) {
+  /* Telephone : au-dessus de la barre d'onglets du bas. */
+  .settings-savebar { bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* FISS : reprise des reponses du mois precedent (un clic). */
+.fiss-prefill {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.6rem 1rem; flex-wrap: wrap;
+  padding: 0.75rem 1rem; margin-bottom: 1rem; border-radius: var(--radius); border: 1px dashed rgba(13, 95, 87, 0.35);
+  background: rgba(13, 95, 87, 0.05);
+}
+.fiss-prefill-text { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: #0d5f57; min-width: 0; flex: 1 1 260px; overflow-wrap: anywhere; }
+.fiss-prefill-text svg { flex-shrink: 0; }

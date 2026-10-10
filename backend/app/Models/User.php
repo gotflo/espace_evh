@@ -2,8 +2,11 @@
 
 namespace App\Models;
 
+use App\Support\PlatformManager;
+use App\Support\PlatformSettings;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -25,13 +28,20 @@ class User extends Authenticatable
 
     public const SUPER_ADMIN = 'super_admin';
 
+    /** Validation d'un nouveau compte par le pasteur. */
+    public const APPROVED = 'approved';
+
+    public const PENDING = 'pending';
+
+    public const REJECTED = 'rejected';
+
     /**
      * Droits donnes par la responsabilite d'un departement (anciennement le role « Responsable ») :
      * voir les membres du departement, faire l'appel des repetitions, publier ses evenements.
      */
     public const DEPARTMENT_LEADER_PERMISSIONS = [
         'members.view_scope', 'spiritual.view', 'attendance.view', 'attendance.record',
-        'events.manage', 'exercises.respond',
+        'events.manage', 'events.delete', 'events.participants', 'exercises.respond', 'departments.approve',
     ];
 
     /** @var array<int>|null memoisation des departements diriges */
@@ -50,7 +60,17 @@ class User extends Authenticatable
             'activity_changed_at' => 'datetime',
             'notification_prefs' => 'array',
             'blocked_at' => 'datetime',
+            'approval_requested_at' => 'datetime',
+            'approval_decided_at' => 'datetime',
+            'absence_notified_at' => 'datetime',
+            'platform_manager_at' => 'datetime',
         ];
+    }
+
+    /** Compte valide par le pasteur (tous les comptes d'avant la validation le sont). */
+    public function isApproved(): bool
+    {
+        return ($this->approval_status ?? self::APPROVED) === self::APPROVED;
     }
 
     /**
@@ -63,7 +83,7 @@ class User extends Authenticatable
             return $override;
         }
 
-        return $lastActivity && $lastActivity->gte(now()->subMonths(self::INACTIVE_AFTER_MONTHS))
+        return $lastActivity && $lastActivity->gte(now()->subMonths(PlatformSettings::int('members.inactive_after_months')))
             ? 'active' : 'inactive';
     }
 
@@ -158,20 +178,43 @@ class User extends Authenticatable
         return $this->roles->contains('key', $key);
     }
 
+    /**
+     * Compte de gestion principal active (numero reserve + OTP + code d'activation). Ses droits ne
+     * dependent d'aucun role : toutes les permissions de gestion, aucune permission confidentielle.
+     */
+    public function isPlatformManager(): bool
+    {
+        return $this->platform_manager_at !== null && PlatformManager::isReservedPhone($this->phone);
+    }
+
+    /** Comptes ordinaires seulement (sans le compte de gestion principal). */
+    public function scopeExceptPlatformManagers(Builder $query): Builder
+    {
+        return $query->whereNull($query->getModel()->getTable().'.platform_manager_at');
+    }
+
+    /** Pasteur Resident (role). Jamais pour le compte de gestion, meme si un role lui etait reste attache. */
     public function isSuperAdmin(): bool
     {
-        return $this->hasRole(self::SUPER_ADMIN);
+        return ! $this->isPlatformManager() && $this->hasRole(self::SUPER_ADMIN);
     }
 
     /** Ids des departements diriges (memorise pour la requete). */
     public function ledDepartmentIds(): array
     {
+        if ($this->isPlatformManager()) {
+            return [];
+        }
+
         return $this->ledDepartmentIdsCache ??= $this->ledDepartments()->pluck('departments.id')->map(fn ($id) => (int) $id)->all();
     }
 
     /** Toutes les cles de permissions : roles + responsabilite de departement. */
     public function permissionKeys(): Collection
     {
+        if ($this->isPlatformManager()) {
+            return collect(PlatformManager::permissions());
+        }
         // Cache lie a la collection de roles chargee : un rechargement des roles le renouvelle.
         $roles = $this->roles;
         if ($this->permissionCache === null || $this->permissionCacheFor !== $roles) {
@@ -187,6 +230,11 @@ class User extends Authenticatable
     /** Le super admin a tous les droits ; sinon on verifie la permission. */
     public function hasPermission(string $key): bool
     {
+        // Compte de gestion : liste fermee de permissions de gestion (refus par defaut, aucune donnee confidentielle).
+        if ($this->isPlatformManager()) {
+            return PlatformManager::allows($key);
+        }
+
         return $this->isSuperAdmin() || $this->permissionKeys()->contains($key);
     }
 
@@ -231,6 +279,10 @@ class User extends Authenticatable
     /** @return array<int> */
     private function scopeIds(string $kind): array
     {
+        if ($this->isPlatformManager()) {
+            return [];
+        }
+
         return $this->roles->where('pivot.scope_kind', $kind)
             ->pluck('pivot.scope_id')->filter()->map(fn ($id) => (int) $id)->unique()->values()->all();
     }
@@ -248,6 +300,10 @@ class User extends Authenticatable
      */
     public function canViewMember(self $target): bool
     {
+        // Le compte de gestion principal n'est pas un membre : il n'a pas de fiche a consulter.
+        if ($target->isPlatformManager()) {
+            return false;
+        }
         if ($this->hasPermission('members.view_all')) {
             return true;
         }
@@ -264,6 +320,9 @@ class User extends Authenticatable
      */
     public function canManageMember(self $target): bool
     {
+        if ($target->isPlatformManager()) {
+            return false;
+        }
         if ($this->hasPermission('members.view_all')) {
             return true;
         }
@@ -294,6 +353,9 @@ class User extends Authenticatable
     /** Peut-il voir les FISS de ce membre (contenu, fiche du mois remplie ou non, historique) ? */
     public function canViewFissOf(self $target): bool
     {
+        if ($target->isPlatformManager()) {
+            return false;
+        }
         $tribeIds = $this->fissTribeIds();
         if ($tribeIds === null) {
             return true;

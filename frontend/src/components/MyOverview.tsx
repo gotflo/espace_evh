@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, peek } from '../api/client'
+import { usePulse } from '../pulse'
 import type { MyOverviewData } from '../types'
 
 type Mood = 'great' | 'good' | 'meh' | 'bad' | 'idle'
@@ -46,9 +47,11 @@ function StatCard({ mood, value, unit, label, sub, action, onClick, children }: 
  */
 export function MyOverview() {
   const navigate = useNavigate()
-  const [d, setD] = useState<MyOverviewData | null>(null)
+  const [d, setD] = useState<MyOverviewData | null>(() => peek<MyOverviewData>('/me/overview') ?? null)
   const [sheet, setSheet] = useState<'attendance' | 'rehearsal' | null>(null)
-  useEffect(() => { api<MyOverviewData>('/me/overview').then(setD).catch(() => setD(null)) }, [])
+  const load = useCallback(() => { api<MyOverviewData>('/me/overview').then(setD).catch(() => {}) }, [])
+  useEffect(() => { load() }, [load])
+  usePulse(['attendance', 'fiss', 'events'], load)
   if (!d) return <section className="gstat-grid">{[0, 1, 2, 3].map((i) => <div key={i} className="skeleton skeleton-tile" />)}</section>
 
   const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -68,7 +71,7 @@ export function MyOverview() {
           action={d.fiss.filled ? 'Voir ma fiche' : 'Remplir'} onClick={() => navigate('/ma-fiche')}>
           <Sparkline values={d.fiss.trend.map((t) => t.score)} />
         </StatCard>
-        <StatCard mood={noteMood} value={d.note_moyenne ?? '—'} unit={d.note_moyenne != null ? '/20' : ''} label="Vertumètre"
+        <StatCard mood={noteMood} value={d.note_moyenne ?? '—'} unit={d.note_moyenne != null ? '/20' : ''} label="Notes"
           sub="moyenne des notes" action="Voir mes notes" onClick={() => scrollTo('mes-notes')} />
         <StatCard mood={assiduiteMood} value={d.assiduite} label="Assiduité" sub="présences (3 mois)" action="Détails" onClick={() => setSheet('attendance')} />
         <StatCard mood={d.parcours > 0 ? 'good' : 'idle'} value={d.parcours} label="Parcours" sub="étapes franchies" action="Mes étapes" onClick={() => scrollTo('mon-parcours')} />

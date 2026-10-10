@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { api, ApiError } from '../api/client'
+import { api, ApiError, peek } from '../api/client'
 import { AppLayout } from '../components/AppLayout'
 import { EventEditor } from '../components/EventEditor'
 import { usePulse } from '../pulse'
@@ -95,7 +95,7 @@ export default function Calendar() {
     catch { return { birthdays: true, holidays: true, tasks: true } }
   })
   const [data, setData] = useState<CalendarData | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [modal, setModal] = useState<CalendarItem | null>(null)
   // Editeur : { date } pour programmer un nouveau, { event } pour modifier.
@@ -118,7 +118,12 @@ export default function Calendar() {
       .finally(() => setLoading(false))
   }, [fromS, toS])
 
-  useEffect(() => { setLoading(true); load() }, [load])
+  // Periode deja vue : affichee tout de suite (mise a jour en silence) ; sinon petit indicateur.
+  useLayoutEffect(() => {
+    const known = peek<CalendarData>(`/calendar?from=${fromS}&to=${toS}`)
+    if (known) setData(known); else setLoading(true)
+    load()
+  }, [load, fromS, toS])
   usePulse(['events', 'exercises'], load)
 
   // L'URL reflete la vue : lien partageable, retour arriere, liens des notifications.

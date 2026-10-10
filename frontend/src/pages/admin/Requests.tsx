@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, ApiError } from '../../api/client'
+import { api, ApiError, peek } from '../../api/client'
+import { usePulse } from '../../pulse'
 import { AppLayout } from '../../components/AppLayout'
 import { SkeletonCard } from '../../components/Skeleton'
 import type { AdminRequest, RequestStatus } from '../../types'
@@ -12,20 +13,21 @@ const NEXT: { key: RequestStatus; label: string }[] = [
 ]
 
 export default function Requests() {
-  const [items, setItems] = useState<AdminRequest[]>([])
-  const [loading, setLoading] = useState(true)
+  const [items, setItems] = useState<AdminRequest[]>(() => peek<{ requests: AdminRequest[] }>('/admin/requests')?.requests ?? [])
+  // Liste deja vue : affichee tout de suite ; les mises a jour (apres une action) se font en silence.
+  const [loading, setLoading] = useState(() => !peek('/admin/requests'))
   const [error, setError] = useState('')
   const [replyFor, setReplyFor] = useState<number | null>(null)
   const [replyText, setReplyText] = useState('')
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(() => {
-    setLoading(true)
     api<{ requests: AdminRequest[] }>('/admin/requests')
-      .then((r) => setItems(r.requests)).catch(() => setItems([]))
+      .then((r) => setItems(r.requests)).catch(() => {})
       .finally(() => setLoading(false))
   }, [])
   useEffect(() => { load() }, [load])
+  usePulse('requests', load)
 
   async function setStatus(id: number, status: RequestStatus) {
     setError('')

@@ -24,6 +24,7 @@ function* files(dir) {
 
 function paths(node) {
   if (ts.isStringLiteralLike(node)) return [node.text]
+  if (ts.isParenthesizedExpression(node)) return paths(node.expression)
   if (ts.isConditionalExpression(node)) return [...paths(node.whenTrue), ...paths(node.whenFalse)]
   if (ts.isTemplateExpression(node)) {
     let result = [node.head.text]
@@ -81,6 +82,17 @@ function localBuilder(source, name) {
 for (const file of files(join(root, 'src'))) {
   const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true)
   function visit(node) {
+    // Adresses lues en avance (survol d'un lien, ouverture de l'accueil) : ce sont des lectures (GET).
+    if (/utils[\\/]routeData\.ts$/.test(file) && ts.isStringLiteralLike(node) && ts.isArrayLiteralExpression(node.parent)) {
+      const uri = `api${node.text.split('?')[0]}`
+      checks++
+      if (!routes.some(route => route.method.split('|').includes('GET') && route.uri.split('/').length === uri.split('/').length
+        && route.uri.split('/').every((part, i) => /^\{[^}]+\}$/.test(part) || part === uri.split('/')[i]))) {
+        failures.push(`${relative(root, file)}: route absente : GET ${uri}`)
+      }
+    }
+    // Le client lui-meme (api, warm) transmet une adresse recue : ce sont ses appelants qui sont verifies.
+    if (/api[\\/]client\.ts$/.test(file)) { ts.forEachChild(node, visit); return }
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'api') {
       calls++
       const location = `${relative(root, file)}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`

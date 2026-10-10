@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, peek } from '../api/client'
 import { usePulse } from '../pulse'
 import type { AdminRequest } from '../types'
 
 /** Widget tableau de bord : dernieres demandes des fideles + compteur de nouvelles. */
 export function DashRequests() {
   const navigate = useNavigate()
-  const [data, setData] = useState<{ requests: AdminRequest[]; new_count: number } | null>(null)
+  const [data, setData] = useState<{ requests: AdminRequest[]; new_count: number } | null>(() => peek<{ requests: AdminRequest[]; new_count: number }>('/admin/requests') ?? null)
 
   const load = useCallback(() => {
     api<{ requests: AdminRequest[]; new_count: number }>('/admin/requests')

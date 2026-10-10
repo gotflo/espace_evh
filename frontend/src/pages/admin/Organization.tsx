@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, ApiError } from '../../api/client'
+import { api, ApiError, peek } from '../../api/client'
 import { invalidateReference } from '../../api/reference'
 import { useAuth } from '../../auth/AuthContext'
 import { AppLayout } from '../../components/AppLayout'
@@ -185,12 +185,12 @@ function OrgSection({ title, singular, items, endpoint, canManage, showLeaders, 
 
 export default function Organization() {
   const { hasPermission } = useAuth()
-  const [data, setData] = useState<OrgData | null>(null)
+  const [data, setData] = useState<OrgData | null>(() => peek<OrgData>('/admin/organization') ?? null)
   const [error, setError] = useState('')
 
   const load = useCallback(() => {
     invalidateReference() // les listes tribus/departements ont pu changer
-    api<OrgData>('/admin/organization').then(setData).catch(() => setData(null))
+    api<OrgData>('/admin/organization').then(setData).catch(() => {})
   }, [])
   useEffect(() => { load() }, [load])
 

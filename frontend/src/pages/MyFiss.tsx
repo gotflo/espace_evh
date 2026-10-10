@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { clearDraft, readDraft, useDraft } from '../utils/drafts'
-import { api } from '../api/client'
+import { api, peek } from '../api/client'
+import { toast } from '../toast'
+import { usePulse } from '../pulse'
 import { useAuth } from '../auth/AuthContext'
 import { AppLayout } from '../components/AppLayout'
 import { SkeletonCard } from '../components/Skeleton'
 import { FissEvolution } from '../components/FissEvolution'
 import { FissDetail } from '../components/FissDetail'
-import type { FissData, FissForm, FissIndex } from '../types'
+import type { FissData, FissForm, FissIndex, InnerLifeKey, InnerLifeQuestion } from '../types'
 import { Icon } from '../components/Icon'
+import { de } from '../utils/french'
 
 const SANCT = [['bien', 'Bien'], ['moyen', 'Moyen'], ['mal', 'Mal']]
 
@@ -15,6 +18,7 @@ const EMPTY: FissForm = {
   meditation: null, priere: null, jeune: null,
   sanctification_corps: null, sanctification_ame: null, sanctification_esprit: null,
   situation_financiere: null, situation_familiale: null, situation_conjugale: null, comment: null,
+  addiction: null, addiction_victory: null, companions: null, inner_wound: null, difficult_situations: null, discouragement: null,
 }
 const FIELDS = Object.keys(EMPTY) as (keyof FissForm)[]
 
@@ -44,6 +48,36 @@ function SanctField({ label, value, onChange }: { label: string; value: string |
           <button key={k} type="button" className={`pill-choice sanct-${k} ${value === k ? 'on' : ''}`} onClick={() => onChange(k)}>{l}</button>
         ))}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Question de la vie interieure : repliee par defaut (moins intimidant sur telephone), ouverte
+ * d'un appui ; une question deja renseignee reste ouverte et porte une coche.
+ */
+function InnerLifeField({ id, q, value, onChange }: { id: InnerLifeKey; q: InnerLifeQuestion; value: string | null | undefined; onChange: (v: string | null) => void }) {
+  const [open, setOpen] = useState(true)
+  const filled = !!value?.trim()
+  return (
+    <div className={`inner-q ${open ? 'open' : ''} ${filled ? 'filled' : 'todo'}`}>
+      <button type="button" className="inner-q-head" aria-expanded={open} aria-controls={`inner-${id}`} onClick={() => setOpen((o) => !o)}>
+        <span className="inner-q-check" aria-hidden>{filled ? <Icon name="check" size={14} /> : null}</span>
+        <span className="inner-q-text">
+          <strong>{q.label}</strong>
+          <small>{q.question}</small>
+        </span>
+        <Icon name="chevron" size={18} className="inner-q-chevron" />
+      </button>
+      {open && (
+        <div className="inner-q-body" id={`inner-${id}`}>
+          {(q.verse || q.reference) && (
+            <p className="inner-q-verse">{q.verse && <>« {q.verse} » </>}<cite>{q.reference}</cite></p>
+          )}
+          <textarea className="input" rows={3} maxLength={3000} aria-label={q.question} placeholder={q.placeholder}
+            value={value ?? ''} onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)} />
+        </div>
+      )}
     </div>
   )
 }
@@ -109,22 +143,31 @@ export default function MyFiss() {
   const { profile } = useAuth()
   // Question « situation conjugale » seulement si le profil indique « Marié(e) » (le serveur applique la meme regle).
   const married = profile?.marital_status === 'marie'
-  const [data, setData] = useState<FissData | null>(null)
-  const [form, setForm] = useState<FissForm>(EMPTY)
+  // Page deja ouverte : affichee tout de suite (derniere lecture), puis mise a jour en silence.
+  const [data, setData] = useState<FissData | null>(() => peek<FissData>('/me/fiss') ?? null)
+  const [form, setForm] = useState<FissForm>(() => {
+    const known = peek<FissData>('/me/fiss')
+    return known && !known.current ? (readDraft<FissForm>('fiss:new') ?? EMPTY) : EMPTY
+  })
   // null = nouvelle fiche du mois ; sinon fiche existante deverrouillee en cours de modification.
   const [editing, setEditing] = useState<FissForm | null>(null)
   const [busy, setBusy] = useState(false)
   const [requestFor, setRequestFor] = useState<FissForm | null>(null)
   const [reason, setReason] = useState('')
 
-  const load = useCallback(() => {
+  // reset : apres un envoi, la saisie repart de zero. Mise a jour silencieuse a l'ouverture : la
+  // saisie deja commencee n'est jamais remplacee.
+  const load = useCallback((reset = true) => {
     api<FissData>('/me/fiss').then((d) => {
       setData(d)
+      if (!reset) return
       setEditing(null)
       setForm(d.current ? { ...EMPTY } : (readDraft<FissForm>('fiss:new') ?? EMPTY))
-    }).catch(() => setData(null))
+    }).catch(() => {})
   }, [])
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load(!peek('/me/fiss')) }, [load])
+  // Deverrouillage accorde, fiche validee... : mise a jour en silence, sans toucher a la saisie en cours.
+  usePulse(['fiss', 'validations'], () => load(false))
 
   const set = <K extends keyof FissForm>(k: K, v: FissForm[K]) => setForm((f) => ({ ...f, [k]: v }))
   // Brouillon de la fiche en cours de saisie (jamais perdue si l'envoi echoue).
@@ -167,12 +210,21 @@ export default function MyFiss() {
 
   if (!data) return <AppLayout title="Fiche de santé spirituelle"><div className="panel-grid"><SkeletonCard /><SkeletonCard /></div></AppLayout>
 
-  // Bouton actif seulement si toutes les questions affichees ont une reponse (commentaire facultatif)
-  // et, pour une fiche deverrouillee, si quelque chose a change.
+  // Bouton actif seulement si toutes les questions affichees ont une reponse, vie interieure comprise
+  // (seul le commentaire est facultatif) et, pour une fiche deverrouillee, si quelque chose a change.
+  const innerKeys = Object.keys(data.inner_life ?? {}) as InnerLifeKey[]
   const required: (keyof FissForm)[] = ['meditation', 'priere', 'jeune', 'sanctification_corps', 'sanctification_ame', 'sanctification_esprit',
-    'situation_financiere', 'situation_familiale', ...(married ? ['situation_conjugale' as const] : [])]
-  const missing = required.filter((k) => form[k] === null || form[k] === undefined || form[k] === '').length
+    'situation_financiere', 'situation_familiale', ...(married ? ['situation_conjugale' as const] : []), ...innerKeys]
+  const missing = required.filter((k) => form[k] === null || form[k] === undefined || String(form[k]).trim() === '').length
+  const innerMissing = innerKeys.filter((k) => !String(form[k] ?? '').trim()).length
   const changed = !editing || FIELDS.some((k) => (form[k] ?? null) !== (editing[k] ?? null))
+
+  const last = data.history[0] ?? null
+  function prefill() {
+    if (!last) return
+    setForm(Object.fromEntries(FIELDS.map((k) => [k, k === 'comment' || (k === 'situation_conjugale' && !married) ? null : (last[k] ?? null)])) as unknown as FissForm)
+    toast.success('Vérifiez chaque rubrique et ajustez ce qui a changé avant d’enregistrer.', { title: 'Réponses reprises' })
+  }
 
   const rl = data.reminder.level
   const showForm = !data.filled || editing !== null
@@ -184,7 +236,7 @@ export default function MyFiss() {
           <span className="fiss-reminder-icon">{rl === 'urgent' ? '⏰' : '📝'}</span>
           <div>
             <strong>{rl === 'urgent' ? 'Derniers jours !' : 'Fiche du mois à remplir'}</strong>
-            <small>Votre fiche de {data.period_label} n'est pas encore remplie{data.reminder.days_left != null ? ` · ${data.reminder.days_left} jour(s) avant la fin du mois` : ''}.</small>
+            <small>Votre fiche {de(data.period_label)} n'est pas encore remplie{data.reminder.days_left != null ? ` · ${data.reminder.days_left} jour(s) avant la fin du mois` : ''}.</small>
           </div>
         </div>
       )}
@@ -198,7 +250,7 @@ export default function MyFiss() {
           {data.history[0] && <FissEvolution current={data.current} previous={data.history[0]} previousLabel={data.history[0].period_label} />}
           <section className="panel mt">
             <div className="panel-head">
-              <h3>Ma fiche de {data.period_label}</h3>
+              <h3>Ma fiche {de(data.period_label)}</h3>
               {data.current.spiritual_score != null && <span className="score-pill">{Math.round(data.current.spiritual_score)} %</span>}
             </div>
             <FissDetail form={data.current} />
@@ -210,10 +262,18 @@ export default function MyFiss() {
         <div className="lock-card open">
           <span className="lock-icon"><Icon name="edit" size={20} /></span>
           <div className="lock-text">
-            <strong>Modification de la fiche de {editing.period_label}</strong>
+            <strong>Modification de la fiche {de(editing.period_label)}</strong>
             <span>Après enregistrement, la fiche sera de nouveau verrouillée.</span>
           </div>
           <button className="btn btn-ghost small" onClick={() => { setEditing(null); setForm(EMPTY) }}>Annuler</button>
+        </div>
+      )}
+
+      {/* Moins de saisie : les reponses du mois precedent reprises en un clic, a ajuster avant d'enregistrer. */}
+      {showForm && !editing && last && (
+        <div className="fiss-prefill">
+          <span className="fiss-prefill-text"><Icon name="renew" size={18} /> Gagnez du temps : reprenez vos réponses {de(last.period_label)}, puis ajustez ce qui a changé.</span>
+          <button type="button" className="btn btn-ghost small" onClick={prefill}>Reprendre mes réponses</button>
         </div>
       )}
 
@@ -222,38 +282,69 @@ export default function MyFiss() {
           <div className="fiss-main">
             <section className="panel">
               <div className="panel-head"><h3>Vie spirituelle <span className="fiss-total">{vieSpi}/60</span></h3></div>
-              <ScoreField label="Méditation" value={form.meditation} onChange={(v) => set('meditation', v)} />
-              <ScoreField label="Prière" value={form.priere} onChange={(v) => set('priere', v)} />
-              <ScoreField label="Jeûne" value={form.jeune} onChange={(v) => set('jeune', v)} />
+              {/* Champs cote a cote des que la largeur le permet (pas de grand vide a droite). */}
+              <div className="fiss-grid">
+                <ScoreField label="Méditation" value={form.meditation} onChange={(v) => set('meditation', v)} />
+                <ScoreField label="Prière" value={form.priere} onChange={(v) => set('priere', v)} />
+                <ScoreField label="Jeûne" value={form.jeune} onChange={(v) => set('jeune', v)} />
+              </div>
               <div className="fiss-subtitle">Sanctification</div>
-              <SanctField label="Du corps (impudicité, mensonge, excès...)" value={form.sanctification_corps} onChange={(v) => set('sanctification_corps', v)} />
-              <SanctField label="De l'âme (colère, jalousie, rancunes...)" value={form.sanctification_ame} onChange={(v) => set('sanctification_ame', v)} />
-              <SanctField label="De l'esprit (idolâtrie, fausses doctrines...)" value={form.sanctification_esprit} onChange={(v) => set('sanctification_esprit', v)} />
+              <div className="fiss-grid fiss-grid-wide">
+                <SanctField label="Du corps (impudicité, mensonge, excès...)" value={form.sanctification_corps} onChange={(v) => set('sanctification_corps', v)} />
+                <SanctField label="De l'âme (colère, jalousie, rancunes...)" value={form.sanctification_ame} onChange={(v) => set('sanctification_ame', v)} />
+                <SanctField label="De l'esprit (idolâtrie, fausses doctrines...)" value={form.sanctification_esprit} onChange={(v) => set('sanctification_esprit', v)} />
+              </div>
             </section>
 
             <section className="panel mt">
               <div className="panel-head"><h3>Vie sociale <span className="fiss-total">{vieSoc}/{form.situation_conjugale != null ? 60 : 40}</span></h3></div>
-              <ScoreField label="Situation financière" value={form.situation_financiere} onChange={(v) => set('situation_financiere', v)} />
-              <ScoreField label="Situation familiale" hint="(famille biologique)" value={form.situation_familiale} onChange={(v) => set('situation_familiale', v)} />
-              {married && (
-                <ScoreField label="Situation conjugale" hint="(mariés uniquement)" value={form.situation_conjugale} onChange={(v) => set('situation_conjugale', v)} />
-              )}
+              <div className="fiss-grid">
+                <ScoreField label="Situation financière" value={form.situation_financiere} onChange={(v) => set('situation_financiere', v)} />
+                <ScoreField label="Situation familiale" hint="(famille biologique)" value={form.situation_familiale} onChange={(v) => set('situation_familiale', v)} />
+                {married && (
+                  <ScoreField label="Situation conjugale" hint="(mariés uniquement)" value={form.situation_conjugale} onChange={(v) => set('situation_conjugale', v)} />
+                )}
+              </div>
+            </section>
+
+            {data.inner_life && (
+              <section className="panel mt inner-life">
+                <div className="panel-head inner-life-head">
+                  <h3>Vie intérieure</h3>
+                  <span className="inner-life-badge"><Icon name="lock" size={13} /> Confidentiel</span>
+                </div>
+                <p className="helper inner-life-intro">
+                  Chaque question demande une réponse (« Aucune » ou « Non » si rien à signaler). Seuls votre patriarche, l'Assistant Pasteur de votre tribu et les pasteurs vous lisent, pour mieux vous accompagner.
+                </p>
+                {innerMissing > 0 && <p className="helper inner-life-left">{innerMissing === 1 ? 'Encore 1 question' : `Encore ${innerMissing} questions`} de la vie intérieure.</p>}
+                <div className="inner-life-grid">
+                  {(Object.entries(data.inner_life) as [InnerLifeKey, InnerLifeQuestion][]).map(([k, q]) => (
+                    <InnerLifeField key={`${k}-${editing?.id ?? 'new'}`} id={k} q={q} value={form[k]} onChange={(v) => set(k, v)} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <section className="panel mt">
               <div className="fiss-field">
                 <label>Commentaire (optionnel)</label>
                 <textarea aria-label="Commentaire (optionnel)" className="input" rows={3} value={form.comment ?? ''} onChange={(e) => set('comment', e.target.value)} />
               </div>
               {missing > 0 && <p className="helper mt">{missing === 1 ? 'Encore 1 réponse' : `Encore ${missing} réponses`} avant de pouvoir enregistrer.</p>}
               <button className="btn btn-primary mt" disabled={busy || missing > 0 || !changed} onClick={save}>
-                {busy ? <span className="spinner" /> : editing ? 'Enregistrer la modification' : 'Enregistrer ma fiche du mois'}
+                {busy ? <span className="spinner" /> : editing ? 'Enregistrer' : 'Enregistrer ma fiche'}
               </button>
             </section>
           </div>
 
+          {/* Bareme de notation en bas de la fiche, en grille sur toute la largeur. */}
           <aside className="fiss-aside">
             <div className="panel">
               <div className="panel-head"><h3>Indices de notation</h3></div>
               <p className="helper" style={{ marginTop: 0 }}>Aidez-vous de ce barème pour vous noter.</p>
-              {Object.values(data.indices).map((idx, i) => <IndexBox key={i} idx={idx} />)}
+              <div className="fiss-indices">
+                {Object.values(data.indices).map((idx, i) => <IndexBox key={i} idx={idx} />)}
+              </div>
             </div>
           </aside>
         </div>
@@ -292,7 +383,7 @@ export default function MyFiss() {
               <button className="btn-link" onClick={() => setRequestFor(null)}>Fermer</button>
             </div>
             <p className="event-desc">
-              Fiche de {requestFor.period_label}. Votre patriarche recevra votre demande. S'il l'accepte, vous pourrez modifier la fiche une fois
+              Fiche {de(requestFor.period_label)}. Votre patriarche recevra votre demande. S'il l'accepte, vous pourrez modifier la fiche une fois
               ({requestFor.requests_left} demande(s) restante(s)).
             </p>
             <div className="field mt">

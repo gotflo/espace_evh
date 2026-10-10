@@ -1,34 +1,39 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api } from '../api/client'
+import { api, peek } from '../api/client'
+import { usePulse } from '../pulse'
 import { useAuth } from '../auth/AuthContext'
 import { AppLayout } from '../components/AppLayout'
 import { SkeletonCard } from '../components/Skeleton'
 import type { ServiceItem } from '../types'
 import { Icon } from '../components/Icon'
+import { toast } from '../toast'
 
-/** Servir : le fidele choisit le(s) departement(s) ou il veut servir et les rejoint aussitot. */
+/** Servir : le fidele demande a rejoindre un ou plusieurs departements ; le responsable valide chaque demande. */
 export default function Services() {
   const { refresh } = useAuth()
-  const [items, setItems] = useState<ServiceItem[] | null>(null)
+  const [items, setItems] = useState<ServiceItem[] | null>(() => peek<{ services: ServiceItem[] }>('/me/services')?.services ?? null)
   const [busy, setBusy] = useState<number | null>(null)
   const [confirmJoin, setConfirmJoin] = useState<ServiceItem | null>(null)
   const [query, setQuery] = useState('')
 
   const load = useCallback(() => {
-    api<{ services: ServiceItem[] }>('/me/services').then((r) => setItems(r.services)).catch(() => setItems([]))
+    api<{ services: ServiceItem[] }>('/me/services').then((r) => setItems(r.services)).catch(() => setItems((p) => p ?? []))
   }, [])
   useEffect(() => { load() }, [load])
+  // Demande acceptee ou refusee par le responsable : la liste se met a jour d'elle-meme.
+  usePulse('services', load)
 
   async function join(s: ServiceItem) {
     setConfirmJoin(null); setBusy(s.id)
     try {
-      await api(`/me/services/${s.id}/join`, { method: 'POST' })
+      const r = await api<{ message: string }>(`/me/services/${s.id}/join`, { method: 'POST', toast: false })
+      toast.success(r.message)
       load(); refresh()
     } catch { /* le toast d'erreur est affiche automatiquement */ } finally { setBusy(null) }
   }
 
   async function leave(s: ServiceItem) {
-    if (!confirm(`Quitter le service ${s.name} ? Ses responsables seront prévenus.`)) return
+    if (!confirm(s.pending ? `Retirer votre demande pour le service ${s.name} ?` : `Quitter le service ${s.name} ? Ses responsables seront prévenus.`)) return
     setBusy(s.id)
     try {
       await api(`/me/services/${s.id}`, { method: 'DELETE' })
@@ -37,8 +42,9 @@ export default function Services() {
   }
 
   const mine = (items ?? []).filter((s) => s.joined)
+  const waiting = (items ?? []).filter((s) => s.pending)
   const q = query.trim().toLowerCase()
-  const others = (items ?? []).filter((s) => !s.joined && (!q || s.name.toLowerCase().includes(q) || (s.description ?? '').toLowerCase().includes(q)))
+  const others = (items ?? []).filter((s) => !s.joined && !s.pending && (!q || s.name.toLowerCase().includes(q) || (s.description ?? '').toLowerCase().includes(q)))
 
   return (
     <AppLayout title="Service" subtitle="Rejoignez un service et mettez vos dons au service de l'église">
@@ -54,11 +60,20 @@ export default function Services() {
         <>
           <h3 className="section-label">Mes services ({mine.length})</h3>
           {mine.length === 0 ? (
-            <p className="helper serve-empty">Vous ne servez dans aucun département pour l'instant. Choisissez un service ci-dessous : l'inscription est immédiate et son responsable sera prévenu.</p>
+            <p className="helper serve-empty">Vous ne servez dans aucun département pour l'instant. Choisissez un service ci-dessous : son responsable validera votre inscription.</p>
           ) : (
             <div className="serve-grid">
               {mine.map((s) => <ServiceCard key={s.id} s={s} busy={busy === s.id} onJoin={() => setConfirmJoin(s)} onLeave={() => leave(s)} />)}
             </div>
+          )}
+
+          {waiting.length > 0 && (
+            <>
+              <h3 className="section-label">En attente de validation ({waiting.length})</h3>
+              <div className="serve-grid">
+                {waiting.map((s) => <ServiceCard key={s.id} s={s} busy={busy === s.id} onJoin={() => setConfirmJoin(s)} onLeave={() => leave(s)} />)}
+              </div>
+            </>
           )}
 
           <div className="toolbar serve-toolbar">
@@ -76,14 +91,14 @@ export default function Services() {
         <div className="modal-overlay" onClick={() => setConfirmJoin(null)}>
           <div className="modal-box" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <div className="panel-head"><h3>Servir dans {confirmJoin.name}</h3></div>
-            <p className="event-desc">En vous inscrivant, vous intégrez ce département et commencez à y servir :</p>
+            <p className="event-desc">Votre demande est envoyée au responsable du service, qui la valide :</p>
             <ul className="notif-help">
-              <li>{confirmJoin.leader ? `${confirmJoin.leader}, responsable du service, est prévenu(e) pour vous accueillir` : 'Les responsables du service sont prévenus pour vous accueillir'}</li>
-              <li>Vous recevez les annonces et les événements du service</li>
-              <li>Ses répétitions et réunions apparaissent dans votre calendrier</li>
+              <li>{confirmJoin.leader ? `${confirmJoin.leader}, responsable du service, reçoit votre demande` : 'Les responsables du service reçoivent votre demande'}</li>
+              <li>Vous êtes prévenu(e) dès qu’elle est validée</li>
+              <li>Ensuite, vous recevez les annonces et les événements du service, et ses réunions apparaissent dans votre calendrier</li>
             </ul>
             <div className="editor-actions mt">
-              <button className="btn btn-primary" onClick={() => join(confirmJoin)}>Je m'inscris</button>
+              <button className="btn btn-primary" onClick={() => join(confirmJoin)}>Envoyer ma demande</button>
               <button className="btn btn-ghost" onClick={() => setConfirmJoin(null)}>Annuler</button>
             </div>
           </div>
@@ -103,6 +118,7 @@ function ServiceCard({ s, busy, onJoin, onLeave }: { s: ServiceItem; busy: boole
           <span className="serve-count">{s.members_count} serviteur(s)</span>
         </div>
         {s.joined && <span className="status-pill on">Je sers ici</span>}
+        {s.pending && <span className="status-pill pending">En attente</span>}
       </div>
       {s.description && <p className="serve-desc">{s.description}</p>}
       <div className="serve-meta">
@@ -120,7 +136,9 @@ function ServiceCard({ s, busy, onJoin, onLeave }: { s: ServiceItem; busy: boole
       <div className="serve-actions">
         {s.joined
           ? <button className="btn-link" disabled={busy} onClick={onLeave}>{busy ? <span className="spinner" /> : 'Quitter ce service'}</button>
-          : <button className="btn btn-primary small" disabled={busy} onClick={onJoin}>{busy ? <span className="spinner" /> : "M'inscrire"}</button>}
+          : s.pending
+            ? <button className="btn-link" disabled={busy} onClick={onLeave}>{busy ? <span className="spinner" /> : 'Retirer ma demande'}</button>
+            : <button className="btn btn-primary small" disabled={busy} onClick={onJoin}>{busy ? <span className="spinner" /> : "M'inscrire"}</button>}
       </div>
     </article>
   )

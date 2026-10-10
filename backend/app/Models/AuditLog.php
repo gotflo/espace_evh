@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\PlatformManager;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -21,6 +23,21 @@ class AuditLog extends Model
         'context' => 'array',
         'created_at' => 'datetime',
     ];
+
+    /**
+     * Journal ordinaire : sans les lignes du compte de gestion principal (auteur ou sujet), meme anterieures
+     * a son activation. Ses operations sont dans le journal de securite prive.
+     */
+    public function scopeOrdinary(Builder $query): Builder
+    {
+        $ids = PlatformManager::userIds();
+        if (! $ids) {
+            return $query;
+        }
+
+        return $query->where(fn ($q) => $q->whereNull('user_id')->orWhereNotIn('user_id', $ids))
+            ->where(fn ($q) => $q->whereNull('member_user_id')->orWhereNotIn('member_user_id', $ids));
+    }
 
     public function actor(): BelongsTo
     {

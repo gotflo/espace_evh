@@ -7,6 +7,7 @@ use App\Models\Announcement;
 use App\Services\Notifier;
 use App\Support\Audience;
 use App\Support\Audit;
+use App\Support\PlatformManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -31,7 +32,7 @@ class AnnouncementController extends Controller
                 'scopes' => $a->audienceList(),
                 'recipients_count' => $a->recipients_count,
                 'created_at' => $a->created_at->toDateString(),
-                'author' => $a->creator?->profile?->full_name ?: null,
+                'author' => PlatformManager::nameOf($a->creator),
             ])->values();
 
         return response()->json(['announcements' => $items]);

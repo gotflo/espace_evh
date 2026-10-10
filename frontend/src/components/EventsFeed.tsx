@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, peek } from '../api/client'
 import { usePulse } from '../pulse'
 import type { EventOccurrence } from '../types'
 import { CAT_LABEL, longDay, optimisticRsvp, parseYmd, relativeDay, rsvpOccurrence, timeRange } from '../utils/events'
@@ -13,7 +13,7 @@ import { Icon } from './Icon'
  */
 export function EventsFeed({ days = 30, limit = 8 }: { days?: number; limit?: number }) {
   const navigate = useNavigate()
-  const [items, setItems] = useState<EventOccurrence[] | null>(null)
+  const [items, setItems] = useState<EventOccurrence[] | null>(() => peek<{ events: EventOccurrence[] }>(`/me/events?days=${days}`)?.events ?? null)
   const [expanded, setExpanded] = useState(false)
   const [open, setOpen] = useState<string | null>(null)
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { api } from '../../api/client'
+import { api, ApiError, peek } from '../../api/client'
 import { AppLayout } from '../../components/AppLayout'
 import { Icon } from '../../components/Icon'
 import { SkeletonCard } from '../../components/Skeleton'
@@ -26,11 +26,14 @@ function Detail({ id, onBack, onEdit }: { id: number; onBack: () => void; onEdit
   async function exportPdf(r: LeaderReportDetail) {
     setExporting(true)
     try {
-      const { downloadLeaderReportPdf } = await import('../../reports/pdf')
-      await downloadLeaderReportPdf(r)
-      api(`/admin/leader-reports/${r.id}/exported`, { method: 'POST', toast: false }).catch(() => {})
+      // Rapport fourni par le serveur pour l'export (droit verifie et export journalise par lui).
+      const [{ downloadLeaderReportPdf }, data] = await Promise.all([
+        import('../../reports/pdf'),
+        api<LeaderReportDetail>(`/admin/leader-reports/${r.id}/export`),
+      ])
+      await downloadLeaderReportPdf(data)
       toast.success('Le rapport PDF a été téléchargé.', { title: 'PDF prêt' })
-    } catch { toast.error('La génération du PDF a échoué. Réessayez.') } finally { setExporting(false) }
+    } catch (err) { toast.error(err instanceof ApiError ? err.firstMessage : 'La génération du PDF a échoué. Réessayez.') } finally { setExporting(false) }
   }
 
   useEffect(() => {
@@ -64,7 +67,7 @@ function Detail({ id, onBack, onEdit }: { id: number; onBack: () => void; onEdit
         </div>
         <div className="row-actions">
           {report.can_edit && <button className="btn btn-primary small" onClick={() => onEdit(report)}>{report.status === 'submitted' ? 'Corriger' : 'Continuer'}</button>}
-          {report.status === 'submitted' && (
+          {report.status === 'submitted' && report.can_export !== false && (
             <button className="btn btn-ghost small" disabled={exporting} onClick={() => exportPdf(report)}>
               {exporting ? <span className="spinner" /> : <><Icon name="download" size={16} /> PDF</>}
             </button>
@@ -105,7 +108,7 @@ function MineCard({ scope, onOpen }: { scope: LeaderReportMine; onOpen: (period:
 
 export default function LeaderReports() {
   const [params, setParams] = useSearchParams()
-  const [data, setData] = useState<LeaderReportsData | null>(null)
+  const [data, setData] = useState<LeaderReportsData | null>(() => peek<LeaderReportsData>('/admin/leader-reports') ?? null)
   const [denied, setDenied] = useState(false)
   const [period, setPeriod] = useState('')
 

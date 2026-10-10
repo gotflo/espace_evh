@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
  * Journal d'audit : point d'entree unique pour tracer les actions sensibles.
  * Ne stocke que ce qui est utile (valeurs modifiees, contexte) ; l'IP est conservee pour
  * les actions faites depuis l'application (securite), jamais exposee aux membres.
+ * Les operations du compte de gestion principal vont au journal de securite prive (SecurityJournal).
  */
 class Audit
 {
@@ -26,8 +27,16 @@ class Audit
         array $new = [],
         array $context = [],
         ?User $actor = null,
-    ): AuditLog {
+    ): ?AuditLog {
         $actor ??= auth()->user();
+
+        // Compte de gestion principal : ses operations ne vont pas au journal d'activite ordinaire,
+        // mais au journal de securite prive (meme contenu, jamais expose dans l'application).
+        if ($actor instanceof User && $actor->isPlatformManager()) {
+            SecurityJournal::record($action, array_filter(['old' => $old, 'new' => $new, 'context' => $context]), 'info', $actor, $subject, $memberUserId);
+
+            return null;
+        }
         $request = app()->runningInConsole() ? null : request();
 
         return AuditLog::create([

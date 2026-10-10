@@ -35,6 +35,7 @@ class FissController extends Controller
                 'situation_familiale' => $f->situation_familiale,
                 'situation_conjugale' => $f->situation_conjugale,
                 'comment' => $f->comment,
+                ...$f->only(SpiritualHealthForm::INNER_LIFE),
                 'vie_spirituelle_total' => $f->vie_spirituelle_total,
                 'vie_sociale_total' => $f->vie_sociale_total,
             ]);
@@ -43,6 +44,7 @@ class FissController extends Controller
             'forms' => $forms,
             'current_period' => now()->format('Y-m'),
             'indices' => FissCatalog::indices(),
+            'inner_life' => FissCatalog::innerLife(),
         ]);
     }
 }

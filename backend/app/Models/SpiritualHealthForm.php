@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SpiritualHealthForm extends Model
 {
@@ -11,6 +12,7 @@ class SpiritualHealthForm extends Model
         'user_id', 'period', 'meditation', 'priere', 'jeune',
         'sanctification_corps', 'sanctification_ame', 'sanctification_esprit',
         'situation_financiere', 'situation_familiale', 'situation_conjugale', 'comment',
+        'addiction', 'addiction_victory', 'companions', 'inner_wound', 'difficult_situations', 'discouragement',
         'submitted_at', 'locked_at', 'edit_count',
     ];
 
@@ -24,9 +26,13 @@ class SpiritualHealthForm extends Model
     public const FIELDS = [
         'meditation', 'priere', 'jeune', 'sanctification_corps', 'sanctification_ame', 'sanctification_esprit',
         'situation_financiere', 'situation_familiale', 'situation_conjugale', 'comment',
+        ...self::INNER_LIFE,
     ];
 
-    public function editRequests(): \Illuminate\Database\Eloquent\Relations\HasMany
+    /** Rubrique « Vie intérieure » : textes libres, facultatifs et confidentiels. */
+    public const INNER_LIFE = ['addiction', 'addiction_victory', 'companions', 'inner_wound', 'difficult_situations', 'discouragement'];
+
+    public function editRequests(): HasMany
     {
         return $this->hasMany(FissEditRequest::class, 'form_id');
     }

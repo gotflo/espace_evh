@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api } from '../api/client'
+import { api, peek } from '../api/client'
 import { usePulse } from '../pulse'
 import type { MyAnnouncement } from '../types'
 
 const CAT: Record<string, string> = { info: 'Info', important: 'Important', evenement: 'Événement' }
 
 export function AnnouncementsFeed() {
-  const [items, setItems] = useState<MyAnnouncement[]>([])
+  const [items, setItems] = useState<MyAnnouncement[]>(() => peek<{ announcements: MyAnnouncement[] }>('/me/announcements')?.announcements ?? [])
 
   const load = useCallback(() => {
     api<{ announcements: MyAnnouncement[] }>('/me/announcements').then((r) => setItems(r.announcements)).catch(() => {})

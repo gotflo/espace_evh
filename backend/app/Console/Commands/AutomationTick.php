@@ -2,25 +2,40 @@
 
 namespace App\Console\Commands;
 
+use App\Http\Controllers\Api\Admin\NewMemberController;
+use App\Models\Assignment;
+use App\Models\DepartmentJoinRequest;
 use App\Models\Event;
 use App\Models\EventParticipation;
 use App\Models\Exercise;
 use App\Models\MemberRequest;
+use App\Models\MonthlyResolution;
 use App\Models\Profile;
 use App\Models\SpiritualHealthForm;
 use App\Models\User;
+use App\Models\VertumetreForm;
 use App\Services\ActivityService;
+use App\Services\AppointmentService;
+use App\Services\AssignmentProgress;
 use App\Services\CalendarService;
+use App\Services\DepartmentJoinService;
 use App\Services\ExerciseProgress;
 use App\Services\FissService;
 use App\Services\GemReportService;
 use App\Services\LeaderReportService;
+use App\Services\MemberMessages;
+use App\Services\Messenger;
 use App\Services\Monitoring\Monitor;
 use App\Services\Notifier;
 use App\Services\ReportService;
 use App\Services\TribeChangeService;
+use App\Services\VertumetreService;
+use App\Services\WelcomeBackService;
 use App\Support\Audience;
+use App\Support\Audit;
 use App\Support\Blessings;
+use App\Support\French;
+use App\Support\PlatformSettings;
 use App\Support\ProfileCompletion;
 use App\Support\Recipients;
 use Illuminate\Console\Command;
@@ -40,7 +55,7 @@ class AutomationTick extends Command
     /** Cle de cache du dernier passage complet (heure, duree, resultat de chaque etape). */
     public const STATUS_KEY = 'automation:last-run';
 
-    protected $signature = 'app:tick {--only= : activity | event-reminders | service-digest | birthdays | weddings | tasks | fiss | profiles | monthly-report | leader-reports | gem-reports | followups | tribe-changes | push-outbox | prune}';
+    protected $signature = 'app:tick {--only= : activity | event-reminders | service-digest | birthdays | weddings | tasks | fiss | vertumetre | profiles | email-invites | monthly-report | leader-reports | gem-reports | resolutions | assignments | appointments | followups | service-joins | rm-renew | absences | tribe-changes | push-outbox | send-outbox | prune}';
 
     protected $description = 'Activité des membres, rappels, anniversaires, FISS, profils, relances et nettoyage.';
 
@@ -54,14 +69,33 @@ class AutomationTick extends Command
             'weddings' => fn () => $this->weddings(),
             'tasks' => fn () => $this->taskReminders(),
             'fiss' => fn () => $this->fiss(),
+            'vertumetre' => fn () => $this->vertumetre(),
             'profiles' => fn () => $this->profileReminders(),
+            // Adresse courriel manquante : une invitation, puis un seul rappel 3 semaines plus tard.
+            'email-invites' => fn () => $this->emailInvites(),
             'monthly-report' => fn () => $this->monthlyReports(),
             'leader-reports' => fn () => $this->leaderReports(),
             'gem-reports' => fn () => $this->gemReports(),
+            'resolutions' => fn () => $this->resolutionReminders(),
+            'assignments' => fn () => $this->assignmentReminders(),
+            // Rendez-vous avec le pasteur : liste du jour, rappels, cloture.
+            'appointments' => fn () => AppointmentService::tick(),
             'followups' => fn () => $this->followUps(),
+            // Inscriptions aux services : relance du responsable, validation automatique si choisie.
+            'service-joins' => fn () => $this->serviceJoins(),
+            // RM oubliees reprises le 15 (seulement si active dans les reglages).
+            'rm-renew' => fn () => $this->renewForgottenResolutions(),
+            // Plus d'une semaine sans connexion : courriel au membre, liste a son patriarche et a son AP.
+            'absences' => fn () => $this->absences(),
             'tribe-changes' => fn () => TribeChangeService::completeApproved(),
             // Secours de app:push-outbox : aucun push ne reste bloque si seule cette tache tourne.
             'push-outbox' => fn () => Notifier::flushOutbox(),
+            // Secours de app:send-outbox : courriels, textos et courriel du jour des pasteurs.
+            'send-outbox' => function () {
+                AppointmentService::mailDigests();
+
+                return Messenger::flush()['sent'];
+            },
             'prune' => fn () => $this->prune(),
         ];
         $only = $this->option('only');
@@ -72,6 +106,12 @@ class AutomationTick extends Command
         Recipients::remember(function () use ($steps, $only, &$results) {
             foreach ($steps as $name => $step) {
                 if ($only && $only !== $name) {
+                    continue;
+                }
+                // Rappel suspendu dans les reglages de la plateforme (les etapes techniques ne le sont jamais).
+                if (! PlatformSettings::stepEnabled($name)) {
+                    $results[$name] = ['count' => 0, 'ms' => 0, 'paused' => true];
+
                     continue;
                 }
                 // Une etape en erreur n'empeche jamais les suivantes ; l'erreur est journalisee.
@@ -106,6 +146,86 @@ class AutomationTick extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Inscriptions aux services en attente : apres le delai choisi, le responsable est relance (une fois) ; si
+     * les reglages le prevoient, la demande toujours sans reponse est ensuite acceptee automatiquement.
+     */
+    private function serviceJoins(): int
+    {
+        $now = now();
+        if ($now->hour < 9 || $now->hour >= 20) {
+            return 0;
+        }
+        $remind = PlatformSettings::int('services.reminder_after_days');
+        $auto = PlatformSettings::int('services.auto_approve_after_days');
+        $sent = 0;
+        $pending = DepartmentJoinRequest::where('status', 'pending')
+            ->where('created_at', '<=', $now->copy()->subDays($auto > 0 ? min($remind, $auto) : $remind))
+            ->with('department', 'member.profile')->get();
+        foreach ($pending as $request) {
+            if (! $request->department || ! $request->member) {
+                continue;
+            }
+            if ($auto > 0 && $request->created_at->lte($now->copy()->subDays($auto))) {
+                $sent += DepartmentJoinService::approveAutomatically($request) ? 1 : 0;
+
+                continue;
+            }
+            $sent += $this->sendOnce("service-join-reminder:{$request->id}", function () use ($request) {
+                $name = $request->member->profile?->full_name ?: $request->member->phone;
+                $deciders = array_values(array_diff(DepartmentJoinService::deciderIds($request->department), [$request->user_id]));
+
+                return Notifier::send($deciders, 'service', "En attente : inscription de {$name}",
+                    "Sa demande pour le service {$request->department->name} attend votre réponse.", '/admin/validations#services',
+                    ['department_join_request_id' => $request->id]);
+            });
+        }
+
+        return $sent;
+    }
+
+    /**
+     * Le 15 du mois (a partir de 9 h), si les reglages le prevoient : les resolutions du mois precedent sont
+     * reprises pour les membres actifs qui n'ont encore rien ecrit ; ils en sont prevenus et peuvent les modifier.
+     */
+    private function renewForgottenResolutions(): int
+    {
+        $now = now();
+        if ($now->day < 15 || $now->hour < 9) {
+            return 0;
+        }
+        $period = $now->format('Y-m');
+        $previous = $now->copy()->subMonthNoOverflow()->format('Y-m');
+
+        return $this->sendOnce("rm-renew:{$period}", function () use ($period, $previous) {
+            $renewed = [];
+            MonthlyResolution::where('period', $previous)
+                ->whereNotIn('user_id', MonthlyResolution::where('period', $period)->select('user_id'))
+                ->whereHas('user', fn ($u) => $u->where('activity_status', 'active')->where('approval_status', User::APPROVED)->whereNull('blocked_at'))
+                ->chunkById(200, function ($rows) use ($period, &$renewed) {
+                    foreach ($rows as $row) {
+                        $filled = $row->filled();
+                        if ($filled === []) {
+                            continue;
+                        }
+                        $created = MonthlyResolution::firstOrCreate(['user_id' => $row->user_id, 'period' => $period], $filled + ['renewed' => array_keys($filled)]);
+                        if ($created->wasRecentlyCreated) {
+                            Audit::log('resolutions.auto_renewed', $created, $row->user_id, [], ['period' => $period], ['from' => $row->period]);
+                            $renewed[] = $row->user_id;
+                        }
+                    }
+                });
+            if ($renewed) {
+                $from = FissService::periodLabel($previous);
+                $to = FissService::periodLabel($period);
+                Notifier::send($renewed, 'resolution', 'Vos résolutions sont reprises',
+                    "Vos résolutions de {$from} sont reprises pour {$to}. Vous pouvez les modifier à tout moment.", '/mes-resolutions');
+            }
+
+            return count($renewed);
+        });
     }
 
     /** Envoi protege : une seule fois par cle ; en cas d'echec, la cle est liberee (nouvel essai). */
@@ -151,7 +271,7 @@ class AutomationTick extends Command
             }
             $date = $start->toDateString();
             if ($event->remind_all && ! $event->is_personal) {
-                if ($minutes > self::SERVICE_LEAD_MINUTES || $event->all_day) {
+                if ($minutes > PlatformSettings::int('reminders.service_lead_minutes') || $event->all_day) {
                     continue;
                 }
                 $sent += $this->serviceReminder($event, $start, $date);
@@ -237,7 +357,7 @@ class AutomationTick extends Command
                     $report['kpis']['inactive'] ? $report['kpis']['inactive'].' membre(s) inactif(s)' : null,
                 ]);
 
-                return Notifier::send([$leader->id], 'report', 'Rapport de '.$monthLabel.' · '.$report['scope']['label'],
+                return Notifier::send([$leader->id], 'report', 'Rapport '.French::de($monthLabel).' · '.$report['scope']['label'],
                     $parts ? ucfirst(implode(' · ', $parts)).'.' : 'Le rapport du mois est disponible.',
                     '/admin/rapports?scope='.urlencode($scope).'&mois=6', ['period' => $previous->format('Y-m')]);
             });
@@ -253,24 +373,40 @@ class AutomationTick extends Command
      */
     private function leaderReports(): int
     {
+        // Rapport du mois ecoule : rappel la premiere semaine, relance la derniere semaine du mois (des 9 h),
+        // aux patriarches et responsables qui ne l'ont pas encore envoye : notification, push, et courriel
+        // (ou texto). Plus rien une fois le rapport envoye.
         $now = now();
-        if ($now->day > 10 || $now->hour < 9) {
+        $daysLeft = (int) $now->copy()->startOfDay()->diffInDays($now->copy()->endOfMonth()->startOfDay());
+        $stage = match (true) {
+            $now->day <= 7 => 'first',
+            $daysLeft <= 6 => 'last',
+            default => null,
+        };
+        if (! $stage || $now->hour < 9) {
             return 0;
         }
         $period = LeaderReportService::duePeriod();
         $month = LeaderReportService::periodLabel($period);
-        $late = $now->day >= 5;
+        $late = $stage === 'last';
 
         $sent = 0;
         foreach (LeaderReportService::pending($period) as $scope) {
             $what = ($scope['kind'] === 'tribe' ? 'tribu ' : 'département ').$scope['scope_name'];
             foreach ($scope['user_ids'] as $userId) {
-                $sent += $this->sendOnce("leader-report:{$period}:{$scope['kind']}:{$scope['scope_id']}:{$userId}:".($late ? 'late' : 'first'),
-                    fn () => Notifier::send([$userId], 'leader_report',
-                        ($late ? 'Rappel : rapport' : 'Rapport')." de {$month} à remplir",
-                        ucfirst($what).' · un questionnaire guidé, quelques minutes suffisent.',
-                        "/admin/rapports-mensuels?remplir={$scope['kind']}:{$scope['scope_id']}&mois={$period}",
-                        ['period' => $period, 'kind' => $scope['kind'], 'scope_id' => $scope['scope_id']], $late ? 'high' : 'normal'));
+                $sent += $this->sendOnce("leader-report:{$period}:{$scope['kind']}:{$scope['scope_id']}:{$userId}:{$stage}",
+                    function () use ($userId, $late, $month, $what, $scope, $period, $stage) {
+                        $count = Notifier::send([$userId], 'leader_report',
+                            ($late ? 'Rappel : rapport' : 'Rapport').' '.French::de($month).' à remplir',
+                            ucfirst($what).' · un questionnaire guidé, quelques minutes suffisent.',
+                            "/admin/rapports-mensuels?remplir={$scope['kind']}:{$scope['scope_id']}&mois={$period}",
+                            ['period' => $period, 'kind' => $scope['kind'], 'scope_id' => $scope['scope_id']], $late ? 'high' : 'normal');
+                        if ($leader = User::with('profile')->find($userId)) {
+                            MemberMessages::reportReminder($leader, $period, $stage, $scope['kind'], $scope['scope_id'], $scope['scope_name']);
+                        }
+
+                        return $count;
+                    });
             }
         }
 
@@ -333,7 +469,7 @@ class AutomationTick extends Command
     private function serviceDigest(): int
     {
         $now = now();
-        if ($now->hour < 18) {
+        if ($now->hour < PlatformSettings::int('reminders.digest_hour')) {
             return 0;
         }
         $day = $now->copy()->addDay()->startOfDay();
@@ -458,6 +594,66 @@ class AutomationTick extends Command
         return $sent;
     }
 
+    /**
+     * Mes RM : du 1er au 3 du mois (des 9 h), invitation a prendre ses resolutions (et a faire le
+     * bilan du mois ecoule) ; du 8 au 12 (des 10 h), une seule relance a ceux qui ne l'ont pas fait.
+     */
+    private function resolutionReminders(): int
+    {
+        $now = now();
+        $period = $now->format('Y-m');
+        $slot = match (true) {
+            $now->day <= 3 && $now->hour >= 9 => 'start',
+            $now->day >= 8 && $now->day <= 12 && $now->hour >= 10 => 'relance',
+            default => null,
+        };
+        if (! $slot) {
+            return 0;
+        }
+
+        return $this->sendOnce("resolutions:{$period}:{$slot}", function () use ($period, $slot, $now) {
+            $taken = MonthlyResolution::where('period', $period)->pluck('user_id');
+            $missing = User::whereHas('profile', fn ($p) => $p->where('is_completed', true))
+                ->where('activity_status', 'active')->whereNotIn('id', $taken)->pluck('id');
+            $month = $now->locale('fr')->isoFormat('MMMM');
+
+            return Notifier::send($missing, 'resolution',
+                $slot === 'start' ? 'Nouveau mois : vos résolutions '.French::de($month) : 'Vos résolutions '.French::de($month).' vous attendent',
+                $slot === 'start'
+                    ? 'À tes résolutions répondra le succès (Job 22:28). Faites le bilan du mois passé et prenez vos résolutions.'
+                    : 'Quelques minutes suffisent : renouvelez ou écrivez vos résolutions du mois.',
+                '/mes-resolutions', ['period' => $period]);
+        });
+    }
+
+    /** Mon devoir : 3 jours apres la publication (10 h - 20 h), une relance a ceux qui ne l'ont pas encore fait. */
+    private function assignmentReminders(): int
+    {
+        $now = now();
+        if ($now->hour < 10 || $now->hour >= 20) {
+            return 0;
+        }
+        $sent = 0;
+        $after = PlatformSettings::int('assignments.reminder_after_days');
+        $due = Assignment::published()->where('published_at', '<=', $now->copy()->subDays($after))
+            ->where('published_at', '>=', $now->copy()->subDays($after + 7))->get();
+        foreach ($due as $assignment) {
+            $sent += $this->sendOnce("assignment-reminder:{$assignment->id}", function () use ($assignment) {
+                // Pas encore fait : resume manquant ou lecture non terminee (memes regles que l'ecran du membre).
+                $done = AssignmentProgress::doneUserIds($assignment);
+                $missing = User::whereHas('profile', fn ($p) => $p->where('is_completed', true))
+                    ->where('activity_status', 'active')->whereNotIn('id', $done)
+                    ->when($assignment->created_by, fn ($q) => $q->where('id', '!=', $assignment->created_by))->pluck('id');
+
+                return Notifier::send($missing, 'assignment', 'Votre devoir : '.$assignment->title,
+                    'Prenez un moment pour le faire, puis écrivez votre résumé et vos résolutions.',
+                    '/mon-devoir?d='.$assignment->id, ['assignment_id' => $assignment->id]);
+            });
+        }
+
+        return $sent;
+    }
+
     /** Taches (exercices) a rendre demain ou aujourd'hui, non faites (a partir de 9 h). */
     /**
      * Exercices : invitations nominatives a ceux qui ne l'ont pas termine (video regardee en
@@ -547,25 +743,31 @@ class AutomationTick extends Command
             return $sent;
         }
 
+        // Un rappel la 2e semaine du mois (du 8 au 14), une relance la derniere semaine (des 10 h), a ceux qui
+        // n'ont pas encore envoye leur FISS du mois : notification dans l'application, push, et courriel (ou
+        // texto). Plus rien apres l'envoi.
         $daysLeft = (int) $now->copy()->startOfDay()->diffInDays($now->copy()->endOfMonth()->startOfDay());
         $type = match (true) {
-            $daysLeft <= 1 => 'urgent',
-            $now->day >= 20 => 'advance',
+            $now->day >= PlatformSettings::int('fiss.reminder_from_day') && $now->day <= PlatformSettings::int('fiss.reminder_from_day') + 6 => 'first',
+            $daysLeft <= 6 => 'last',
             default => null,
         };
         $period = $now->format('Y-m');
-        if ($type) {
-            $sent += $this->sendOnce("fiss:{$period}:{$type}", function () use ($period, $type, $now) {
+        if ($type && $now->hour >= 10) {
+            $sent += $this->sendOnce("fiss:{$period}:{$type}", function () use ($period, $type, $now, $daysLeft) {
                 $filled = SpiritualHealthForm::where('period', $period)->pluck('user_id');
                 $missing = User::whereHas('profile', fn ($p) => $p->where('is_completed', true))
                     ->where('activity_status', 'active')->whereNotIn('id', $filled)->pluck('id');
-                $month = $now->locale('fr')->isoFormat('MMMM YYYY');
+                $month = French::de($now->locale('fr')->isoFormat('MMMM'));
 
-                return Notifier::send($missing, 'fiss', "Rappel : fiche de santé spirituelle de {$month}",
-                    $type === 'urgent'
-                        ? "Le mois se termine. Merci de remplir votre fiche de {$month} dès aujourd'hui."
-                        : "Pensez à remplir votre fiche de {$month} avant la fin du mois.",
-                    '/ma-fiche', ['period' => $period], $type === 'urgent' ? 'high' : 'normal');
+                $count = Notifier::send($missing, 'fiss', $type === 'last' ? 'Rappel : votre fiche '.$month.' à remplir' : 'Votre fiche '.$month.' vous attend',
+                    $type === 'last'
+                        ? 'Il reste '.max(0, $daysLeft).' jour(s) avant la fin du mois. Merci de remplir votre fiche de santé spirituelle.'
+                        : 'Prenez quelques minutes pour remplir votre fiche de santé spirituelle '.$month.'.',
+                    '/ma-fiche', ['period' => $period], $type === 'last' ? 'high' : 'normal');
+                MemberMessages::fissReminders($period, $type, $missing, $daysLeft);
+
+                return $count;
             });
         }
 
@@ -593,7 +795,79 @@ class AutomationTick extends Command
         return $sent;
     }
 
+    /**
+     * Vertumetre (meme rythme que la FISS) : deverrouillages expires reverrouilles ; a partir du 20
+     * (des 8 h) un rappel, puis le dernier jour une relance, a ceux qui ne l'ont pas rempli ce mois-ci.
+     */
+    private function vertumetre(): int
+    {
+        $now = now();
+        $sent = VertumetreService::expireOpenRequests();
+        if ($now->hour < 8) {
+            return $sent;
+        }
+        $daysLeft = (int) $now->copy()->startOfDay()->diffInDays($now->copy()->endOfMonth()->startOfDay());
+        $type = match (true) {
+            $daysLeft <= 1 => 'urgent',
+            $now->day >= 20 => 'advance',
+            default => null,
+        };
+        if (! $type) {
+            return $sent;
+        }
+        $period = $now->format('Y-m');
+
+        return $sent + $this->sendOnce("vertumetre:{$period}:{$type}", function () use ($period, $type, $now) {
+            $filled = VertumetreForm::where('period', $period)->pluck('user_id');
+            $missing = User::whereHas('profile', fn ($p) => $p->where('is_completed', true))
+                ->where('activity_status', 'active')->whereNotIn('id', $filled)->pluck('id');
+            $month = $now->locale('fr')->isoFormat('MMMM YYYY');
+
+            return Notifier::send($missing, 'fiss', 'Rappel : votre Vertumètre '.French::de($month),
+                $type === 'urgent'
+                    ? 'Le mois touche à sa fin. Prenez quelques minutes pour remplir votre Vertumètre '.French::de($month).'.'
+                    : 'Pensez à remplir votre Vertumètre '.French::de($month).' avant la fin du mois.',
+                '/vertumetre', ['period' => $period], $type === 'urgent' ? 'high' : 'normal');
+        });
+    }
+
     /** Profils incomplets : rappel au membre toutes les 2 semaines (a partir de 10 h), avec les informations manquantes. */
+    /**
+     * Membres sans adresse courriel (le courriel porte devoirs, rappels et messages importants) : une
+     * invitation (notification et push, de 11 h a 19 h), puis un seul rappel 3 semaines plus tard ;
+     * ensuite plus rien. Le suivi est garde sur le compte (pas de relance a l'infini).
+     */
+    private function emailInvites(): int
+    {
+        $now = now();
+        if ($now->hour < 11 || $now->hour >= 19) {
+            return 0;
+        }
+        $sent = 0;
+        User::where('activity_status', 'active')
+            ->whereHas('profile', fn ($p) => $p->where('is_completed', true)->where(fn ($q) => $q->whereNull('email')->orWhere('email', '')))
+            ->select(['id', 'notification_prefs'])->chunkById(200, function ($users) use ($now, &$sent) {
+                foreach ($users as $user) {
+                    $prefs = is_array($user->notification_prefs) ? $user->notification_prefs : [];
+                    $invites = array_values((array) ($prefs['email_invites'] ?? []));
+                    $due = count($invites) === 0
+                        || (count($invites) === 1 && Carbon::parse($invites[0])->lte($now->copy()->subDays(21)));
+                    if (! $due) {
+                        continue;
+                    }
+                    $first = count($invites) === 0;
+                    $prefs['email_invites'] = array_merge($invites, [$now->toDateString()]);
+                    $user->forceFill(['notification_prefs' => $prefs])->save();
+                    $sent += Notifier::send([$user->id], 'profile',
+                        $first ? 'Recevez vos rappels par courriel' : 'Votre adresse courriel nous manque',
+                        'Ajoutez votre adresse en un instant : votre devoir, vos rappels de fiche et les messages importants arriveront aussi dans votre boîte courriel.',
+                        '/tableau-de-bord?courriel=1');
+                }
+            });
+
+        return $sent;
+    }
+
     private function profileReminders(): int
     {
         $now = now();
@@ -647,15 +921,18 @@ class AutomationTick extends Command
         }
         $sent = 0;
 
+        // Arrivee = validation du compte par le pasteur (nouveaux comptes), sinon inscription.
+        $arrival = NewMemberController::ARRIVAL;
         $newcomers = Profile::where('is_completed', true)->whereNull('welcomed_at')
-            ->whereBetween('created_at', [$now->copy()->subDays(30), $now->copy()->subDays(3)])
+            ->select('profiles.*')->selectRaw("{$arrival} as arrived_at")
+            ->whereRaw("{$arrival} between ? and ?", [$now->copy()->subDays(30)->toDateTimeString(), $now->copy()->subDays(PlatformSettings::int('followups.welcome_after_days'))->toDateTimeString()])
             ->with('user')->get();
         foreach ($newcomers->chunk(200) as $group) {
             DB::transaction(function () use ($group, $now, &$sent) {
                 foreach ($group as $p) {
                     if ($p->user) {
                         $sent += $this->sendOnce("newcomer:{$p->user_id}", fn () => Notifier::send(Recipients::watchersOf($p->user), 'member',
-                            "À accueillir : {$p->full_name}", 'Inscrit depuis '.(int) $p->created_at->diffInDays($now, true).' jours, pas encore accueilli.',
+                            "À accueillir : {$p->full_name}", 'Arrivé(e) depuis '.(int) NewMemberController::arrivedAt($p)->diffInDays($now, true).' jours, pas encore accueilli(e).',
                             '/admin/membres/'.$p->user_id, ['user_id' => $p->user_id]));
                     }
                 }
@@ -663,7 +940,7 @@ class AutomationTick extends Command
         }
 
         $pending = MemberRequest::where('status', 'nouvelle')->whereNull('replied_at')
-            ->where('created_at', '<=', $now->copy()->subHours(48))
+            ->where('created_at', '<=', $now->copy()->subHours(PlatformSettings::int('followups.request_after_hours')))
             ->where('created_at', '>=', $now->copy()->subDays(30))->with('sender.profile')->get();
         foreach ($pending as $r) {
             if ($r->sender) {
@@ -685,12 +962,72 @@ class AutomationTick extends Command
             foreach ($byLeader as $leaderId => $names) {
                 $sent += $this->sendOnce("inactive-digest:{$leaderId}:".$now->toDateString(), fn () => Notifier::send([$leaderId], 'activity',
                     count($names).' membre(s) devenu(s) inactif(s)',
-                    CalendarService::joinNames(array_slice($names, 0, 6)).(count($names) > 6 ? '…' : '').' · 3 mois sans connexion, FISS ni présence. Un appel peut faire la différence.',
+                    CalendarService::joinNames(array_slice($names, 0, 6)).(count($names) > 6 ? '…' : '').' · '.PlatformSettings::int('members.inactive_after_months').' mois sans connexion, FISS ni présence. Un appel peut faire la différence.',
                     '/admin/membres?statut=inactif'));
             }
         }
 
         return $sent;
+    }
+
+    /**
+     * Absence : un membre qui n'a pas ouvert l'application depuis plus d'une semaine recoit, une fois par
+     * absence, un courriel (a defaut un texto) et une notification avec ce qui l'attend ; le patriarche et
+     * l'AP de sa tribu recoivent la liste du jour dans l'application. Une fois par jour, a partir de 10 h.
+     * Absences de 7 a 30 jours seulement (au-dela, le suivi d'inactivite prend le relais). Les autorites
+     * pastorales ne sont pas concernees.
+     */
+    private function absences(): int
+    {
+        $now = now();
+        if ($now->hour < 10 || $now->hour >= 19) {
+            return 0;
+        }
+
+        return $this->sendOnce('absences:'.$now->toDateString(), function () use ($now) {
+            $lastSeen = 'COALESCE(last_seen_at, last_login_at)';
+            $authorities = Recipients::withPermission('members.view_all');
+            $byLeader = [];
+            $sent = 0;
+            User::where('approval_status', User::APPROVED)->whereNull('blocked_at')
+                ->whereHas('profile', fn ($p) => $p->where('is_completed', true))
+                ->whereRaw("{$lastSeen} < ?", [$now->copy()->subDays(PlatformSettings::int('absences.after_days'))->toDateTimeString()])
+                ->whereRaw("{$lastSeen} >= ?", [$now->copy()->subDays(30)->toDateTimeString()])
+                ->where(fn ($q) => $q->whereNull('absence_notified_at')->orWhereRaw("absence_notified_at < {$lastSeen}"))
+                // Compte valide il y a moins d'une semaine : la personne decouvre a peine son espace.
+                ->where(fn ($q) => $q->whereNull('approval_decided_at')->orWhere('approval_decided_at', '<', $now->copy()->subDays(7)))
+                ->whereNotIn('id', $authorities ?: [0])
+                ->with('profile.tribe')->chunkById(100, function ($users) use ($now, &$byLeader, &$sent) {
+                    foreach ($users as $user) {
+                        $seen = collect([$user->last_seen_at, $user->last_login_at])->filter()->max();
+                        // Reserve l'envoi (une seule fois par absence, meme si deux passages se croisent).
+                        if (User::where('id', $user->id)->where(fn ($q) => $q->whereNull('absence_notified_at')->orWhere('absence_notified_at', '<', $seen))
+                            ->update(['absence_notified_at' => $now]) !== 1) {
+                            continue;
+                        }
+                        $days = (int) $seen->copy()->startOfDay()->diffInDays($now->copy()->startOfDay());
+                        MemberMessages::absence($user, $days, WelcomeBackService::for($user, $seen));
+                        $sent += Notifier::send([$user->id], 'system', 'Votre espace vous attend',
+                            'Votre dernière visite remonte à '.$days.' jours. Venez voir ce qui vous attend.', '/tableau-de-bord');
+                        if ($user->profile?->tribe_id) {
+                            foreach (Recipients::tribeRoleHolders((int) $user->profile->tribe_id, ['patriarche', 'assistant_pasteur']) as $leaderId) {
+                                if ($leaderId !== $user->id) {
+                                    $byLeader[$leaderId][] = $user->profile->full_name ?: $user->phone;
+                                }
+                            }
+                        }
+                    }
+                });
+            foreach ($byLeader as $leaderId => $names) {
+                $sent += Notifier::send([$leaderId], 'activity',
+                    count($names) > 1 ? count($names).' membres sans connexion depuis une semaine' : $names[0].' : aucune connexion depuis une semaine',
+                    (count($names) > 1 ? CalendarService::joinNames(array_slice($names, 0, 6)).(count($names) > 6 ? '…' : '').' · ' : '')
+                    .'Pas de connexion depuis plus de 7 jours. Un message ou un appel peut les encourager.',
+                    '/admin/membres?statut=absents');
+            }
+
+            return $sent;
+        });
     }
 
     /** Nettoyage quotidien : notifications lues de plus de 60 jours, toutes celles de plus de 6 mois. */

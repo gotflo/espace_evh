@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Event;
 use App\Models\EventParticipation;
 use App\Models\Profile;
+use App\Models\Role;
 use App\Models\User;
 use App\Models\UserNotification;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -58,7 +59,9 @@ class ServiceScheduleTest extends TestCase
         $titles = collect($res->json('events'))->map(fn ($e) => substr($e['starts_at'], 11, 5).' '.$e['title'])->all();
 
         $this->assertContains("19:30 Mercredi de l'intercession", $titles);
-        $this->assertContains("08:30 Temps de prière & d'intercession", $titles);
+        // Mercredi : sans heure de fin.
+        $this->assertNull(collect($res->json('events'))->firstWhere('title', "Mercredi de l'intercession")['ends_at']);
+        $this->assertContains("08:45 Temps de prière & d'intercession", $titles);
         $this->assertContains('09:30 Culte de contemplation et de célébration', $titles);
         $this->assertContains('12:30 Healing Time', $titles);
         $this->assertContains('13:00 Bloom Light · Coin cocktail fraternel', $titles);
@@ -86,7 +89,7 @@ class ServiceScheduleTest extends TestCase
         $forA = UserNotification::where('user_id', $a->id)->get();
         $this->assertCount(1, $forA);
         $this->assertSame('Demain dimanche : programme du culte', $forA[0]->title);
-        $this->assertSame("08h30 Temps de prière & d'intercession · 09h30 Culte de contemplation et de célébration · 12h30 Healing Time · 13h00 Bloom Light · Coin cocktail fraternel", $forA[0]->body);
+        $this->assertSame("08h45 Temps de prière & d'intercession · 09h30 Culte de contemplation et de célébration · 12h30 Healing Time · 13h00 Bloom Light · Coin cocktail fraternel", $forA[0]->body);
 
         // Absent declare au culte : il n'apparait pas dans son programme.
         $forB = UserNotification::where('user_id', $b->id)->get();
@@ -98,12 +101,12 @@ class ServiceScheduleTest extends TestCase
     {
         $member = $this->member('+14185557004');
 
-        // 7 h 30 : rien encore (le rappel part dans les 35 minutes qui precedent).
-        Carbon::setTestNow($this->sunday->copy()->setTime(7, 30));
+        // 8 h : rien encore (le rappel part dans les 35 minutes qui precedent ; debut a 8 h 45).
+        Carbon::setTestNow($this->sunday->copy()->setTime(8, 0));
         $this->artisan('app:tick', ['--only' => 'event-reminders'])->assertSuccessful();
         $this->assertSame(0, UserNotification::where('user_id', $member->id)->count());
 
-        Carbon::setTestNow($this->sunday->copy()->setTime(8, 0));
+        Carbon::setTestNow($this->sunday->copy()->setTime(8, 15));
         $this->artisan('app:tick', ['--only' => 'event-reminders'])->assertSuccessful();
         $this->artisan('app:tick', ['--only' => 'event-reminders'])->assertSuccessful();
         Carbon::setTestNow($this->sunday->copy()->setTime(9, 0));
@@ -126,7 +129,7 @@ class ServiceScheduleTest extends TestCase
     public function test_leader_can_make_a_recurring_event_a_service_with_reminders_for_all(): void
     {
         $pastor = $this->member('+14185557005');
-        $pastor->roles()->attach(\App\Models\Role::where('key', 'super_admin')->value('id'));
+        $pastor->roles()->attach(Role::where('key', 'super_admin')->value('id'));
         Sanctum::actingAs($pastor);
 
         $this->postJson('/api/admin/events', [

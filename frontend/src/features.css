@@ -65,7 +65,7 @@
 .notif-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
 .notif-title { font-weight: 600; font-size: 0.94rem; }
 .notif-row.unread .notif-title { color: #0d5f57; }
-.notif-body { font-size: 0.86rem; color: var(--text-muted); }
+.notif-body { font-size: 0.86rem; color: var(--text-muted); overflow-wrap: anywhere; }
 .notif-meta { font-size: 0.76rem; color: var(--text-soft); }
 .notif-help { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.88rem; color: var(--text-muted); }
 .push-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-top: 1rem; }
@@ -78,7 +78,7 @@
 .push-prompt-text strong { color: var(--text); font-size: 0.95rem; }
 .push-prompt-actions { display: flex; align-items: center; gap: 0.8rem; }
 @media (max-width: 900px) {
-  .notif-layout { grid-template-columns: 1fr; }
+  .notif-layout { grid-template-columns: minmax(0, 1fr); }
   .notif-side { position: static; order: -1; }
 }
 @media (max-width: 560px) {
@@ -120,7 +120,7 @@
 .newcomer-row { display: flex; align-items: center; gap: 0.4rem; }
 .newcomer-row .mini-row { flex: 1; min-width: 0; }
 .newcomer-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
-.newcomer-text strong { font-size: 0.9rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.newcomer-text strong { font-size: 0.9rem; font-weight: 600; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: break-word; }
 .newcomer-text small { font-size: 0.75rem; color: var(--text-soft); }
 .new-tag {
   margin-left: 0.4rem; font-size: 0.64rem; font-weight: 700; text-transform: uppercase; padding: 0.1rem 0.4rem;
@@ -290,7 +290,7 @@
   .cal-dot.chip-birthday { background: #e05570; }
   .cal-dot.chip-task { background: #2563c9; }
   .cal-num { left: 50%; right: auto; transform: translateX(-50%); font-size: 0.8rem; min-width: 24px; height: 24px; }
-  .cal-grid.week { grid-template-columns: 1fr; }
+  .cal-grid.week { grid-template-columns: minmax(0, 1fr); }
   .cal-grid.week .cal-head { display: none; }
   .cal-grid.week .cal-cell { min-height: 0; border-right: none; padding-top: 2rem; }
   .cal-grid.week .cal-num { left: 0.6rem; transform: none; }
@@ -302,7 +302,7 @@
 .serve-hero { background: linear-gradient(135deg, var(--bg-start), var(--bg-end)); color: #fff; border-radius: var(--radius); padding: 1.2rem 1.4rem; margin-bottom: 1.3rem; }
 .serve-verse { font-family: var(--font-serif); font-size: 1.15rem; line-height: 1.4; margin-bottom: 0.3rem; }
 .serve-hero .verse-ref { color: var(--accent); font-size: 0.8rem; font-weight: 600; letter-spacing: 0.06em; }
-.serve-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 0.9rem; margin-bottom: 1.6rem; }
+.serve-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); gap: 0.9rem; margin-bottom: 1.6rem; }
 .serve-card {
   display: flex; flex-direction: column; gap: 0.6rem; background: var(--card-bg); border: 1px solid var(--border-subtle);
   border-radius: var(--radius); padding: 1rem 1.1rem; transition: box-shadow 0.2s, transform 0.2s;
@@ -348,8 +348,10 @@
 .editor-title { font-size: 1.15rem; font-weight: 600; margin: 0.4rem 0 0.8rem; }
 .editor-note { margin: 0 0 0.6rem; }
 .editor-error { color: #b42318; margin-top: -0.3rem; margin-bottom: 0.6rem; }
-.seg { display: flex; background: var(--field-bg); border-radius: 12px; padding: 4px; gap: 4px; margin-bottom: 0.8rem; }
-.seg button { flex: 1; border: none; background: none; font: inherit; font-size: 0.9rem; font-weight: 600; color: var(--text-muted); padding: 0.55rem; border-radius: 9px; cursor: pointer; transition: background 0.15s, color 0.15s; }
+/* Libelles sur une ligne : chaque bouton prend la place de son texte (« Tous » est court) ; defilement si l'ecran est trop etroit. */
+.seg { display: flex; background: var(--field-bg); border-radius: 12px; padding: 4px; gap: 4px; margin-bottom: 0.8rem; overflow-x: auto; scrollbar-width: none; }
+.seg::-webkit-scrollbar { display: none; }
+.seg button { flex: 1 1 auto; white-space: nowrap; border: none; background: none; font: inherit; font-size: 0.9rem; font-weight: 600; color: var(--text-muted); padding: 0.55rem; border-radius: 9px; cursor: pointer; transition: background 0.15s, color 0.15s; }
 .seg button.on { background: #fff; color: #0d5f57; box-shadow: 0 2px 8px rgba(16, 40, 36, 0.1); }
 .cat-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.9rem; }
 .cat-chip {
@@ -410,7 +412,7 @@ a.sidebar-user:hover, a.sidebar-user.active { background: var(--hover-bg); color
     color: #6b7a77; text-decoration: none; cursor: pointer; border-radius: 10px; min-width: 0;
     -webkit-tap-highlight-color: transparent;
   }
-  .bottom-item span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .bottom-item > span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .bottom-item.active { color: #0d5f57; }
   .bottom-item.active svg { stroke-width: 2.4; }
   .bottom-icon { position: relative; display: grid; }

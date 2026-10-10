@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
-import { api, ApiError } from '../../api/client'
+import { api, ApiError, peek } from '../../api/client'
+import { usePulse } from '../../pulse'
+import { useAuth } from '../../auth/AuthContext'
 import { AppLayout } from '../../components/AppLayout'
 import { AudiencePicker } from '../../components/AudiencePicker'
 import { SkeletonCard } from '../../components/Skeleton'
@@ -14,8 +16,10 @@ const CATEGORIES = [
 const CAT_LABEL: Record<string, string> = { info: 'Info', important: 'Important', evenement: 'Événement' }
 
 export default function Announcements() {
-  const [items, setItems] = useState<AnnouncementAdminItem[]>([])
-  const [loading, setLoading] = useState(true)
+  const canDelete = useAuth().hasPermission('announcements.delete')
+  const [items, setItems] = useState<AnnouncementAdminItem[]>(() => peek<{ announcements: AnnouncementAdminItem[] }>('/admin/announcements')?.announcements ?? [])
+  // Liste deja vue : affichee tout de suite ; les mises a jour (apres une action) se font en silence.
+  const [loading, setLoading] = useState(() => !peek('/admin/announcements'))
   const [mode, setMode] = useState<'list' | 'new'>('list')
   const [error, setError] = useState('')
 
@@ -29,12 +33,12 @@ export default function Announcements() {
   const fileRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(() => {
-    setLoading(true)
     api<{ announcements: AnnouncementAdminItem[] }>('/admin/announcements')
-      .then((r) => setItems(r.announcements)).catch(() => setItems([]))
+      .then((r) => setItems(r.announcements)).catch(() => {})
       .finally(() => setLoading(false))
   }, [])
   useEffect(() => { load() }, [load])
+  usePulse('announcements', load)
 
   function onPickImage(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -124,7 +128,7 @@ export default function Announcements() {
               <div className="feed-head">
                 <span className={`cat-badge cat-${a.category}`}>{CAT_LABEL[a.category]}</span>
                 <span className="feed-date">{a.target} · {a.recipients_count} destinataire(s) · {a.created_at}</span>
-                <button className="org-del" onClick={() => remove(a.id)} aria-label="Supprimer">×</button>
+                {canDelete && <button className="org-del" onClick={() => remove(a.id)} aria-label="Supprimer">×</button>}
               </div>
               {a.title && <h4 className="feed-title">{a.title}</h4>}
               {a.image_url && <img className="feed-image" src={a.image_url} alt={a.title ?? 'Annonce'} loading="lazy" />}

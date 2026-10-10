@@ -4,6 +4,7 @@ import { api, ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import type { AuthPayload } from '../types'
 import { Brand } from '../components/Brand'
+import { takeDestination } from '../utils/afterLogin'
 import { APP_NAME } from '../config'
 import { DEFAULT_COUNTRY, type Country } from '../data/countries'
 import { CountrySelect } from '../components/CountrySelect'
@@ -11,13 +12,24 @@ import { LoginBackdrop } from '../components/LoginBackdrop'
 import { AsYouType, isValidPhoneNumber, type CountryCode } from 'libphonenumber-js'
 
 type VerifyResponse = AuthPayload & { token: string; is_new_account?: boolean }
+/**
+ * Reponse a la saisie du numero : code SMS envoye ; ou numero de gestion : connexion directe (appareil de
+ * confiance, jeton de session present) ou appareil a autoriser une seule fois.
+ */
+type RequestResponse = Partial<VerifyResponse> & { phone: string; message?: string; dev_code?: string; manager_device_required?: boolean }
+type Step = 'phone' | 'code' | 'device'
+
+/** Jeton de l'appareil de confiance du compte de gestion (garde apres la deconnexion). */
+const DEVICE_KEY = 'evh_manager_device'
+const readDevice = () => { try { return localStorage.getItem(DEVICE_KEY) } catch { return null } }
 
 export default function Login() {
-  const [step, setStep] = useState<'phone' | 'code'>('phone')
+  const [step, setStep] = useState<Step>('phone')
   const [country, setCountry] = useState<Country>(DEFAULT_COUNTRY)
   const [national, setNational] = useState('')
   const [normalizedPhone, setNormalizedPhone] = useState('')
   const [code, setCode] = useState('')
+  const [activationCode, setActivationCode] = useState('')
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
   const [busy, setBusy] = useState(false)
@@ -32,24 +44,41 @@ export default function Login() {
     setNational(new AsYouType(country.iso as CountryCode).input(value))
   }
 
+  const failure = (err: unknown) => setError(err instanceof ApiError ? err.firstMessage : 'Connexion impossible. Vérifiez votre réseau puis réessayez.')
+
   async function requestCode(e: FormEvent) {
     e.preventDefault()
     setError(''); setInfo(''); setBusy(true)
     try {
-      const res = await api<{ phone: string; message: string; dev_code?: string }>('/auth/request-otp', {
-        method: 'POST', body: { phone: national, country: country.iso }, auth: false, toast: false,
+      const res = await api<RequestResponse>('/auth/request-otp', {
+        method: 'POST', body: { phone: national, country: country.iso, device_token: readDevice() ?? undefined }, auth: false, toast: false,
       })
       setNormalizedPhone(res.phone)
+      // Connexion directe : numero de gestion sur un appareil de confiance, ou serveur d'essai local.
+      if (res.token && res.user) {
+        const payload = res as VerifyResponse
+        if (payload.is_new_account) {
+          try { localStorage.setItem('evh_welcome', '1') } catch { /* ignore */ }
+        }
+        login(res.token, payload)
+        navigate(payload.is_platform_manager ? '/admin/gestion' : payload.profile_completed ? (takeDestination() ?? '/tableau-de-bord') : '/profil', { replace: true })
+        return
+      }
+      // Numero de gestion sur un nouvel appareil : autorisation unique.
+      if (res.manager_device_required) {
+        setActivationCode(''); setStep('device')
+        return
+      }
       setStep('code')
       // Phase de test : le backend renvoie le code, on l'affiche et on le pre-remplit.
       if (res.dev_code) {
         setCode(res.dev_code)
         setInfo(`Code (mode test) : ${res.dev_code}`)
       } else {
-        setInfo(res.message)
+        setInfo(res.message ?? '')
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.firstMessage : 'Connexion impossible. Vérifiez votre réseau puis réessayez.')
+      failure(err)
     } finally {
       setBusy(false)
     }
@@ -67,12 +96,35 @@ export default function Login() {
         try { localStorage.setItem('evh_welcome', '1') } catch { /* ignore */ }
       }
       login(res.token, res)
-      navigate(res.profile_completed ? '/tableau-de-bord' : '/profil', { replace: true })
+      // Lien d'un courriel ouvert avant la connexion : on y retourne directement.
+      navigate(res.profile_completed ? (takeDestination() ?? '/tableau-de-bord') : '/profil', { replace: true })
     } catch (err) {
-      setError(err instanceof ApiError ? err.firstMessage : 'Connexion impossible. Vérifiez votre réseau puis réessayez.')
+      failure(err)
     } finally {
       setBusy(false)
     }
+  }
+
+  /** Autorise cet appareil pour le compte de gestion (une seule fois) : ensuite, le numero suffit ici. */
+  async function authorizeDevice(e: FormEvent) {
+    e.preventDefault()
+    setError(''); setBusy(true)
+    try {
+      const res = await api<VerifyResponse & { device_token: string }>('/auth/manager-activation', {
+        method: 'POST', auth: false, toast: false, body: { phone: normalizedPhone, activation_code: activationCode },
+      })
+      try { localStorage.setItem(DEVICE_KEY, res.device_token) } catch { /* appareil sans stockage : code a chaque fois */ }
+      login(res.token, res)
+      navigate('/admin/gestion', { replace: true })
+    } catch (err) {
+      failure(err)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function restart() {
+    setStep('phone'); setCode(''); setActivationCode(''); setError(''); setInfo('')
   }
 
   return (
@@ -138,9 +190,36 @@ export default function Login() {
             </button>
 
             <div className="center mt">
-              <button type="button" className="btn-link" onClick={() => { setStep('phone'); setCode(''); setError('') }}>
+              <button type="button" className="btn-link" onClick={restart}>
                 Modifier le numéro
               </button>
+            </div>
+          </form>
+        )}
+
+        {step === 'device' && (
+          <form onSubmit={authorizeDevice}>
+            <h2 className="section-title">Nouvel appareil</h2>
+            <p className="section-sub">Première connexion sur cet appareil : saisissez le code d'autorisation remis par le propriétaire de la plateforme.</p>
+
+            {error && <div className="alert alert-error">{error}</div>}
+
+            <div className="field">
+              <label htmlFor="activation">Code d'autorisation</label>
+              <input
+                id="activation" className="input otp" autoComplete="off" autoCapitalize="characters" spellCheck={false}
+                placeholder="XXXX-XXXX-XXXX" maxLength={20} value={activationCode} autoFocus
+                onChange={(e) => setActivationCode(e.target.value.toUpperCase())} required
+              />
+              <p className="helper">Demandé une seule fois : ensuite, votre numéro suffit sur cet appareil.</p>
+            </div>
+
+            <button className="btn btn-primary" disabled={busy || activationCode.replace(/[^A-Za-z0-9]/g, '').length < 12}>
+              {busy ? <span className="spinner" /> : 'Autoriser'}
+            </button>
+
+            <div className="center mt">
+              <button type="button" className="btn-link" onClick={restart}>Modifier le numéro</button>
             </div>
           </form>
         )}

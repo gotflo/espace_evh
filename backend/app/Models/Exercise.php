@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasPublicationScopes;
+use App\Support\PlainText;
 use App\Support\YouTube;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -78,5 +80,14 @@ class Exercise extends Model
             'thumbnail' => YouTube::thumbnail($this->video_id),
             'url' => YouTube::watchUrl($this->video_id),
         ] : null;
+    }
+
+    /** Titre en texte simple (lettres stylisees et emojis retires), a l'enregistrement comme a la lecture. */
+    protected function title(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $v) => PlainText::title($v),
+            set: fn (?string $v) => PlainText::title($v),
+        );
     }
 }

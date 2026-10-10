@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react'
+import { useAuth } from '../auth/AuthContext'
 import { disablePush, enablePush, getPushState, PushError, type PushState } from '../push'
 import { toast } from '../toast'
 import { Icon } from './Icon'
 
-const DISMISS_KEY = 'evh_push_prompt_dismissed'
+// « Plus tard » : date (ms) jusqu'a laquelle l'invitation reste cachee. Ensuite elle revient, tant que
+// les notifications ne sont pas activees sur cet appareil (delai choisi dans Gestion > Reglages).
+const SNOOZE_KEY = 'evh_push_prompt_until'
+const readSnooze = () => { try { return Number(localStorage.getItem(SNOOZE_KEY)) || 0 } catch { return 0 } }
 
 /**
  * Activation des notifications push sur cet appareil.
@@ -13,9 +17,9 @@ const DISMISS_KEY = 'evh_push_prompt_dismissed'
 export function PushSettings({ variant = 'card' }: { variant?: 'card' | 'prompt' }) {
   const [state, setState] = useState<PushState | null>(null)
   const [busy, setBusy] = useState(false)
-  const [dismissed, setDismissed] = useState(() => {
-    try { return localStorage.getItem(DISMISS_KEY) === '1' } catch { return false }
-  })
+  const { settings } = useAuth()
+  const [snoozedUntil, setSnoozedUntil] = useState(readSnooze)
+  const [showIosSteps, setShowIosSteps] = useState(false)
 
   useEffect(() => { getPushState().then(setState) }, [])
 
@@ -31,8 +35,8 @@ export function PushSettings({ variant = 'card' }: { variant?: 'card' | 'prompt'
       setState(await getPushState())
     } finally {
       setBusy(false)
-      // Le choix est fait : l'invitation du tableau de bord disparait (reglage dans Notifications).
-      if (variant === 'prompt') dismiss()
+      // Refus dans la fenetre du navigateur : on ne redemande pas avant le delai choisi.
+      if (variant === 'prompt') snooze()
     }
   }
 
@@ -59,27 +63,63 @@ export function PushSettings({ variant = 'card' }: { variant?: 'card' | 'prompt'
     } finally { setBusy(false) }
   }
 
-  function dismiss() {
-    setDismissed(true)
-    try { localStorage.setItem(DISMISS_KEY, '1') } catch { /* ignore */ }
+  function snooze() {
+    const until = Date.now() + Math.max(1, settings.push_prompt_snooze_days) * 86400000
+    setSnoozedUntil(until)
+    try { localStorage.setItem(SNOOZE_KEY, String(until)) } catch { /* ignore */ }
   }
 
   if (state === null) return null
 
   if (variant === 'prompt') {
-    if (dismissed || state !== 'off') return null
+    // Invitation sur toutes les pages tant que les notifications ne sont pas activees (un seul clic).
+    if (snoozedUntil > Date.now() || (state !== 'off' && state !== 'ios-install' && state !== 'denied')) return null
+    if (state === 'denied') {
+      return (
+        <div className="push-prompt" role="status">
+          <span className="push-prompt-icon"><Icon name="bell" size={24} /></span>
+          <div className="push-prompt-text">
+            <strong>Les notifications sont bloquées</strong>
+            {showIosSteps
+              ? <span>Touchez le cadenas (ou « ⓘ ») à côté de l'adresse du site, puis <strong>Notifications → Autoriser</strong>, et rechargez la page. Sur un téléphone : Réglages → Notifications → cette application → Autoriser.</span>
+              : <span>Autorisez-les une fois pour recevoir les annonces et rappels.</span>}
+          </div>
+          <div className="push-prompt-actions">
+            {!showIosSteps && <button className="btn btn-primary small" onClick={() => setShowIosSteps(true)}>Comment faire</button>}
+            <button className="btn-link" onClick={snooze}>Plus tard</button>
+          </div>
+        </div>
+      )
+    }
+    if (state === 'ios-install') {
+      return (
+        <div className="push-prompt" role="status">
+          <span className="push-prompt-icon"><Icon name="bell" size={24} /></span>
+          <div className="push-prompt-text">
+            <strong>Recevez vos rappels sur l'iPhone</strong>
+            {showIosSteps
+              ? <span>Touchez <strong>Partager</strong> (carré avec une flèche), puis <strong>« Sur l'écran d'accueil »</strong>. Ouvrez ensuite l'application depuis son icône : un bouton vous proposera d'activer les notifications.</span>
+              : <span>Ajoutez l'application à l'écran d'accueil pour recevoir les annonces et rappels.</span>}
+          </div>
+          <div className="push-prompt-actions">
+            {!showIosSteps && <button className="btn btn-primary small" onClick={() => setShowIosSteps(true)}>Comment faire</button>}
+            <button className="btn-link" onClick={snooze}>Plus tard</button>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="push-prompt" role="status">
         <span className="push-prompt-icon"><Icon name="bell" size={24} /></span>
         <div className="push-prompt-text">
-          <strong>Ne manquez rien</strong>
-          <span>Recevez les annonces, rappels d'événements et tâches directement sur votre téléphone.</span>
+          <strong>Activez les notifications</strong>
+          <span>Un clic suffit : annonces, rappels et tâches arriveront directement sur votre téléphone.</span>
         </div>
         <div className="push-prompt-actions">
           <button className="btn btn-primary small" disabled={busy} onClick={enable}>
             {busy ? <span className="spinner" /> : 'Activer'}
           </button>
-          <button className="btn-link" onClick={dismiss}>Plus tard</button>
+          <button className="btn-link" onClick={snooze}>Plus tard</button>
         </div>
       </div>
     )

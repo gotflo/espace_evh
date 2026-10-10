@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, peek } from '../api/client'
+import { usePulse } from '../pulse'
 import type { FissData, FissForm } from '../types'
 
 function sanctDot(v: string | null) {
@@ -18,10 +19,12 @@ function trend(cur: FissForm, prev?: FissForm) {
 }
 
 export function FissSummary() {
-  const [d, setD] = useState<FissData | null>(null)
+  const [d, setD] = useState<FissData | null>(() => peek<FissData>('/me/fiss') ?? null)
   const navigate = useNavigate()
 
-  useEffect(() => { api<FissData>('/me/fiss').then(setD).catch(() => setD(null)) }, [])
+  const load = useCallback(() => { api<FissData>('/me/fiss').then(setD).catch(() => {}) }, [])
+  useEffect(() => { load() }, [load])
+  usePulse(['fiss', 'validations'], load)
 
   if (!d || !d.filled || !d.current) return null
   const f = d.current

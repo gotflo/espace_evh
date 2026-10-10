@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, ApiError } from '../api/client'
+import { api, ApiError, peek } from '../api/client'
 import { AppLayout } from '../components/AppLayout'
 import { SkeletonCard } from '../components/Skeleton'
 import { MyGrades } from '../components/MyGrades'
@@ -12,8 +12,9 @@ function today() {
 }
 
 export default function MySpiritual() {
-  const [data, setData] = useState<MySpiritualData | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState<MySpiritualData | null>(() => peek<MySpiritualData>('/me/spiritual') ?? null)
+  // Page deja ouverte : affichee tout de suite, la mise a jour se fait en silence.
+  const [loading, setLoading] = useState(() => !peek('/me/spiritual'))
   const [error, setError] = useState('')
 
   const [type, setType] = useState('temoignage')
@@ -22,10 +23,9 @@ export default function MySpiritual() {
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(() => {
-    setLoading(true)
     api<MySpiritualData>('/me/spiritual')
       .then((d) => { setData(d); if (d.entry_types[0]) setType((t) => t || d.entry_types[0].key) })
-      .catch(() => setData(null))
+      .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
   useEffect(() => { load() }, [load])

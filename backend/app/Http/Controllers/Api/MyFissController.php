@@ -30,6 +30,7 @@ class MyFissController extends Controller
             'current' => $current ? $this->present($current) : null,
             'history' => $forms->where('period', '!=', $period)->take(12)->map(fn ($f) => $this->present($f))->values(),
             'indices' => FissCatalog::indices(),
+            'inner_life' => FissCatalog::innerLife(),
             'max_requests' => FissEditRequest::MAX_PER_FORM,
         ]);
     }
@@ -45,6 +46,8 @@ class MyFissController extends Controller
     /** Modifie une fiche deverrouillee (demande approuvee) ; elle est reverrouillee. */
     public function update(Request $request, SpiritualHealthForm $form): JsonResponse
     {
+        // Fiche verrouillee : refusee avant meme de lire les reponses.
+        FissService::ensureEditable($request->user(), $form);
         $form = FissService::update($request->user(), $form, $this->validated($request));
 
         return response()->json(['message' => 'Fiche modifiée et reverrouillée.', 'form' => $this->present($form->load('editRequests'))]);
@@ -69,18 +72,30 @@ class MyFissController extends Controller
     /** @return array<string, mixed> */
     private function validated(Request $request): array
     {
+        // Toutes les questions de la fiche sont obligatoires (meme regle que l'ecran), vie interieure comprise ;
+        // seul le commentaire est facultatif. Situation conjugale : obligatoire pour un profil « Marié(e) ».
+        $married = $request->user()->profile?->marital_status === 'marie';
         $data = $request->validate([
-            'meditation' => ['nullable', 'integer', 'min:0', 'max:20'],
-            'priere' => ['nullable', 'integer', 'min:0', 'max:20'],
-            'jeune' => ['nullable', 'integer', 'min:0', 'max:20'],
-            'sanctification_corps' => ['nullable', 'in:'.implode(',', FissCatalog::SANCTIFICATION)],
-            'sanctification_ame' => ['nullable', 'in:'.implode(',', FissCatalog::SANCTIFICATION)],
-            'sanctification_esprit' => ['nullable', 'in:'.implode(',', FissCatalog::SANCTIFICATION)],
-            'situation_financiere' => ['nullable', 'integer', 'min:0', 'max:20'],
-            'situation_familiale' => ['nullable', 'integer', 'min:0', 'max:20'],
-            'situation_conjugale' => ['nullable', 'integer', 'min:0', 'max:20'],
+            'meditation' => ['required', 'integer', 'min:0', 'max:20'],
+            'priere' => ['required', 'integer', 'min:0', 'max:20'],
+            'jeune' => ['required', 'integer', 'min:0', 'max:20'],
+            'sanctification_corps' => ['required', 'in:'.implode(',', FissCatalog::SANCTIFICATION)],
+            'sanctification_ame' => ['required', 'in:'.implode(',', FissCatalog::SANCTIFICATION)],
+            'sanctification_esprit' => ['required', 'in:'.implode(',', FissCatalog::SANCTIFICATION)],
+            'situation_financiere' => ['required', 'integer', 'min:0', 'max:20'],
+            'situation_familiale' => ['required', 'integer', 'min:0', 'max:20'],
+            'situation_conjugale' => [$married ? 'required' : 'nullable', 'integer', 'min:0', 'max:20'],
             'comment' => ['nullable', 'string', 'max:2000'],
+            // Vie interieure : fait partie du remplissage de la fiche (« Aucune », « Non »... si rien a signaler).
+            ...array_fill_keys(SpiritualHealthForm::INNER_LIFE, ['required', 'string', 'max:3000']),
+        ], [
+            'required' => 'Répondez à cette question pour enregistrer votre fiche.',
+            ...array_fill_keys(array_map(fn ($k) => "$k.required", SpiritualHealthForm::INNER_LIFE),
+                'Répondez à cette question de la vie intérieure (« Aucune » ou « Non » si rien à signaler).'),
         ]);
+        foreach (SpiritualHealthForm::INNER_LIFE as $key) {
+            $data[$key] = trim((string) $data[$key]);
+        }
 
         // Situation conjugale : seulement pour un profil « Marié(e) » ; ignoree sinon.
         if ($request->user()->profile?->marital_status !== 'marie') {
@@ -125,6 +140,7 @@ class MyFissController extends Controller
             'situation_familiale' => $f->situation_familiale,
             'situation_conjugale' => $f->situation_conjugale,
             'comment' => $f->comment,
+            ...$f->only(SpiritualHealthForm::INNER_LIFE),
             'vie_spirituelle_total' => $f->vie_spirituelle_total,
             'vie_sociale_total' => $f->vie_sociale_total,
             'spiritual_score' => $f->spiritualScore(),

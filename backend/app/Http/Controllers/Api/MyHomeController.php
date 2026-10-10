@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\Admin\VerseController;
 use App\Http\Controllers\Controller;
+use App\Support\PlatformSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -25,10 +26,17 @@ class MyHomeController extends Controller
     private const SOURCES = [
         '/dashboard/verse' => [VerseController::class, 'current'],
         '/me/fiss' => [MyFissController::class, 'index'],
+        '/me/month' => [MyMonthController::class, '__invoke'],
         '/me/events' => [MyEventController::class, 'index'],
         '/me/announcements' => [MyAnnouncementController::class, 'index'],
         '/me/exercises' => [MyExerciseController::class, 'index'],
         '/calendar' => [CalendarController::class, 'index'],
+    ];
+
+    /** Lectures appartenant a un module activable (Reglages > Modules). */
+    private const MODULES = [
+        '/me/exercises' => 'exercises', '/me/resolutions' => 'resolutions', '/me/assignments' => 'assignments',
+        '/me/vertumetre' => 'vertumetre', '/me/appointments' => 'appointments', '/me/spiritual' => 'spiritual',
     ];
 
     public function __invoke(Request $request): JsonResponse
@@ -43,6 +51,12 @@ class MyHomeController extends Controller
             $route = (string) parse_url($path, PHP_URL_PATH);
             if (! isset(self::SOURCES[$route])) {
                 $responses[$path] = ['status' => 404];
+
+                continue;
+            }
+            // Module desactive dans les reglages : meme reponse que sa route (fermee).
+            if (isset(self::MODULES[$route]) && ! PlatformSettings::module(self::MODULES[$route])) {
+                $responses[$path] = ['status' => 403, 'body' => ['message' => "Ce module n'est pas activé sur la plateforme."]];
 
                 continue;
             }

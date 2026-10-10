@@ -64,5 +64,10 @@ export const NOTIF_ICON: Record<string, IconName> = {
   wedding: 'spiritual',
   activity: 'reports',
   report: 'reports',
+  leader_report: 'clipboard',
+  gem_report: 'gem',
+  assignment: 'devoir',
+  resolution: 'target',
+  appointment: 'clock',
   system: 'bell',
 }

@@ -2,20 +2,20 @@
 
 namespace App\Providers;
 
+use App\Models\PersonalAccessToken;
+use App\Services\Monitoring\Monitor;
 use App\Services\Push\WebPush;
 use App\Services\Sms\LogSmsSender;
 use App\Services\Sms\SmsSender;
-use App\Services\Monitoring\Monitor;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Http\Request;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
-use App\Models\PersonalAccessToken;
 use Laravel\Sanctum\Sanctum;
 
 class AppServiceProvider extends ServiceProvider
@@ -25,7 +25,7 @@ class AppServiceProvider extends ServiceProvider
         // L'envoi de codes OTP via Twilio est gere par Twilio Verify directement.
         $this->app->bind(SmsSender::class, function () {
             return match (config('services.sms.driver', 'log')) {
-                'log', 'twilio_verify' => new LogSmsSender(),
+                'log', 'twilio_verify' => new LogSmsSender,
                 default => throw new \InvalidArgumentException('Unsupported SMS_DRIVER value.'),
             };
         });
@@ -45,6 +45,8 @@ class AppServiceProvider extends ServiceProvider
         // Lecteur video : un signal toutes les ~15 s (marge pour pauses, reprises, onglets multiples).
         RateLimiter::for('video-progress', fn (Request $r) => Limit::perMinute(40)->by('video-progress:'.($r->user()?->id ?: $r->ip())));
         RateLimiter::for('member-search', fn (Request $r) => Limit::perMinute(60)->by('member-search:'.($r->user()?->id ?: $r->ip())));
+        // Compte de gestion (autorisation d'un appareil) : 5 essais par minute et par adresse, verrouillage apres 5 codes faux.
+        RateLimiter::for('manager-activation', fn (Request $r) => Limit::perMinute(5)->by('manager-activation:'.$r->ip()));
 
         // Supervision : compteurs propres (une limite « throttle:N,1 » partagerait le compteur
         // de l'adresse IP avec la connexion des membres).

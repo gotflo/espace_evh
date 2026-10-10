@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
-import { api, ApiError } from '../../api/client'
+import { api, ApiError, peek } from '../../api/client'
+import { usePulse } from '../../pulse'
+import { useAuth } from '../../auth/AuthContext'
 import { AppLayout } from '../../components/AppLayout'
 import { SkeletonCard } from '../../components/Skeleton'
 import { AudiencePicker } from '../../components/AudiencePicker'
@@ -45,8 +47,12 @@ const EMPTY = {
 }
 
 export default function Events() {
-  const [items, setItems] = useState<EventAdminItem[]>([])
-  const [loading, setLoading] = useState(true)
+  const { hasPermission } = useAuth()
+  const canDelete = hasPermission('events.delete')
+  const canParticipants = hasPermission('events.participants')
+  const [items, setItems] = useState<EventAdminItem[]>(() => peek<{ events: EventAdminItem[] }>('/admin/events')?.events ?? [])
+  // Liste deja vue : affichee tout de suite ; les mises a jour (apres une action) se font en silence.
+  const [loading, setLoading] = useState(() => !peek('/admin/events'))
   const [mode, setMode] = useState<'list' | 'form'>('list')
   const [form, setForm] = useState({ ...EMPTY })
   const [image, setImage] = useState<File | null>(null)
@@ -64,12 +70,12 @@ export default function Events() {
   }
 
   const load = useCallback(() => {
-    setLoading(true)
     api<{ events: EventAdminItem[] }>('/admin/events')
-      .then((r) => setItems(r.events)).catch(() => setItems([]))
+      .then((r) => setItems(r.events)).catch(() => {})
       .finally(() => setLoading(false))
   }, [])
   useEffect(() => { load() }, [load])
+  usePulse('events', load)
   useEffect(() => {
   }, [])
 
@@ -271,7 +277,7 @@ export default function Events() {
             <span className={`cat-badge evt-${e.category}`}>{CAT_LABEL[e.category]}</span>
             <div className="event-actions">
               <button className="btn-link" onClick={() => onEdit(e)}>Modifier</button>
-              <button className="org-del" onClick={() => onDelete(e.id)} aria-label="Supprimer">×</button>
+              {canDelete && <button className="org-del" onClick={() => onDelete(e.id)} aria-label="Supprimer">×</button>}
             </div>
           </div>
           <h4 className="event-title">{e.title}</h4>
@@ -281,9 +287,13 @@ export default function Events() {
           )}
           <p className="event-meta-soft">{e.target}</p>
           {e.image_url && <img className="event-image" style={{ marginTop: '0.6rem', marginBottom: 0 }} src={e.image_url} alt={e.title} loading="lazy" />}
-          <button className="event-participants-btn" onClick={() => openParticipants(e.id)}>
-            <Icon name="members" size={14} /> {e.going_count} inscrit(s){e.volunteer_count > 0 ? ` · ${e.volunteer_count} volontaire(s)` : ''}
-          </button>
+          {canParticipants ? (
+            <button className="event-participants-btn" onClick={() => openParticipants(e.id)}>
+              <Icon name="members" size={14} /> {e.going_count} inscrit(s){e.volunteer_count > 0 ? ` · ${e.volunteer_count} volontaire(s)` : ''}
+            </button>
+          ) : (
+            <p className="event-meta-soft"><Icon name="members" size={14} /> {e.going_count} inscrit(s){e.volunteer_count > 0 ? ` · ${e.volunteer_count} volontaire(s)` : ''}</p>
+          )}
         </div>
       </article>
     )

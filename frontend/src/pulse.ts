@@ -1,12 +1,12 @@
 // « Pouls » de l'application : un seul appel leger (/me/pulse) toutes les ~45 s quand
-// l'application est visible. Chaque ecran s'abonne aux donnees qui l'interessent et ne se
+// l'application est visible. Chaque écran s'abonne aux données qui l'intéressent et ne se
 // recharge que si elles ont change. Remplace les rafraichissements periodiques de chaque
 // composant (qui multipliaient les requetes par le nombre de membres connectes).
 import { useEffect, useRef } from 'react'
-import { api, auth } from './api/client'
+import { api, auth, markStale, onDataChanged } from './api/client'
 import { setUnread } from './notifications'
 
-export type PulseKey = 'announcements' | 'events' | 'exercises' | 'requests' | 'members' | 'validations' | 'fiss' | 'attendance' | 'leader_reports' | 'gem_reports' | 'unread'
+export type PulseKey = 'announcements' | 'events' | 'exercises' | 'requests' | 'members' | 'validations' | 'fiss' | 'attendance' | 'leader_reports' | 'gem_reports' | 'resolutions' | 'assignments' | 'appointments' | 'services' | 'verses' | 'settings' | 'unread'
 
 type Versions = Partial<Record<PulseKey, string>>
 type Listener = (v: Versions) => void
@@ -25,7 +25,10 @@ export function pollNow(): Promise<void> {
   inflight = api<{ unread: number; versions: Versions }>('/me/pulse')
     .then((r) => {
       setUnread(r.unread)
-      versions = { ...r.versions, unread: String(r.unread) }
+      const next = { ...r.versions, unread: String(r.unread) }
+      // Quelque chose a change sur le serveur : aucune lecture recente n'est reutilisee.
+      if (JSON.stringify(next) !== JSON.stringify(versions)) markStale()
+      versions = next
       listeners.forEach((l) => l(versions))
     })
     .catch(() => { /* hors ligne ou serveur occupe : on reessaiera au prochain passage */ })
@@ -48,7 +51,9 @@ let started = false
 export function startPulse() {
   if (started) return
   started = true
-  void pollNow()
+  // Premier passage un peu apres l'ouverture : les donnees de la page partent d'abord
+  // (le nombre de notifications non lues arrive deja avec le compte).
+  window.setTimeout(() => void pollNow(), 2000)
   schedule()
   const onVisible = () => {
     if (document.visibilityState === 'visible' && Date.now() - lastPoll > 15000) void pollNow()
@@ -56,6 +61,13 @@ export function startPulse() {
   document.addEventListener('visibilitychange', onVisible)
   window.addEventListener('focus', onVisible)
   window.addEventListener('online', () => void pollNow())
+  // Action de l'utilisateur enregistree (publication, validation, reponse...) : les autres blocs
+  // et pages concernes se mettent a jour tout de suite, sans attendre le prochain passage.
+  let soon: number | undefined
+  onDataChanged(() => {
+    window.clearTimeout(soon)
+    soon = window.setTimeout(() => void pollNow(), 400)
+  })
   // Push recu : on met a jour tout de suite.
   navigator.serviceWorker?.addEventListener('message', (e: MessageEvent) => {
     if (e.data?.type === 'evh-push') void pollNow()

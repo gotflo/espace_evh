@@ -107,7 +107,7 @@ export default function Attendance() {
           <label>Type de session</label>
           <div className="pill-choices">
             <button type="button" className={`pill-choice ${kind === 'culte' ? 'on' : ''}`} onClick={() => setKind('culte')}>Culte / activité</button>
-            <button type="button" className={`pill-choice ${kind === 'repetition' ? 'on' : ''}`} onClick={() => setKind('repetition')}>Répétition (avec retards)</button>
+            <button type="button" className={`pill-choice ${kind === 'repetition' ? 'on' : ''}`} onClick={() => setKind('repetition')}>Répétition (retards)</button>
           </div>
         </div>
 

@@ -8,8 +8,11 @@ import { DepartmentPicker } from '../../components/DepartmentPicker'
 import { SpiritualPanel } from '../../components/SpiritualPanel'
 import { EvaluationsPanel } from '../../components/EvaluationsPanel'
 import { MemberFissPanel } from '../../components/MemberFissPanel'
-import { MemberCompletion, MemberFamily, MemberFissHistory } from '../../components/MemberExtras'
+import { MemberGrowth } from '../../components/MemberGrowth'
+import { MemberCompletion, MemberExercises, MemberFamily, MemberFissHistory } from '../../components/MemberExtras'
 import type { Department, Gem, MemberDetailData, MemberListItem, RoleOption, Tribe } from '../../types'
+import { PersonName } from '../../components/PersonName'
+import { MemberDeletion } from '../../components/MemberDeletion'
 import { Icon } from '../../components/Icon'
 import { useDirty } from '../../utils/dirty'
 
@@ -23,6 +26,7 @@ export default function MemberDetail() {
   const canManageEval = hasPermission('evaluations.manage')
   const canRecordSpiritual = hasPermission('spiritual.record')
   const canFissHistory = hasPermission('fiss.review') || hasPermission('audit.view')
+  const canExercises = hasPermission('exercises.assign')
 
   const [data, setData] = useState<MemberDetailData | null>(null)
   const [roleOptions, setRoleOptions] = useState<RoleOption[]>([])
@@ -152,7 +156,7 @@ export default function MemberDetail() {
             {p?.photo_url
               ? <img className="member-hero-photo" src={p.photo_url} alt="" />
               : <div className="member-hero-photo">{initials || <Icon name="profile" size={28} />}</div>}
-            <h2 className="member-hero-name">{p?.full_name || data.user.phone}</h2>
+            <PersonName className="member-hero-name" first={p?.first_name} last={p?.last_name} fallback={p?.full_name || data.user.phone} />
             <span className={`status-pill ${data.user.activity === 'active' ? 'on' : 'off'}`}>
               {data.user.activity === 'active' ? 'Actif' : 'Inactif'}
             </span>
@@ -278,7 +282,7 @@ export default function MemberDetail() {
             <DepartmentPicker departments={departments} selected={belongDepts} onChange={setBelongDepts} />
           </div>
           <button className="btn btn-primary" disabled={busy || !belonging.dirty} onClick={saveBelonging}>
-            {busy ? <span className="spinner" /> : "Enregistrer l'appartenance"}
+            {busy ? <span className="spinner" /> : 'Enregistrer'}
           </button>
         </section>
       )}
@@ -303,8 +307,11 @@ export default function MemberDetail() {
 
       {canViewSpiritual && data.can_view_fiss && id && <MemberFissPanel userId={id} />}
       {canFissHistory && data.can_view_fiss && id && <MemberFissHistory userId={id} />}
+      {canViewSpiritual && data.can_view_fiss && id && <MemberGrowth userId={id} />}
+      {canExercises && id && <MemberExercises userId={id} />}
       {canViewSpiritual && id && <SpiritualPanel userId={id} canRecord={canRecordSpiritual && manage} />}
       {canManageEval && id && <EvaluationsPanel userId={id} canManage={manage} />}
+      {id && <MemberDeletion userId={id} name={data.profile?.full_name ?? 'ce membre'} />}
     </AppLayout>
   )
 }

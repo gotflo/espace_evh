@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { api } from '../../api/client'
+import { api, ApiError } from '../../api/client'
+import { useAuth } from '../../auth/AuthContext'
 import { AppLayout } from '../../components/AppLayout'
 import { ColumnChart, HBarChart, LineChart, Meter, VIZ } from '../../components/charts'
 import { toast } from '../../toast'
@@ -67,6 +68,10 @@ function People({ title, people, empty, extra }: { title: string; people: { user
 }
 
 export default function Reports() {
+  // Export PDF : rapport (reports.export) ou liste detaillee des membres (members.export), verifies par le serveur.
+  const { hasPermission } = useAuth()
+  const canExportReport = hasPermission('reports.export')
+  const canExportMembers = hasPermission('members.export')
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const [options, setOptions] = useState<ReportOptions | null>(null)
@@ -103,9 +108,9 @@ export default function Reports() {
   }, [scope, months])
   useEffect(() => { loadReport() }, [loadReport])
 
-  // Liste affichee par pages de 60 (recherche cote serveur) ; liste complete seulement pour le PDF.
-  const membersUrl = useCallback((p: number, all = false) =>
-    `/admin/reports/members?scope=${encodeURIComponent(scope)}&filter=${filter}&q=${encodeURIComponent(query.trim())}${all ? '&all=1' : `&page=${p}`}`,
+  // Liste affichee par pages de 60 (recherche cote serveur) ; la liste complete passe par l'export PDF.
+  const membersUrl = useCallback((p: number) =>
+    `/admin/reports/members?scope=${encodeURIComponent(scope)}&filter=${filter}&q=${encodeURIComponent(query.trim())}&page=${p}`,
   [scope, filter, query])
   useEffect(() => {
     if (!scope || tab !== 'members') return
@@ -131,22 +136,27 @@ export default function Reports() {
     if (!report) return
     setExporting(true)
     try {
-      const { downloadReportPdf } = await import('../../reports/pdf')
-      await downloadReportPdf(report)
-      api('/admin/reports/exported', { method: 'POST', body: { scope, kind: 'report' }, toast: false }).catch(() => {})
+      // Donnees fournies par le serveur pour l'export (droit verifie et export journalise par lui).
+      const [{ downloadReportPdf }, data] = await Promise.all([
+        import('../../reports/pdf'),
+        api<{ report: ReportData }>(`/admin/reports/export?kind=report&scope=${encodeURIComponent(scope)}&months=${months}`),
+      ])
+      await downloadReportPdf(data.report)
       toast.success('Le rapport PDF a été téléchargé.', { title: 'PDF prêt' })
-    } catch { toast.error('La génération du PDF a échoué. Réessayez.') } finally { setExporting(false) }
+    } catch (err) { toast.error(err instanceof ApiError ? err.firstMessage : 'La génération du PDF a échoué. Réessayez.') } finally { setExporting(false) }
   }
 
   async function exportMembers() {
     if (!rows) return
     setExporting(true)
     try {
-      const [{ downloadMembersPdf }, all] = await Promise.all([import('../../reports/pdf'), api<MembersPage>(membersUrl(1, true))])
+      const [{ downloadMembersPdf }, all] = await Promise.all([
+        import('../../reports/pdf'),
+        api<{ members: MembersPage['members'] }>(`/admin/reports/export?kind=members&scope=${encodeURIComponent(scope)}&filter=${filter}&q=${encodeURIComponent(query.trim())}`),
+      ])
       await downloadMembersPdf(report?.scope.label ?? '', FILTERS.find((f) => f.key === filter)?.label ?? '', all.members)
-      api('/admin/reports/exported', { method: 'POST', body: { scope, kind: 'members' }, toast: false }).catch(() => {})
       toast.success('La liste PDF a été téléchargée.', { title: 'PDF prêt' })
-    } catch { toast.error('La génération du PDF a échoué. Réessayez.') } finally { setExporting(false) }
+    } catch (err) { toast.error(err instanceof ApiError ? err.firstMessage : 'La génération du PDF a échoué. Réessayez.') } finally { setExporting(false) }
   }
 
   if (options && !options.church && options.tribes.length === 0) {
@@ -175,10 +185,12 @@ export default function Reports() {
           <button className={`tab ${tab === 'overview' ? 'active' : ''}`} onClick={() => setTab('overview')}>Vue d'ensemble</button>
           <button className={`tab ${tab === 'members' ? 'active' : ''}`} onClick={() => setTab('members')}>Membres</button>
         </div>
-        <button className="btn btn-primary small report-pdf" disabled={exporting || (tab === 'overview' ? !report : !rows)}
-          onClick={tab === 'overview' ? exportReport : exportMembers}>
-          {exporting ? <span className="spinner" /> : <><Icon name="download" size={14} /> PDF</>}
-        </button>
+        {(tab === 'overview' ? canExportReport : canExportMembers) && (
+          <button className="btn btn-primary small report-pdf" disabled={exporting || (tab === 'overview' ? !report : !rows)}
+            onClick={tab === 'overview' ? exportReport : exportMembers}>
+            {exporting ? <span className="spinner" /> : <><Icon name="download" size={14} /> PDF</>}
+          </button>
+        )}
       </div>
 
       {tab === 'overview' && (
@@ -191,7 +203,7 @@ export default function Reports() {
               <Kpi label="Vie spirituelle" value={pct(k!.spiritual_score)} sub="moyenne des FISS remplies" tone={k!.spiritual_score !== null && k!.spiritual_score >= 60 ? 'good' : undefined} />
               <Kpi label="FISS du mois" value={pct(k!.fiss_rate)} sub={`${k!.fiss_missing} actif(s) sans fiche`} tone={k!.fiss_missing > 0 ? 'warn' : 'good'} />
               <Kpi label="Assiduité" value={pct(k!.attendance_rate)} sub="présences aux cultes" />
-              <Kpi label="Vertumètre" value={k!.vertumetre !== null ? `${k!.vertumetre.toFixed(1).replace('.', ',')}/20` : '—'} sub="moyenne des notes" />
+              <Kpi label="Notes" value={k!.vertumetre !== null ? `${k!.vertumetre.toFixed(1).replace('.', ',')}/20` : '—'} sub="moyenne des notes" />
               <Kpi label="Nouveaux membres" value={String(k!.new_members)} sub={`sur ${months} mois`} />
               <Kpi label="Profils complétés" value={k!.profile_completion_avg !== null ? `${k!.profile_completion_avg} %` : '—'} sub={`${k!.incomplete_profiles} incomplet(s)`} tone={k!.incomplete_profiles > 0 ? 'warn' : undefined} />
               <Kpi label="Événements" value={String(k!.events)} sub={`${k!.participations} participation(s)`} />
@@ -224,10 +236,10 @@ export default function Reports() {
                 <DataTable headers={['Mois', 'Nouveaux', 'Membres']} rows={report.monthly.map((m) => [m.label, m.new_members, m.members])} />
               </section>
               <section className="panel">
-                <div className="panel-head"><h3>Vertumètre et activités</h3></div>
-                <LineChart labels={labels} unit="" yMax={20} ariaLabel="Moyenne du Vertumètre par mois"
-                  series={[{ key: 'v', label: 'Vertumètre /20', color: VIZ.s1, values: report.monthly.map((m) => m.vertumetre) }]} />
-                <DataTable headers={['Mois', 'Vertumètre', 'Événements', 'Participations']} rows={report.monthly.map((m) => [m.label, m.vertumetre ?? '—', m.events, m.participations])} />
+                <div className="panel-head"><h3>Notes et activités</h3></div>
+                <LineChart labels={labels} unit="" yMax={20} ariaLabel="Moyenne des notes par mois"
+                  series={[{ key: 'v', label: 'Notes /20', color: VIZ.s1, values: report.monthly.map((m) => m.vertumetre) }]} />
+                <DataTable headers={['Mois', 'Notes /20', 'Événements', 'Participations']} rows={report.monthly.map((m) => [m.label, m.vertumetre ?? '—', m.events, m.participations])} />
               </section>
             </div>
 
@@ -291,7 +303,7 @@ export default function Reports() {
                     <span title="Complétion du profil">Profil {r.completion} %</span>
                     <span title="Dernière FISS" className={r.fiss_current ? '' : 'warn'}>FISS {r.fiss_current ? `ce mois ${pct(r.fiss_score)}` : r.last_fiss ? `dernière : ${r.last_fiss}` : 'aucune'}</span>
                     <span title="Présences sur 3 mois">Présences {r.attendance_3m}</span>
-                    <span title="Vertumètre">Vertumètre {r.vertumetre ?? '—'}</span>
+                    <span title="Moyenne des notes">Notes {r.vertumetre ?? '—'}</span>
                     <span title="Dernière connexion">Vu le {r.last_seen ? new Date(r.last_seen).toLocaleDateString('fr-CA') : 'jamais'}</span>
                   </div>
                 </button>

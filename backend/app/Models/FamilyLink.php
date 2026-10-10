@@ -11,9 +11,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class FamilyLink extends Model
 {
-    protected $fillable = ['user_id', 'relation', 'relative_user_id', 'relative_name', 'birth_year', 'status', 'confirmed_at'];
+    protected $fillable = ['user_id', 'relation', 'relative_user_id', 'relative_name', 'birth_year', 'birth_date', 'status', 'confirmed_at'];
 
-    protected $casts = ['confirmed_at' => 'datetime', 'birth_year' => 'integer'];
+    protected $casts = ['confirmed_at' => 'datetime', 'birth_year' => 'integer', 'birth_date' => 'date'];
 
     public function user(): BelongsTo
     {

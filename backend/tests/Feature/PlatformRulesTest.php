@@ -64,7 +64,10 @@ class PlatformRulesTest extends TestCase
 
     private function fiss(): array
     {
-        return ['meditation' => 14, 'priere' => 12, 'jeune' => 10, 'sanctification_corps' => 'bien', 'situation_financiere' => 12];
+        return ['meditation' => 14, 'priere' => 12, 'jeune' => 10, 'sanctification_corps' => 'bien', 'sanctification_ame' => 'bien',
+            'sanctification_esprit' => 'moyen', 'situation_financiere' => 12, 'situation_familiale' => 14,
+            'addiction' => 'Aucune', 'addiction_victory' => 'Non', 'companions' => 'Oui', 'inner_wound' => 'Aucune',
+            'difficult_situations' => 'Aucune', 'discouragement' => 'Non'];
     }
 
     // ------------------------------------------------------------ FISS : verrouillage, demandes, limite, audit
@@ -153,13 +156,15 @@ class PlatformRulesTest extends TestCase
         Profile::where('user_id', $single->id)->update(['marital_status' => 'celibataire']);
         $married = $this->member('+14185550561', $this->juda, 'Marie');
         Profile::where('user_id', $married->id)->update(['marital_status' => 'marie']);
-        $fiss = ['meditation' => 12, 'priere' => 14, 'jeune' => 8, 'situation_familiale' => 15, 'situation_conjugale' => 17];
+        $fiss = array_merge($this->fiss(), ['meditation' => 12, 'priere' => 14, 'jeune' => 8, 'situation_familiale' => 15, 'situation_conjugale' => 17]);
 
         Sanctum::actingAs(User::find($single->id));
         $this->postJson('/api/me/fiss', $fiss)->assertCreated();
         $this->assertNull(SpiritualHealthForm::where('user_id', $single->id)->value('situation_conjugale'));
 
         Sanctum::actingAs(User::find($married->id));
+        // Marie(e) : la situation conjugale fait partie des questions obligatoires.
+        $this->postJson('/api/me/fiss', array_diff_key($fiss, ['situation_conjugale' => true]))->assertStatus(422)->assertJsonValidationErrors(['situation_conjugale']);
         $this->postJson('/api/me/fiss', $fiss)->assertCreated();
         $this->assertSame(17, (int) SpiritualHealthForm::where('user_id', $married->id)->value('situation_conjugale'));
     }

@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\Assignment;
 use App\Models\Department;
 use App\Models\Gem;
 use App\Models\GemWeeklyReport;
 use App\Models\LeaderReport;
+use App\Models\MonthlyResolution;
 use App\Models\Profile;
 use App\Models\Role;
 use App\Models\SpiritualHealthForm;
@@ -177,6 +179,79 @@ class RoleAccessMatrixTest extends TestCase
         $this->assertSame('Mois difficile', $this->getJson('/api/me/fiss')->assertOk()->json('current.comment'));
     }
 
+    public function test_resolutions_and_devoirs_follow_the_fiss_confidentiality(): void
+    {
+        MonthlyResolution::create(['user_id' => $this->marie->id, 'period' => '2026-10', 'priere' => 'Prier chaque soir']);
+        $devoir = Assignment::create(['title' => 'Devoir', 'media_type' => 'video', 'youtube_id' => 'KSvbDy7Yv7k',
+            'media_url' => 'https://youtu.be/KSvbDy7Yv7k', 'published_at' => now()->subDay()]);
+
+        // Resolutions et devoirs d'un membre : memes lecteurs que ses FISS.
+        $fissReaders = ['patriarche_juda', 'ap_juda', 'pasteur_assistant', 'pasteur_resident'];
+        $this->assertOnly("RM d'un membre", fn () => $this->getJson("/api/admin/members/{$this->marie->id}/resolutions"), $fissReaders);
+        $this->assertOnly("Devoirs d'un membre", fn () => $this->getJson("/api/admin/members/{$this->marie->id}/assignments"), $fissReaders);
+
+        // Suivi des RM et reponses d'un devoir : responsables de tribu (chacun la sienne) et pasteurs.
+        $tribeLeaders = ['patriarche_juda', 'patriarche_levi', 'ap_juda', 'ap_levi', 'pasteur_assistant', 'pasteur_resident'];
+        $this->assertOnly('Suivi des RM', fn () => $this->getJson('/api/admin/resolutions'), $tribeLeaders);
+        $this->assertOnly('Liste des devoirs', fn () => $this->getJson('/api/admin/assignments'), $tribeLeaders);
+        $this->assertOnly("Réponses d'un devoir", fn () => $this->getJson("/api/admin/assignments/{$devoir->id}/responses"), $tribeLeaders);
+        foreach (['patriarche_levi', 'ap_levi'] as $role) {
+            $this->as($role);
+            $this->assertNull(collect($this->getJson('/api/admin/resolutions')->json('members'))->firstWhere('user_id', $this->marie->id), $role);
+        }
+
+        // Devoirs (DS) et ressources des RM : le Pasteur Resident seul ; horaires des cultes : PR et PA.
+        $this->assertOnly('Ressources RM', fn () => $this->getJson('/api/admin/resolution-resources'), ['pasteur_resident']);
+        $this->assertOnly('Horaires des cultes', fn () => $this->getJson('/api/admin/service-schedule'), ['pasteur_assistant', 'pasteur_resident']);
+
+        // Vertumetre : memes lecteurs que la FISS ; numeros bloques : le PR seul.
+        $this->assertOnly("Vertumètre d'un membre", fn () => $this->getJson("/api/admin/members/{$this->marie->id}/vertumetre"), $fissReaders);
+        $this->assertOnly('Numéros bloqués', fn () => $this->getJson('/api/admin/blocked-phones'), ['pasteur_resident']);
+        $this->assertOnly('Suivi du Vertumètre', fn () => $this->getJson('/api/admin/vertumetre'), $tribeLeaders);
+        foreach (array_diff(self::ALL, ['pasteur_resident']) as $role) {
+            $this->as($role);
+            $this->postJson('/api/admin/assignments', ['title' => 'X', 'media_type' => 'video', 'url' => 'https://youtu.be/KSvbDy7Yv7k'])->assertForbidden();
+        }
+    }
+
+    public function test_new_signups_and_exercise_follow_up_follow_each_role(): void
+    {
+        // Nouvelle inscription envoyee, en attente du pasteur : seul le PR la voit et en decide.
+        $new = User::create(['phone' => '+14185570099']);
+        $new->forceFill(['approval_status' => 'pending', 'approval_requested_at' => now()])->save();
+        Profile::create(['user_id' => $new->id, 'first_name' => 'Nouveau', 'last_name' => 'T', 'gender' => 'homme', 'is_completed' => false,
+            'tribe_id' => $this->juda->id, 'matricule' => 'VHCTN0101']);
+        $this->assertOnly('Inscription à valider', fn () => $this->getJson("/api/admin/membership-requests/{$new->id}"), ['pasteur_resident']);
+        foreach (array_diff(self::ALL, ['pasteur_resident']) as $role) {
+            $this->as($role);
+            $this->postJson("/api/admin/validations/memberships/{$new->id}", ['decision' => 'approved'])->assertForbidden();
+            $this->assertSame([], $this->getJson('/api/admin/validations')->json('memberships') ?? [], $role);
+        }
+        // Tant qu'elle n'est pas validee, la personne n'apparait chez personne (fiche, liste).
+        foreach (self::ALL as $role) {
+            $this->as($role);
+            $this->assertNotSame(200, $this->getJson("/api/admin/members/{$new->id}")->getStatusCode(), $role);
+            $this->assertNotContains($new->id, array_column($this->getJson('/api/admin/members')->json('members') ?? [], 'user_id'), $role);
+        }
+        $this->as('pasteur_resident');
+        $this->assertSame('Nouveau T', $this->getJson('/api/admin/validations')->json('memberships.0.name'));
+
+        // Exercice donne par le patriarche de Juda a sa tribu : historique et suivi pour l'AP de la tribu, le PA et le PR.
+        $this->as('patriarche_juda');
+        $id = $this->postJson('/api/admin/exercises', ['title' => 'Lire Psaume 23', 'content' => 'Lire et noter un verset.', 'type' => 'lecture',
+            'scopes' => [['type' => 'tribe', 'id' => $this->juda->id]]])->assertCreated()->json('id');
+        $followers = ['patriarche_juda', 'ap_juda', 'pasteur_assistant', 'pasteur_resident'];
+        $this->assertOnly("Suivi d'un exercice du patriarche", fn () => $this->getJson("/api/admin/exercises/{$id}/tracking"), $followers);
+        foreach (self::ALL as $role) {
+            $this->as($role);
+            $res = $this->getJson('/api/admin/exercises');
+            $listed = $res->getStatusCode() === 200 && in_array($id, array_column($res->json('exercises'), 'id'), true);
+            $this->assertSame(in_array($role, $followers, true), $listed, "historique des exercices : {$role}");
+        }
+        $this->assertOnly("Exercices d'un membre", fn () => $this->getJson("/api/admin/members/{$this->marie->id}/exercises"),
+            ['garde', 'patriarche_juda', 'ap_juda', 'pasteur_assistant', 'pasteur_resident']);
+    }
+
     public function test_the_gardes_page_hides_the_fiss_of_the_gem_from_the_garde(): void
     {
         $readers = ['garde', 'patriarche_juda', 'ap_juda', 'pasteur_assistant', 'pasteur_resident', 'administrateur'];
@@ -225,10 +300,10 @@ class RoleAccessMatrixTest extends TestCase
 
         $tribeReaders = ['patriarche_juda', 'ap_juda', 'pasteur_assistant', 'pasteur_resident'];
         $this->assertOnly('Lecture du rapport de la tribu Juda', fn () => $this->getJson("/api/admin/leader-reports/{$this->tribeReport->id}"), $tribeReaders);
-        $this->assertOnly('PDF du rapport de la tribu Juda', fn () => $this->postJson("/api/admin/leader-reports/{$this->tribeReport->id}/exported"), $tribeReaders);
+        $this->assertOnly('PDF du rapport de la tribu Juda', fn () => $this->getJson("/api/admin/leader-reports/{$this->tribeReport->id}/export"), $tribeReaders);
         $departmentReaders = ['respo_departement', 'pasteur_assistant', 'pasteur_resident'];
         $this->assertOnly('Lecture du rapport de la Chorale', fn () => $this->getJson("/api/admin/leader-reports/{$this->departmentReport->id}"), $departmentReaders);
-        $this->assertOnly('PDF du rapport de la Chorale', fn () => $this->postJson("/api/admin/leader-reports/{$this->departmentReport->id}/exported"), $departmentReaders);
+        $this->assertOnly('PDF du rapport de la Chorale', fn () => $this->getJson("/api/admin/leader-reports/{$this->departmentReport->id}/export"), $departmentReaders);
 
         // Envoi : seul le patriarche de la tribu ; meme un pasteur ne remplit pas a sa place.
         $answers = ['rencontres_nombre' => 0, 'rencontres_motif' => 'Vacances', 'recadrement' => 'non', 'activites' => ['aucune' => 'Mois de repos'],

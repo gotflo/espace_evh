@@ -22,7 +22,7 @@ export function MyGrades() {
   if (data.evaluations.length === 0) {
     return (
       <section className="panel mt" id="mes-notes">
-        <div className="panel-head"><h3>Mes notes (Vertumètre)</h3></div>
+        <div className="panel-head"><h3>Mes notes</h3></div>
         <p className="helper">Aucune note pour l'instant. Vos responsables vous noteront au fil de votre parcours (méditation, participation…).</p>
       </section>
     )
@@ -30,7 +30,7 @@ export function MyGrades() {
 
   return (
     <section className="panel mt" id="mes-notes">
-      <div className="panel-head"><h3>Mes notes (Vertumètre)</h3></div>
+      <div className="panel-head"><h3>Mes notes</h3></div>
 
       <div className="grades-top">
         <div className="grade-avg">

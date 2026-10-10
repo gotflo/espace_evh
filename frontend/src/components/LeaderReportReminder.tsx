@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, peek } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { fillUrl, KIND_LABEL } from '../utils/leaderReports'
 import type { GemReportsData, LeaderReportsData } from '../types'
@@ -11,7 +11,7 @@ export function LeaderReportReminder() {
   const { roles } = useAuth()
   const navigate = useNavigate()
   const concerned = roles.some((r) => (r.key === 'patriarche' && r.scope_kind === 'tribe') || r.key === 'department_leader')
-  const [data, setData] = useState<LeaderReportsData | null>(null)
+  const [data, setData] = useState<LeaderReportsData | null>(() => peek<LeaderReportsData>('/admin/leader-reports') ?? null)
 
   useEffect(() => {
     if (concerned) api<LeaderReportsData>('/admin/leader-reports').then(setData).catch(() => setData(null))
@@ -42,7 +42,7 @@ export function GemReportReminder() {
   const { roles } = useAuth()
   const navigate = useNavigate()
   const isGarde = roles.some((r) => r.key === 'garde' && r.scope_kind === 'gem')
-  const [data, setData] = useState<GemReportsData | null>(null)
+  const [data, setData] = useState<GemReportsData | null>(() => peek<GemReportsData>('/admin/gem-reports') ?? null)
 
   useEffect(() => {
     if (isGarde) api<GemReportsData>('/admin/gem-reports').then(setData).catch(() => setData(null))

@@ -66,3 +66,13 @@ export const TREND_LABEL: Record<'up' | 'down' | 'stable', string> = {
   up: 'En hausse', down: 'En baisse', stable: 'Stable',
 }
 export const TREND_ARROW: Record<'up' | 'down' | 'stable', string> = { up: '↑', down: '↓', stable: '→' }
+
+/** Rubrique « Vie intérieure » (questions obligatoires de la fiche) : libelles courts pour la lecture d'une fiche. */
+export const INNER_LIFE_LABELS: [keyof FissForm, string][] = [
+  ['addiction', 'Addiction'],
+  ['addiction_victory', 'Victoire sur une addiction'],
+  ['companions', 'Saines compagnies'],
+  ['inner_wound', 'Blessure intérieure'],
+  ['difficult_situations', 'Situations difficiles'],
+  ['discouragement', 'Pensées de découragement'],
+]

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Profile;
 use App\Models\Role;
+use App\Models\Tribe;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -49,7 +50,7 @@ class InjectionTest extends TestCase
     public function test_sql_injection_attempts_in_searches_return_nothing_and_break_nothing(): void
     {
         Sanctum::actingAs($this->pastor);
-        foreach (["' OR '1'='1", "'; DROP TABLE users; --", '" OR ""="', "1) UNION SELECT phone FROM users --", '\\'] as $payload) {
+        foreach (["' OR '1'='1", "'; DROP TABLE users; --", '" OR ""="', '1) UNION SELECT phone FROM users --', '\\'] as $payload) {
             $res = $this->getJson('/api/admin/members?q='.urlencode($payload))->assertOk();
             $this->assertCount(0, $res->json('members'), $payload);
         }
@@ -101,7 +102,8 @@ class InjectionTest extends TestCase
     {
         $member = User::where('phone', '+14185559001')->first();
         Sanctum::actingAs($member);
-        $this->putJson('/api/profile', ['first_name' => 'Marie', 'last_name' => 'Tremblay', 'gender' => 'femme',
+        $tribe = Tribe::create(['name' => 'Juda', 'slug' => 'juda-i']);
+        $this->putJson('/api/profile', ['first_name' => 'Marie', 'last_name' => 'Tremblay', 'gender' => 'femme', 'tribe_id' => $tribe->id,
             'user_id' => $this->pastor->id, 'is_admin' => true, 'completion' => 100, 'id' => 999])->assertOk();
 
         $this->assertSame($member->id, Profile::where('first_name', 'Marie')->value('user_id'));

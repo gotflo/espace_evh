@@ -10,7 +10,9 @@ use App\Models\SpiritualHealthForm;
 use App\Models\Tribe;
 use App\Models\User;
 use App\Support\Audit;
+use App\Support\French;
 use App\Support\LeaderReportCatalog;
+use App\Support\PlatformSettings;
 use App\Support\Recipients;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
@@ -41,7 +43,7 @@ class LeaderReportService
     {
         return array_values(array_filter([
             self::duePeriod(),
-            now()->day >= self::OPENS_ON_DAY ? now()->format('Y-m') : null,
+            now()->day >= PlatformSettings::int('leader_reports.opens_on_day') ? now()->format('Y-m') : null,
         ]));
     }
 
@@ -220,7 +222,7 @@ class LeaderReportService
     public static function save(User $author, string $kind, int $scopeId, string $period, array $answers, bool $submit): LeaderReport
     {
         abort_unless(self::canFill($author, $kind, $scopeId), 403, "Ce rapport n'est pas à votre charge.");
-        abort_unless(self::isOpen($period), 423, 'Le rapport de '.self::periodLabel($period).' ne peut plus être modifié.');
+        abort_unless(self::isOpen($period), 423, 'Le rapport '.French::de(self::periodLabel($period)).' ne peut plus être modifié.');
         $clean = LeaderReportCatalog::clean($kind, $answers, $submit);
         $scopeName = ($kind === 'tribe' ? Tribe::find($scopeId) : Department::find($scopeId))?->name;
 

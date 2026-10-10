@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\LeaderReport;
+use App\Models\User;
 use App\Services\LeaderReportService;
 use App\Support\Audit;
 use App\Support\LeaderReportCatalog;
@@ -119,9 +120,35 @@ class LeaderReportController extends Controller
     {
         $user = $request->user();
         abort_unless(LeaderReportService::canRead($user, $report), 403, 'Ce rapport ne fait pas partie de votre périmètre.');
+
+        return response()->json($this->present($report, $user));
+    }
+
+    /**
+     * Export PDF : le serveur fournit le rapport et journalise l'export dans la meme requete. Permis a son
+     * auteur et aux lecteurs qui ont le droit d'exporter (reports.export) ; un brouillon ne s'exporte pas.
+     */
+    public function export(Request $request, LeaderReport $report): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless(LeaderReportService::canRead($user, $report), 403, 'Ce rapport ne fait pas partie de votre périmètre.');
+        abort_unless($this->canExport($user, $report), 403, 'Vous ne pouvez pas exporter ce rapport.');
+        Audit::log('leader_report.exported', $report, null, [], [], ['kind' => $report->kind, 'scope' => $report->scope_name, 'period' => $report->period]);
+
+        return response()->json($this->present($report, $user));
+    }
+
+    private function canExport(User $user, LeaderReport $report): bool
+    {
+        return $report->isSubmitted() && ((int) $report->author_user_id === $user->id || $user->hasPermission('reports.export'));
+    }
+
+    /** @return array<string, mixed> */
+    private function present(LeaderReport $report, User $user): array
+    {
         $report->load('author.profile:id,user_id,first_name,last_name');
 
-        return response()->json([
+        return [
             'id' => $report->id,
             'kind' => $report->kind,
             'scope_id' => $report->scope_id,
@@ -133,20 +160,12 @@ class LeaderReportController extends Controller
             'submitted_at' => $report->submitted_at?->toIso8601String(),
             'updated_at' => $report->updated_at?->toIso8601String(),
             'can_edit' => LeaderReportService::canFill($user, $report->kind, $report->scope_id) && LeaderReportService::isOpen($report->period),
+            'can_export' => $this->canExport($user, $report),
             'answers' => (object) ($report->answers ?? []),
             'steps' => LeaderReportCatalog::steps($report->kind),
             // Rapport envoye : ames figees a l'envoi ; brouillon : liste du moment.
             'souls' => $report->isSubmitted() ? ($report->souls ?? []) : LeaderReportService::souls($report->kind, $report->scope_id, $report->period),
-        ]);
-    }
-
-    /** Trace l'export PDF d'un rapport (genere sur l'appareil a partir des donnees autorisees). */
-    public function logExport(Request $request, LeaderReport $report): JsonResponse
-    {
-        abort_unless(LeaderReportService::canRead($request->user(), $report), 403, 'Ce rapport ne fait pas partie de votre périmètre.');
-        Audit::log('leader_report.exported', $report, null, [], [], ['kind' => $report->kind, 'scope' => $report->scope_name, 'period' => $report->period]);
-
-        return response()->json(['message' => 'ok']);
+        ];
     }
 
     private function period(mixed $value): ?string

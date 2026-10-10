@@ -17,6 +17,9 @@ class MemberScope
     /** Membres que l'utilisateur peut consulter. */
     public static function scopeProfiles(Builder $query, User $user): Builder
     {
+        $table = $query->getModel()->getTable();
+        // Inscription inachevee (tribu non choisie...) : la personne n'apparait chez aucun responsable.
+        $query->where("{$table}.is_completed", true);
         if ($user->hasPermission('members.view_all')) {
             return $query;
         }
@@ -25,13 +28,21 @@ class MemberScope
         $deptIds = $user->scopeDepartmentIds();
         $gemIds = $user->scopeGemIds();
         $memberIds = $user->scopeMemberIds();
-        $table = $query->getModel()->getTable();
 
         return $query->where(function ($sub) use ($tribeIds, $deptIds, $gemIds, $memberIds, $table) {
             $applied = false;
-            if ($gemIds) { $sub->orWhereIn("{$table}.gem_id", $gemIds); $applied = true; }
-            if ($tribeIds) { $sub->orWhereIn("{$table}.tribe_id", $tribeIds); $applied = true; }
-            if ($memberIds) { $sub->orWhereIn("{$table}.user_id", $memberIds); $applied = true; }
+            if ($gemIds) {
+                $sub->orWhereIn("{$table}.gem_id", $gemIds);
+                $applied = true;
+            }
+            if ($tribeIds) {
+                $sub->orWhereIn("{$table}.tribe_id", $tribeIds);
+                $applied = true;
+            }
+            if ($memberIds) {
+                $sub->orWhereIn("{$table}.user_id", $memberIds);
+                $applied = true;
+            }
             if ($deptIds) {
                 $sub->orWhereHas('departments', fn ($d) => $d->whereIn('departments.id', $deptIds));
                 $applied = true;

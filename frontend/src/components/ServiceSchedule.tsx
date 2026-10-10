@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, peek } from '../api/client'
+import { usePulse } from '../pulse'
+import { useAuth } from '../auth/AuthContext'
 import type { CalendarData, EventOccurrence } from '../types'
 import { serviceSchedulePath } from '../utils/schedule'
 
@@ -13,28 +15,44 @@ const time = (iso: string) => {
  * Programme regulier de l'eglise (rendez-vous « rappel a tous » : cultes, priere...),
  * regroupe par jour de la semaine a partir des 7 prochains jours du calendrier.
  */
-export function ServiceSchedule() {
-  const [days, setDays] = useState<{ day: string; date: string; items: EventOccurrence[] }[] | null>(null)
+function groupByDay(r: CalendarData) {
+  const byDay = new Map<string, EventOccurrence[]>()
+  r.events.filter((e) => e.remind_all).sort((a, b) => a.starts_at.localeCompare(b.starts_at)).forEach((e) => {
+    const l = byDay.get(e.occurs_on)
+    if (l) l.push(e); else byDay.set(e.occurs_on, [e])
+  })
+  return [...byDay.entries()].map(([date, items]) => ({
+    date, items,
+    day: new Date(`${date}T12:00:00`).toLocaleDateString('fr-CA', { weekday: 'long' }),
+  }))
+}
 
-  useEffect(() => {
-    api<CalendarData>(serviceSchedulePath(), { toast: false }).then((r) => {
-      const byDay = new Map<string, EventOccurrence[]>()
-      r.events.filter((e) => e.remind_all).sort((a, b) => a.starts_at.localeCompare(b.starts_at)).forEach((e) => {
-        const l = byDay.get(e.occurs_on)
-        if (l) l.push(e); else byDay.set(e.occurs_on, [e])
-      })
-      setDays([...byDay.entries()].map(([date, items]) => ({
-        date, items,
-        day: new Date(`${date}T12:00:00`).toLocaleDateString('fr-CA', { weekday: 'long' }),
-      })))
-    }).catch(() => setDays([]))
+export function ServiceSchedule() {
+  const { hasPermission } = useAuth()
+  const [days, setDays] = useState<{ day: string; date: string; items: EventOccurrence[] }[] | null>(() => {
+    const known = peek<CalendarData>(serviceSchedulePath())
+    return known ? groupByDay(known) : null
+  })
+
+  const load = useCallback(() => {
+    api<CalendarData>(serviceSchedulePath(), { toast: false }).then((r) => setDays(groupByDay(r))).catch(() => setDays((d) => d ?? []))
   }, [])
+  useEffect(() => { load() }, [load])
+  usePulse('events', load)
 
   if (!days || days.length === 0) return null
 
   return (
     <section className="panel service-schedule" aria-label="Nos rendez-vous">
-      <div className="panel-head"><h3>Nos rendez-vous</h3><Link className="btn-link" to="/calendrier">Calendrier</Link></div>
+      <div className="panel-head">
+        <h3>Nos rendez-vous</h3>
+        <span>
+          {/* Pasteurs : acces direct a la modification des horaires. */}
+          {hasPermission('schedule.edit') && <Link className="btn-link service-edit" to="/admin/horaires">Modifier</Link>}
+          {hasPermission('schedule.edit') && ' · '}
+          <Link className="btn-link" to="/calendrier">Calendrier</Link>
+        </span>
+      </div>
       {days.map((d) => (
         <div key={d.date} className="service-day">
           <Link to={`/calendrier?date=${d.date}`} className="service-day-name">{d.day}</Link>

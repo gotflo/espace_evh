@@ -2,13 +2,13 @@
 
 namespace Tests\Feature;
 
-use App\Models\Announcement;
 use App\Models\Department;
+use App\Models\DepartmentJoinRequest;
 use App\Models\Event;
-use App\Models\Exercise;
 use App\Models\Profile;
 use App\Models\PushSubscription;
 use App\Models\Role;
+use App\Models\Tribe;
 use App\Models\User;
 use App\Models\UserNotification;
 use App\Services\Push\WebPush;
@@ -31,7 +31,7 @@ class CalendarNotificationsServicesTest extends TestCase
         Http::preventStrayRequests(); // aucun appel reseau reel (push)
         // Ces tests portent sur des evenements precis : on retire le programme hebdomadaire
         // des cultes cree par la migration (teste a part dans ServiceScheduleTest).
-        \App\Models\Event::where('remind_all', true)->delete();
+        Event::where('remind_all', true)->delete();
     }
 
     protected function tearDown(): void
@@ -111,8 +111,8 @@ class CalendarNotificationsServicesTest extends TestCase
 
     public function test_member_does_not_see_events_of_other_tribes(): void
     {
-        $tribe = \App\Models\Tribe::create(['name' => 'Juda', 'slug' => 'juda']);
-        $other = \App\Models\Tribe::create(['name' => 'Lévi', 'slug' => 'levi']);
+        $tribe = Tribe::create(['name' => 'Juda', 'slug' => 'juda']);
+        $other = Tribe::create(['name' => 'Lévi', 'slug' => 'levi']);
         $user = $this->member('+14185550112', ['tribe_id' => $tribe->id]);
         Sanctum::actingAs($user);
         $this->makeEvent(['title' => 'Mienne', 'category' => 'culte', 'starts_at' => '2026-09-28 10:00'], [['type' => 'tribe', 'id' => $tribe->id]]);
@@ -280,28 +280,77 @@ class CalendarNotificationsServicesTest extends TestCase
 
     // ------------------------------------------------------------ Services
 
-    public function test_member_joins_and_leaves_a_service_and_the_leader_is_notified(): void
+    public function test_joining_a_service_is_validated_by_its_leader(): void
     {
         $leader = $this->member('+14185550120');
+        Profile::where('user_id', $leader->id)->update(['email' => 'responsable@exemple.org']);
         $dept = Department::create(['name' => 'Louange', 'slug' => 'louange', 'is_active' => true]);
         $dept->leaders()->attach($leader->id);
+        $otherLeader = $this->member('+14185550125');
+        $other = Department::create(['name' => 'Accueil', 'slug' => 'accueil', 'is_active' => true]);
+        $other->leaders()->attach($otherLeader->id);
         $member = $this->member('+14185550121', ['first_name' => 'Jean', 'last_name' => 'Dupont']);
         Sanctum::actingAs($member);
 
         $louange = fn () => collect($this->getJson('/api/me/services')->assertOk()->json('services'))->firstWhere('id', $dept->id);
         $this->assertFalse($louange()['joined']);
+        // Demande : en attente, le responsable est prevenu (application et courriel), rien n'est encore rejoint.
+        $this->postJson("/api/me/services/{$dept->id}/join")->assertOk()->assertJsonPath('status', 'pending');
+        $this->assertFalse($louange()['joined']);
+        $this->assertTrue($louange()['pending']);
+        $this->assertSame(0, DB::table('department_profile')->count());
+        $this->assertSame('Inscription au service Louange : Jean Dupont', UserNotification::where('user_id', $leader->id)->value('title'));
+        $this->assertDatabaseHas('outbound_messages', ['recipient' => 'responsable@exemple.org', 'kind' => 'service_request', 'view' => 'service-request']);
+        // Deux demandes ne font qu'une.
         $this->postJson("/api/me/services/{$dept->id}/join")->assertOk();
+        $this->assertSame(1, DepartmentJoinRequest::count());
+        $request = DepartmentJoinRequest::sole();
+
+        // Ni le membre lui-meme, ni le responsable d'un autre service ne peuvent valider.
+        $this->postJson("/api/admin/validations/services/{$request->id}", ['decision' => 'approved'])->assertForbidden();
+        Sanctum::actingAs($otherLeader->fresh());
+        $this->postJson("/api/admin/validations/services/{$request->id}", ['decision' => 'approved'])->assertForbidden();
+        $this->assertSame([], $this->getJson('/api/admin/validations')->assertOk()->json('services'));
+
+        // Le responsable du service voit la demande et la valide.
+        Sanctum::actingAs($leader->fresh());
+        $this->assertSame('Louange', $this->getJson('/api/admin/validations')->assertOk()->json('services.0.department.name'));
+        $this->postJson("/api/admin/validations/services/{$request->id}", ['decision' => 'approved'])->assertOk();
+        $this->postJson("/api/admin/validations/services/{$request->id}", ['decision' => 'approved'])->assertStatus(409);
+        $this->assertSame(1, DB::table('department_profile')->count());
+        $this->assertSame('Bienvenue au service Louange', UserNotification::where('user_id', $member->id)->where('type', 'service')->latest('id')->value('title'));
+
+        Sanctum::actingAs($member->fresh());
         $this->assertTrue($louange()['joined']);
         $this->assertSame(1, $louange()['members_count']);
-        $this->assertSame('Nouveau serviteur : Jean Dupont', UserNotification::where('user_id', $leader->id)->value('title'));
-        $this->assertSame(1, UserNotification::where('user_id', $member->id)->where('type', 'service')->count());
-
-        // Rejoindre deux fois ne duplique rien.
-        $this->postJson("/api/me/services/{$dept->id}/join")->assertOk();
-        $this->assertSame(1, DB::table('department_profile')->count());
-
         $this->deleteJson("/api/me/services/{$dept->id}")->assertOk();
         $this->assertSame(0, DB::table('department_profile')->count());
+
+        // Demande retiree par le membre avant la decision.
+        $this->postJson("/api/me/services/{$other->id}/join")->assertOk();
+        $this->deleteJson("/api/me/services/{$other->id}")->assertOk();
+        $this->assertSame('cancelled', DepartmentJoinRequest::where('department_id', $other->id)->value('status'));
+    }
+
+    public function test_the_profile_no_longer_chooses_departments_and_a_refusal_is_told_to_the_member(): void
+    {
+        $leader = $this->member('+14185550130');
+        $dept = Department::create(['name' => 'Chorale', 'slug' => 'chorale', 'is_active' => true]);
+        $dept->leaders()->attach($leader->id);
+        $member = $this->member('+14185550131', ['first_name' => 'Ana', 'last_name' => 'Tremblay']);
+        Sanctum::actingAs($member);
+        $profile = Profile::where('user_id', $member->id)->first();
+        $profile->forceFill(['tribe_id' => Tribe::create(['name' => 'Juda', 'slug' => 'juda'])->id, 'gender' => 'femme'])->save();
+        // department_ids envoye au profil : ignore (plus aucun raccourci pour entrer dans un departement).
+        $this->putJson('/api/profile', ['first_name' => 'Ana', 'last_name' => 'Tremblay', 'gender' => 'femme', 'tribe_id' => $profile->tribe_id,
+            'department_ids' => [$dept->id]])->assertOk();
+        $this->assertSame(0, DB::table('department_profile')->count());
+
+        $this->postJson("/api/me/services/{$dept->id}/join")->assertOk();
+        Sanctum::actingAs($leader->fresh());
+        $this->postJson('/api/admin/validations/services/'.DepartmentJoinRequest::sole()->id, ['decision' => 'rejected'])->assertOk();
+        $this->assertSame(0, DB::table('department_profile')->count());
+        $this->assertSame('Inscription au service Chorale', UserNotification::where('user_id', $member->id)->latest('id')->value('title'));
     }
 
     // ------------------------------------------------------------ Nouveaux inscrits
@@ -333,9 +382,12 @@ class CalendarNotificationsServicesTest extends TestCase
         $admin = $this->admin();
         $newcomer = User::create(['phone' => '+14185550124']);
         Profile::create(['user_id' => $newcomer->id, 'is_completed' => false]);
+        $tribe = Tribe::create(['name' => 'Juda', 'slug' => 'juda-n']);
         Sanctum::actingAs($newcomer);
 
-        $this->putJson('/api/profile', ['first_name' => 'Marie', 'last_name' => 'Tremblay', 'gender' => 'femme'])->assertOk();
+        // La tribu est obligatoire a l'inscription.
+        $this->putJson('/api/profile', ['first_name' => 'Marie', 'last_name' => 'Tremblay', 'gender' => 'femme'])->assertStatus(422);
+        $this->putJson('/api/profile', ['first_name' => 'Marie', 'last_name' => 'Tremblay', 'gender' => 'femme', 'tribe_id' => $tribe->id])->assertOk();
         $this->assertSame('Nouveau membre : Marie Tremblay', UserNotification::where('user_id', $admin->id)->value('title'));
 
         // Une simple modification ensuite ne renotifie pas.
@@ -361,7 +413,8 @@ class CalendarNotificationsServicesTest extends TestCase
         $this->assertContains('Demain : Prière du soir', $titles);
         $this->assertContains('Joyeux anniversaire, Adams !', $titles);
         $this->assertContains('Rappel : « Lire Romains 8 »', $titles);
-        $this->assertContains('Rappel : fiche de santé spirituelle de septembre 2026', $titles);
+        // Derniere semaine du mois : relance FISS (rappel la 1re semaine, relance la derniere).
+        $this->assertContains('Rappel : votre fiche de septembre à remplir', $titles);
         $this->assertSame(1, collect($titles)->filter(fn ($t) => $t === 'Demain : Prière du soir')->count());
 
         // ~1 h avant : seuls les inscrits sont relances.

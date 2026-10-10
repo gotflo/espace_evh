@@ -6,6 +6,7 @@ import type { LeaderReportForm, LeaderReportKind, ReportAnswer, ReportAnswers, R
 import { SkeletonCard } from '../Skeleton'
 import { Icon } from '../Icon'
 import { GemsBlock, IndicatorsBlock, ReportView, SoulsBlock } from './ReportView'
+import { de } from '../../utils/french'
 
 type SetAnswer = (value: ReportAnswer) => void
 
@@ -170,7 +171,7 @@ export function ReportWizard({ kind, scopeId, period, onClose, onSent }: {
         <span className="lock-icon"><Icon name="lock" size={20} /></span>
         <div className="lock-text">
           <strong>{title}</strong>
-          <span>{sent ? 'Ce rapport a été envoyé et ne peut plus être modifié.' : `Le rapport de ${form.period_label} ne peut plus être rempli.`}</span>
+          <span>{sent ? 'Ce rapport a été envoyé et ne peut plus être modifié.' : `Le rapport ${de(form.period_label)} ne peut plus être rempli.`}</span>
         </div>
         <button className="btn btn-ghost small" onClick={() => (sent && form.report_id ? onSent(form.report_id) : onClose())}>{sent ? 'Voir le rapport' : 'Retour'}</button>
       </div>

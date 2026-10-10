@@ -5,8 +5,8 @@ namespace App\Console\Commands;
 use App\Models\SpiritualHealthForm;
 use App\Models\User;
 use App\Services\Notifier;
+use App\Support\French;
 use Illuminate\Console\Command;
-use Illuminate\Support\Carbon;
 
 class FissRemind extends Command
 {
@@ -35,10 +35,10 @@ class FissRemind extends Command
             return self::SUCCESS;
         }
 
-        $title = "Rappel : fiche de santé spirituelle de {$monthLabel}";
+        $title = 'Rappel : fiche de santé spirituelle '.French::de($monthLabel);
         $body = $type === 'urgent'
-            ? "Le mois se termine bientôt. Merci de remplir votre fiche de santé spirituelle de {$monthLabel} dès aujourd'hui."
-            : "Pensez à remplir votre fiche de santé spirituelle de {$monthLabel} avant la fin du mois.";
+            ? 'Le mois touche bientôt à sa fin. Merci de remplir votre fiche de santé spirituelle '.French::de($monthLabel)." dès aujourd'hui."
+            : 'Pensez à remplir votre fiche de santé spirituelle '.French::de($monthLabel).' avant la fin du mois.';
 
         // Envoi manuel ; les rappels automatiques passent par app:tick (sans doublon).
         Notifier::send($missing, 'fiss', $title, $body, '/ma-fiche', ['period' => $period], $type === 'urgent' ? 'high' : 'normal');

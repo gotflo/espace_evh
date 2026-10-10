@@ -77,12 +77,32 @@ export interface UserRole {
   scope_name?: string | null
 }
 
+export interface Membership {
+  status: 'approved' | 'pending' | 'rejected'
+  /** Profil envoye au pasteur. */
+  submitted: boolean
+}
+
+/** Modules activables dans Gestion > Reglages. */
+export type ModuleName = 'vertumetre' | 'resolutions' | 'assignments' | 'exercises' | 'appointments' | 'spiritual'
+export interface AppSettings { modules: Partial<Record<ModuleName, boolean>>; push_prompt_snooze_days: number }
+
 export interface AuthPayload {
   user: User
   profile: Profile | null
   profile_completed: boolean
+  /** Notifications non lues (lecture du compte /me seulement). */
+  unread?: number
+  /** Reglages utiles a l'application : modules actifs, delai avant une nouvelle invitation aux notifications. */
+  settings?: AppSettings
+  /** Inscription : tribu obligatoire (sauf pasteurs, AP, administrateur) ; membre deja inscrit a qui il manque la tribu. */
+  registration?: { tribe_required: boolean; reopened: boolean }
   completion: ProfileCompletion | null
+  /** Validation du compte par le pasteur (nouveaux comptes). */
+  membership?: Membership
   is_super_admin: boolean
+  /** Compte de gestion principal : permissions de gestion seulement, sans espace membre. */
+  is_platform_manager?: boolean
   roles: UserRole[]
   permissions: string[]
 }
@@ -98,6 +118,8 @@ export interface MemberListItem {
   completion: number
   activity: Activity
   last_seen: string | null
+  /** Plus d'une semaine sans connexion : nombre de jours. */
+  absent_days?: number | null
   roles: string[]
   can_manage: boolean
   /** null : cet utilisateur ne voit pas les FISS de ce membre (Garde, responsable de departement...) */
@@ -115,11 +137,28 @@ export interface ManagedRole extends RoleOption {
   id: number
   is_system: boolean
   permission_keys: string[]
+  users_count?: number
+  rank?: number
+  /** Actions permises a l'utilisateur connecte (memes regles que le serveur). */
+  can_edit?: boolean
+  can_assign?: boolean
+}
+
+export interface PermissionItem {
+  key: string
+  name: string
+  kind?: string
+  kind_label?: string
+  /** Donne acces aux donnees personnelles des fideles. */
+  confidential?: boolean
+  /** L'utilisateur connecte peut-il la donner ? */
+  grantable?: boolean
 }
 
 export interface PermissionGroup {
+  key?: string
   group: string
-  permissions: { key: string; name: string }[]
+  permissions: PermissionItem[]
 }
 
 export interface OrgItem {
@@ -190,9 +229,34 @@ export interface ExerciseListItem {
   views_count: number
   views_completed_count: number
   created_at: string
+  /** Auteur (nom, role le plus eleve). */
+  author: ExerciseAuthor | null
+  is_mine: boolean
+  can_delete: boolean
+  /** Avancement, limite aux membres que l'utilisateur suit. */
+  audience_count: number
+  done_count: number
+  percent: number
 }
 
+export interface ExerciseAuthor { name: string; role: string | null }
+
 export type ExerciseStatus = 'todo' | 'in_progress' | 'done'
+
+/** Exercice adresse a un membre (historique sur sa fiche). */
+export interface MemberExerciseItem {
+  id: number
+  title: string
+  type_label: string
+  closes_at: string | null
+  is_closed: boolean
+  status: ExerciseStatus
+  percent: number
+  is_video: boolean
+  response: string | null
+  done_at: string | null
+  created_at: string
+}
 
 export interface ExerciseTrackingRow {
   user_id: number
@@ -215,6 +279,7 @@ export interface ExerciseTracking {
   exercise: {
     id: number; title: string; content: string; type_label: string; video: ExerciseVideo | null
     requires_response: boolean; closes_at: string | null; is_closed: boolean; target: string
+    author: ExerciseAuthor | null
   }
   summary: { total: number; done: number; in_progress: number; todo: number; skipped: number }
   members: ExerciseTrackingRow[]
@@ -392,6 +457,12 @@ export interface FissForm {
   situation_familiale: number | null
   situation_conjugale: number | null
   comment: string | null
+  addiction?: string | null
+  addiction_victory?: string | null
+  companions?: string | null
+  inner_wound?: string | null
+  difficult_situations?: string | null
+  discouragement?: string | null
   vie_spirituelle_total?: number
   vie_sociale_total?: number
   spiritual_score?: number | null
@@ -415,8 +486,11 @@ export interface FissData {
   current: FissForm | null
   history: FissForm[]
   indices: Record<string, FissIndex>
+  inner_life: Record<InnerLifeKey, InnerLifeQuestion>
   max_requests: number
 }
+export type InnerLifeKey = 'addiction' | 'addiction_victory' | 'companions' | 'inner_wound' | 'difficult_situations' | 'discouragement'
+export interface InnerLifeQuestion { label: string; question: string; placeholder: string; verse: string | null; reference: string | null }
 
 export interface EvaluationItem {
   id: number
@@ -602,6 +676,8 @@ export interface ServiceItem {
   leader_photo_url: string | null
   joined: boolean
   joined_at: string | null
+  /** Demande envoyee, en attente du responsable du service. */
+  pending?: boolean
   next_event: { title: string; starts_at: string } | null
 }
 
@@ -625,7 +701,7 @@ export interface FamilyPerson { user_id: number; full_name: string; tribe: strin
 export interface FamilyOverview {
   spouse: { id: number; user_id: number | null; name: string | null; tribe: string | null; photo_url: string | null; status: 'pending' | 'confirmed' | 'declined' } | null
   spouse_name: string | null
-  children: { id: number; name: string; birth_year: number | null; user_id: number | null; status: string }[]
+  children: { id: number; name: string; birth_year: number | null; birth_date?: string | null; user_id: number | null; status: string }[]
   incoming: { id: number; relation: 'spouse' | 'child'; from: string; from_user_id: number }[]
   suggestions: FamilyPerson[]
 }
@@ -664,7 +740,40 @@ export interface ValidationTribeItem {
   approvals: TribeApproval[]
   created_at: string
 }
-export interface ValidationsData { fiss: ValidationFissItem[]; tribes: ValidationTribeItem[]; count: number }
+export interface ValidationVertumetreItem { id: number; member: { user_id: number; name: string; tribe: string | null }; period_label: string | null; reason: string; request_number: number; created_at: string }
+export interface ValidationDeletionItem { id: number; member: { user_id: number | null; name: string; tribe: string | null }; requested_by: string | null; reason: string; created_at: string }
+/** Nouvelle inscription a valider par le pasteur (profil complet). */
+export interface MembershipRequest {
+  user_id: number
+  name: string
+  first_name: string | null
+  last_name: string | null
+  photo_url: string | null
+  tribe: string | null
+  status: 'pending' | 'rejected' | 'approved'
+  details: { label: string; value: string }[]
+  requested_at: string | null
+  decided_at: string | null
+  decided_by?: string | null
+}
+
+export interface ValidationsData {
+  fiss: ValidationFissItem[]
+  tribes: ValidationTribeItem[]
+  vertumetre?: ValidationVertumetreItem[]
+  deletions?: ValidationDeletionItem[]
+  memberships?: MembershipRequest[]
+  memberships_rejected?: MembershipRequest[]
+  /** Inscriptions aux services (departements) a valider par leur responsable. */
+  services?: ServiceJoinRequest[]
+  count: number
+}
+export interface ServiceJoinRequest {
+  id: number
+  department: { id: number; name: string | null }
+  member: { user_id: number; name: string | null; tribe: string | null; photo_url: string | null }
+  created_at: string | null
+}
 
 // ---------------------------------------------------------------- Rapports
 export interface ReportOptions { church: boolean; mine: boolean; tribes: { id: number; name: string }[] }
@@ -822,6 +931,8 @@ export interface LeaderReportForm extends LeaderReportScope {
 }
 export interface LeaderReportDetail extends LeaderReportScope {
   id: number
+  /** Export PDF permis (auteur, ou lecteur avec le droit d'exporter) ; verifie par le serveur. */
+  can_export?: boolean
   period: string
   period_label: string
   status: LeaderReportStatus
@@ -904,4 +1015,207 @@ export interface GardePage {
   reports_count: number
   weeks: GardeWeek[]
   timeline: { kind: string; at: string; label: string }[]
+}
+
+// ---------------------------------------------------------------- Mes RM (Résolutions du Mois)
+export type ResolutionKey = 'meditation' | 'priere' | 'jeune' | 'sanctification' | 'assiduite' | 'autres'
+export type ResolutionOutcome = 'atteinte' | 'en_partie' | 'non'
+export interface ResolutionField { label: string; question: string; placeholder: string; fiss: string | null; theme: string | null }
+export type MonthlyResolution = Record<ResolutionKey, string | null> & {
+  id: number
+  period: string
+  period_label: string
+  renewed: ResolutionKey[]
+  outcome: Partial<Record<ResolutionKey, ResolutionOutcome>> | null
+  outcome_at: string | null
+  count: number
+  achieved: number
+  updated_at: string | null
+}
+export interface ResolutionResource {
+  id: number; theme: string; title: string; author: string; url: string; youtube_id: string | null; note: string | null; position: number
+  status?: 'draft' | 'published'
+  kind?: 'youtube' | 'link'
+  thumbnail?: string | null
+  /** Membre : lecture de la video (pourcentage regarde, regardee en entier, reprise). */
+  watch?: { percent: number; completed: boolean; resume_at: number }
+}
+export interface ResolutionResourceGroup { theme: string; label: string; items: ResolutionResource[] }
+export interface ResolutionHint { value: string; level: 'bon' | 'moyen' | 'faible' }
+export interface ResolutionsData {
+  period: string
+  period_label: string
+  verse: { text: string; reference: string }
+  renew_phrase: string
+  fields: Record<ResolutionKey, ResolutionField>
+  outcomes: Record<ResolutionOutcome, string>
+  current: MonthlyResolution | null
+  previous: MonthlyResolution | null
+  review_needed: boolean
+  hints: { fiss_period_label: string | null; items: Partial<Record<ResolutionKey, ResolutionHint>> }
+  resources: ResolutionResourceGroup[]
+  history: MonthlyResolution[]
+}
+
+// ---------------------------------------------------------------- Mon devoir (DS)
+export interface AssignmentMedia { type: 'video' | 'audio'; youtube_id: string | null; audio_url: string | null; link: string | null }
+export interface Assignment {
+  id: number
+  title: string
+  instructions: string | null
+  speaker: string | null
+  media_type: 'video' | 'audio'
+  media_url: string | null
+  media: AssignmentMedia
+  thumbnail: string | null
+  published_at: string | null
+  response?: { summary: string; actions: string; submitted_at: string | null } | null
+  // Suivi de lecture (memes regles que les exercices video) : null = lien externe, non mesurable
+  trackable?: boolean
+  percent?: number | null
+  media_completed?: boolean
+  resume_at?: number
+  status?: 'todo' | 'in_progress' | 'done'
+  done?: boolean
+  // Cote responsables
+  done_count?: number
+  author?: string | null
+  has_audio_file?: boolean
+  responses_count?: number
+  members_count?: number
+}
+export interface MyAssignmentsData { assignments: Assignment[]; pending: number; prayer_reminder: string }
+
+// ---------------------------------------------------------------- Mon mois (tableau de bord)
+export interface MyMonthData {
+  /** Rendez-vous avec le pasteur a venir ou demande en attente. */
+  appointment?: { status: 'pending' | 'confirmed'; when: string | null; today: boolean } | null
+  period: string
+  period_label: string
+  days_left: number
+  steps: {
+    fiss: { done: boolean }
+    vertumetre?: { done: boolean }
+    /** Absent quand le module est desactive dans les reglages. */
+    resolutions?: { done: boolean; review_needed: boolean }
+    assignment?: { done: boolean; available: boolean; id: number | null; title: string | null; media_type: 'video' | 'audio' | null }
+  }
+  done: number
+  total: number
+}
+
+// ---------------------------------------------------------------- Horaires des cultes
+export interface ServiceSlot { id: number; title: string; description: string | null; category: string; location: string | null; day: number; day_label: string; start: string; end: string | null }
+
+// ---------------------------------------------------------------- Vertumètre mensuel
+export interface VertumetreOption { value: string; label: string }
+export interface VertumetreQuestion {
+  key: string
+  label: string
+  hint?: string
+  type: 'single' | 'multi' | 'text'
+  options: VertumetreOption[]
+  /** Texte qui accompagne un choix (« Autre (précisez) ») ; optional : facultatif. */
+  other?: { choice: string | string[]; key: string; label: string; optional?: boolean }
+  /** Texte qui suit la question (« Expliquez »). */
+  details?: { key: string; label: string }
+}
+export interface VertumetreSection { key: string; title: string; intro: string | null; questions: VertumetreQuestion[] }
+export type VertumetreAnswers = Record<string, string | string[] | null>
+export interface VertumetreForm {
+  id: number
+  period: string
+  period_label: string
+  answers: VertumetreAnswers
+  submitted_at: string | null
+  locked: boolean
+  edit_count: number
+  editable?: boolean
+  can_edit_until?: string | null
+  requests_left?: number
+  pending_request?: { id: number; reason: string; created_at: string } | null
+  last_decision?: { status: string; comment: string | null } | null
+}
+export interface VertumetreData {
+  sections: VertumetreSection[]
+  periods: { period: string; label: string; filled: boolean }[]
+  forms: VertumetreForm[]
+  max_requests: number
+}
+
+// ---------------------------------------------------------------- Rendez-vous avec le pasteur
+export type AppointmentStatus = 'pending' | 'confirmed' | 'done' | 'no_show' | 'cancelled'
+export type AppointmentUrgency = 'normal' | 'important' | 'urgent'
+export interface AppointmentItem {
+  id: number
+  host_id: number
+  status: AppointmentStatus
+  status_label: string
+  starts_at: string | null
+  ends_at: string | null
+  when: string | null
+  /** « mercredi 14 octobre » et « 21h50 », a l'heure de l'eglise. */
+  day: string | null
+  time: string | null
+  preference: 'slot' | 'session' | 'first'
+  preferred_date: string | null
+  preferred_label: string | null
+  urgency: AppointmentUrgency
+  urgency_label: string
+  message: string | null
+  has_message: boolean
+  cancel_reason: string | null
+  created_at: string | null
+  member: { user_id: number; name: string; first_name: string | null; last_name: string | null; phone: string | null; tribe: string | null; photo_url: string | null } | null
+  host?: string | null
+  rank?: number
+}
+export interface AppointmentSlot {
+  start: string
+  end: string
+  at: string
+  state: 'free' | 'taken' | 'booked' | 'blocked' | 'past' | 'done'
+  appointment_id?: number
+  appointment?: AppointmentItem
+  block_id?: number | null
+  outside?: boolean
+}
+export interface AppointmentSession {
+  date: string
+  label: string
+  range: string
+  starts_at: string
+  blocked: boolean
+  block_id: number | null
+  block_reason: string | null
+  slots: AppointmentSlot[]
+  free: number
+  booked: number
+  queued: number
+  over: boolean
+}
+export interface AppointmentHost { id: number; name: string; photo_url: string | null; accepting: boolean }
+export interface MyAppointmentsData {
+  hosts: AppointmentHost[]
+  host_id: number | null
+  accepting: boolean
+  slot_minutes: number
+  sessions: AppointmentSession[]
+  active: AppointmentItem | null
+  history: AppointmentItem[]
+  urgencies: Record<AppointmentUrgency, string>
+}
+export interface AppointmentWindowItem { id: number; weekday?: number; date?: string; label?: string; starts_at: string; ends_at: string }
+export interface AppointmentBlockItem { id: number; date: string; label: string; starts_at: string | null; ends_at: string | null; reason: string | null }
+export interface AdminAppointmentsData {
+  hosts: AppointmentHost[]
+  host_id: number | null
+  is_host: boolean
+  can_manage: boolean
+  sessions: AppointmentSession[]
+  /** Rendez-vous a venir par ordre de priorite (urgence, puis anciennete). */
+  priority: AppointmentItem[]
+  recent: AppointmentItem[]
+  availability: { slot_minutes: number; accepting: boolean; weekly: AppointmentWindowItem[]; extra: AppointmentWindowItem[]; blocks: AppointmentBlockItem[] } | null
+  urgencies: Record<AppointmentUrgency, string>
 }

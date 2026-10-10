@@ -10,6 +10,57 @@ class FissCatalog
 {
     public const SANCTIFICATION = ['mal', 'moyen', 'bien'];
 
+    /**
+     * Rubrique « Vie intérieure » de la fiche : textes libres OBLIGATOIRES (elle fait partie du remplissage), visibles seulement
+     * des pasteurs et des responsables de la tribu (patriarche, AP). Une seule definition,
+     * affichee par l'application et validee par le serveur.
+     *
+     * @return array<string, array{label: string, question: string, placeholder: string, verse: ?string, reference: ?string}>
+     */
+    public static function innerLife(): array
+    {
+        return [
+            'addiction' => [
+                'label' => 'Addiction',
+                'question' => 'Êtes-vous aux prises avec une addiction ?',
+                'placeholder' => 'Laquelle ? Depuis quand ? (ou « Aucune »)',
+                'verse' => null, 'reference' => null,
+            ],
+            'addiction_victory' => [
+                'label' => 'Victoire sur une addiction',
+                'question' => 'Avez-vous remporté une victoire sur une addiction ?',
+                'placeholder' => 'Racontez votre victoire. (ou « Non »)',
+                'verse' => null, 'reference' => null,
+            ],
+            'companions' => [
+                'label' => 'Saines compagnies',
+                'question' => 'Vos fréquentations vous aident-elles à grandir ?',
+                'placeholder' => 'Amis, collègues, réseaux… ce qui vous élève ou vous éloigne.',
+                'verse' => null,
+                'reference' => '1 Corinthiens 15:33',
+            ],
+            'inner_wound' => [
+                'label' => 'Blessure intérieure',
+                'question' => 'Portez-vous une blessure intérieure ?',
+                'placeholder' => 'Rejet, trahison, deuil, offense… (ou « Aucune »)',
+                'verse' => null, 'reference' => null,
+            ],
+            'difficult_situations' => [
+                'label' => 'Situations difficiles',
+                'question' => 'Traversez-vous une situation difficile ?',
+                'placeholder' => 'Santé, travail, famille, études… (ou « Aucune »)',
+                'verse' => null, 'reference' => null,
+            ],
+            'discouragement' => [
+                'label' => 'Pensées de découragement',
+                'question' => 'Avez-vous des pensées de découragement ?',
+                'placeholder' => 'Ce qui vous pèse en ce moment. (ou « Non »)',
+                'verse' => null,
+                'reference' => '2 Thessaloniciens 2:3',
+            ],
+        ];
+    }
+
     public static function indices(): array
     {
         return [

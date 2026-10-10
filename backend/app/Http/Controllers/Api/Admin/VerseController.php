@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\DashboardVerse;
 use App\Services\VerseService;
 use App\Support\Audit;
+use App\Support\PlatformManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -22,22 +23,48 @@ class VerseController extends Controller
         return response()->json(['verse' => VerseService::current()]);
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         $verses = DashboardVerse::with('editor.profile:id,user_id,first_name,last_name', 'creator.profile:id,user_id,first_name,last_name')
             ->orderBy('position')->orderBy('id')->get();
         $today = VerseService::pick(now());
+        $user = $request->user();
 
         return response()->json([
             'verses' => $verses->map(fn (DashboardVerse $v) => $this->present($v))->values(),
             'today' => $today,
             'today_is_fallback' => $today['id'] === null,
+            // Actions permises (memes regles que le serveur) : les boutons absents ne sont pas proposes.
+            'can' => [
+                'edit' => $user->hasPermission('verses.edit'),
+                'publish' => $user->hasPermission('verses.publish'),
+                'delete' => $user->hasPermission('verses.delete'),
+            ],
         ]);
+    }
+
+    /**
+     * Sans la permission « publier » : seulement des brouillons (ni publication, ni mise en avant, ni
+     * modification d'un texte deja publie, qui changerait ce que voient les membres).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function ensureCanPublish(Request $request, array $data, ?DashboardVerse $current = null): void
+    {
+        if ($request->user()->hasPermission('verses.publish')) {
+            return;
+        }
+        if ($data['status'] === 'published' || $data['is_pinned'] || ($current && ($current->status === 'published' || $current->is_pinned))) {
+            throw ValidationException::withMessages([
+                'status' => 'Vous pouvez préparer des brouillons ; publier, dépublier ou modifier un texte publié demande la permission « Publier ».',
+            ]);
+        }
     }
 
     public function store(Request $request): JsonResponse
     {
         $data = $this->validated($request);
+        $this->ensureCanPublish($request, $data);
         $verse = DB::transaction(function () use ($data, $request) {
             $verse = DashboardVerse::create($data + [
                 'position' => (int) DashboardVerse::max('position') + 1,
@@ -59,6 +86,7 @@ class VerseController extends Controller
     public function update(Request $request, DashboardVerse $verse): JsonResponse
     {
         $data = $this->validated($request, $verse);
+        $this->ensureCanPublish($request, $data, $verse);
         $before = $verse->only(['label', 'text', 'reference', 'message', 'status', 'starts_at', 'ends_at', 'is_pinned']);
         $verse->update($data + ['updated_by' => $request->user()->id]);
         [$old, $new] = Audit::diff(array_map(fn ($v) => (string) $v, $before), array_map(fn ($v) => (string) $v, $verse->only(array_keys($before))));
@@ -97,7 +125,7 @@ class VerseController extends Controller
     /** Historique d'un texte (creation, modifications, publication), du plus recent au plus ancien. */
     public function history(DashboardVerse $verse): JsonResponse
     {
-        $logs = AuditLog::with('actor.profile:id,user_id,first_name,last_name')
+        $logs = AuditLog::ordinary()->with('actor.profile:id,user_id,first_name,last_name')
             ->where('subject_type', 'dashboard_verse')->where('subject_id', $verse->id)
             ->orderByDesc('id')->limit(50)->get()
             ->map(fn (AuditLog $l) => [
@@ -185,8 +213,8 @@ class VerseController extends Controller
             'ends_at' => $v->ends_at?->toIso8601String(),
             'is_pinned' => $v->is_pinned,
             'position' => $v->position,
-            'author' => $v->creator?->profile?->full_name,
-            'updated_by' => $v->editor?->profile?->full_name,
+            'author' => PlatformManager::nameOf($v->creator),
+            'updated_by' => PlatformManager::nameOf($v->editor),
             'updated_at' => $v->updated_at?->toIso8601String(),
         ];
     }

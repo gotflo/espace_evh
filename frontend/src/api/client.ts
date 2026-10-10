@@ -5,8 +5,44 @@ const TOKEN_KEY = 'evh_token'
 
 export const auth = {
   get: () => localStorage.getItem(TOKEN_KEY),
-  set: (t: string) => localStorage.setItem(TOKEN_KEY, t),
-  clear: () => localStorage.removeItem(TOKEN_KEY),
+  set: (t: string) => { cache.clear(); cachedAt.clear(); localStorage.setItem(TOKEN_KEY, t) },
+  clear: () => { cache.clear(); cachedAt.clear(); localStorage.removeItem(TOKEN_KEY) },
+}
+
+/**
+ * Dernieres lectures (GET) reussies, en memoire seulement (rien n'est ecrit sur l'appareil),
+ * propres a la session et videes a la deconnexion. Une page deja visitee s'affiche tout de
+ * suite avec ces donnees (peek) puis se met a jour en silence quand la nouvelle lecture arrive.
+ */
+const CACHE_MAX = 80
+const cache = new Map<string, unknown>()
+const cachedAt = new Map<string, number>()
+function remember(key: string, data: unknown) {
+  cache.delete(key)
+  cache.set(key, data)
+  cachedAt.set(key, Date.now())
+  if (cache.size > CACHE_MAX) {
+    const oldest = cache.keys().next().value as string
+    cache.delete(oldest)
+    cachedAt.delete(oldest)
+  }
+}
+
+/**
+ * Lecture anticipee (survol ou toucher d'un lien) : la page suivante a deja ses donnees en
+ * arrivant. Rien n'est relu si la derniere lecture a moins de 20 s ou si elle est en cours.
+ */
+export function warm(path: string) {
+  const token = auth.get()
+  if (!token) return
+  const key = `${token} ${path}`
+  if (inflight.has(key) || Date.now() - (cachedAt.get(key) ?? 0) < 20000) return
+  api(path, { toast: false }).catch(() => {})
+}
+
+/** Derniere reponse connue d'une lecture (ou undefined) : affichage immediat avant la mise a jour. */
+export function peek<T>(path: string): T | undefined {
+  return cache.get(`${auth.get() ?? ''} ${path}`) as T | undefined
 }
 
 export class ApiError extends Error {
@@ -36,13 +72,24 @@ type Options = { method?: string; body?: unknown; auth?: boolean; toast?: string
 // donnee) : une seule requete au serveur, le resultat est partage.
 const inflight = new Map<string, Promise<unknown>>()
 
+/** Une lecture de moins de 2,5 s est reutilisee telle quelle (page ouverte juste apres un survol,
+ *  deux blocs qui lisent la meme donnee) ; toute modification ou tout changement signale par le
+ *  pouls la rend aussitot perimee (markStale). */
+const FRESH_MS = 2500
+export function markStale() { cachedAt.clear() }
+
 export function api<T = unknown>(path: string, opts: Options = {}): Promise<T> {
   const method = (opts.method ?? 'GET').toUpperCase()
   if (method !== 'GET' || opts.body !== undefined) return send<T>(path, method, opts)
   const key = `${opts.auth === false ? '' : auth.get() ?? ''} ${path}`
   const pending = inflight.get(key)
   if (pending) return pending as Promise<T>
-  const promise = send<T>(path, method, opts).finally(() => inflight.delete(key))
+  if (opts.auth !== false && cache.has(key) && Date.now() - (cachedAt.get(key) ?? 0) < FRESH_MS) {
+    return Promise.resolve(cache.get(key) as T)
+  }
+  const promise = send<T>(path, method, opts)
+    .then((data) => { if (opts.auth !== false) remember(key, data); return data })
+    .finally(() => inflight.delete(key))
   inflight.set(key, promise)
   return promise
 }
@@ -56,7 +103,8 @@ export function api<T = unknown>(path: string, opts: Options = {}): Promise<T> {
 export function prefetch(paths: string[]) {
   const token = auth.get()
   if (!token) return
-  const todo = paths.filter((p) => !inflight.has(`${token} ${p}`))
+  const fresh = (k: string) => cache.has(k) && Date.now() - (cachedAt.get(k) ?? 0) < FRESH_MS
+  const todo = paths.filter((p) => !inflight.has(`${token} ${p}`) && !fresh(`${token} ${p}`))
   if (!todo.length) return
   const query = todo.map((p) => `paths[]=${encodeURIComponent(p)}`).join('&')
   const bundle = send<{ responses: Record<string, { status: number; body?: unknown }> }>(`/me/home?${query}`, 'GET', {})
@@ -76,15 +124,24 @@ export function prefetch(paths: string[]) {
           throw err
         },
       )
+      .then((data) => { remember(key, data); return data })
       .finally(() => inflight.delete(key))
     inflight.set(key, promise)
+    promise.catch(() => { /* chaque bloc qui lit cette donnee gere lui-meme l'erreur */ })
   }
 }
+
+/** Rappel apres chaque action reussie de l'utilisateur (le « pouls » s'y abonne : temps reel). */
+let changed: (() => void) | null = null
+export function onDataChanged(cb: () => void) { changed = cb }
 
 async function send<T>(path: string, method: string, opts: Options): Promise<T> {
   const isAction = method !== 'GET' && opts.toast !== false
   try {
     const data = await request<T>(path, method, opts)
+    // Toute ecriture rend les lectures recentes perimees (sauf l'entretien : notifications lues, appareil).
+    if (method !== 'GET' && !/^\/(me\/notifications|me\/push|monitor|me\/announcements\/read)/.test(path)) markStale()
+    if (isAction) changed?.()
     if (isAction) {
       const text = typeof opts.toast === 'string' ? opts.toast : (data as { message?: unknown } | undefined)?.message
       if (typeof text === 'string' && text && text !== 'ok') toast.success(text)

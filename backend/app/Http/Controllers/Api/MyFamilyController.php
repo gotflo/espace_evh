@@ -45,6 +45,7 @@ class MyFamilyController extends Controller
             'children' => ['array', 'max:20'],
             'children.*.name' => ['required', 'string', 'min:2', 'max:150'],
             'children.*.birth_year' => ['nullable', 'integer', 'min:1900', 'max:'.now()->year],
+            'children.*.birth_date' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:1900-01-01', 'before_or_equal:today'],
             'children.*.user_id' => ['nullable', 'integer', 'exists:users,id'],
         ]);
         FamilyService::setChildren($request->user(), (bool) $data['has_children'], $data['children'] ?? []);

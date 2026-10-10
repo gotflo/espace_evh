@@ -322,11 +322,15 @@ class GemReportsAndLeadersTest extends TestCase
             'author_user_id' => $this->patriarch->id, 'status' => 'submitted', 'answers' => ['projets' => 'Veillée'], 'souls' => [], 'submitted_at' => now()]);
 
         Sanctum::actingAs($this->pastor);
-        $this->postJson("/api/admin/leader-reports/{$report->id}/exported")->assertOk();
+        $this->getJson("/api/admin/leader-reports/{$report->id}/export")->assertOk()->assertJsonPath('id', $report->id)->assertJsonPath('answers.projets', 'Veillée');
         $log = AuditLog::where('action', 'leader_report.exported')->sole();
         $this->assertSame([$this->pastor->id, 'Juda', '2026-09'], [$log->user_id, $log->context['scope'], $log->context['period']]);
 
         Sanctum::actingAs($this->members[0]);
-        $this->postJson("/api/admin/leader-reports/{$report->id}/exported")->assertForbidden();
+        $this->getJson("/api/admin/leader-reports/{$report->id}/export")->assertForbidden();
+        // Un brouillon ne s'exporte pas.
+        $report->update(['status' => 'draft']);
+        Sanctum::actingAs($this->pastor);
+        $this->getJson("/api/admin/leader-reports/{$report->id}/export")->assertForbidden();
     }
 }

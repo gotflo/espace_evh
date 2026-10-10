@@ -8,6 +8,7 @@ use App\Models\EventParticipation;
 use App\Services\Notifier;
 use App\Support\Audience;
 use App\Support\Audit;
+use App\Support\PlatformManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -242,7 +243,7 @@ class EventController extends Controller
             'target' => $e->targetLabel(),
             // Un evenement recurrent reste « a venir » tant qu'il a une prochaine occurrence.
             'is_past' => $e->isRecurring() ? $next === null : ($e->ends_at ?? $e->starts_at)?->isPast() ?? false,
-            'author' => $e->creator?->profile?->full_name ?: null,
+            'author' => PlatformManager::nameOf($e->creator),
             'going_count' => $e->going_count ?? 0,
             'volunteer_count' => $e->volunteer_count ?? 0,
         ];

@@ -60,16 +60,28 @@ export default function ExerciseDetail() {
   const canRespond = hasPermission('exercises.respond') && ex.requires_response && !ex.is_closed
 
   return (
-    <AppLayout title={ex.title} subtitle={deadline ?? 'Sans date limite'} actions={back}>
+    <AppLayout title="Mes exercices" subtitle={ex.video ? 'Vidéo à regarder' : 'Lecture et méditation'} actions={back}>
       <div className="exercise-detail">
+        {/* Titre dans la page (et non dans l'en-tete) : un titre long reste lisible sur telephone. */}
+        <header className="ex-hero">
+          <span className={`ds-type ds-type-${ex.video ? 'video' : 'audio'}`}><Icon name={ex.video ? 'play' : 'book'} size={14} /> {ex.video ? 'Vidéo' : 'Lecture'}</span>
+          <h2>{ex.title}</h2>
+        </header>
         <div className={`exercise-state state-${ex.is_closed && !ex.completed ? 'closed' : ex.status}`}>
           {ex.completed ? 'Exercice terminé' : ex.is_closed ? 'Exercice fermé' : ex.status === 'in_progress' ? 'En cours' : 'À faire'}
           {deadline && <span>{deadline}</span>}
         </div>
 
+        {/* Exercice ferme : on peut le consulter, plus le faire (reponse et lecture ne comptent plus). */}
+        {ex.is_closed && !ex.completed && (
+          <div className="alert alert-info ex-closed-note" role="note">
+            <Icon name="lock" size={15} /> Exercice fermé : vous pouvez le consulter, mais il ne peut plus être fait.
+          </div>
+        )}
+
         {ex.video && (
           <section className="panel">
-            <YouTubePlayer exerciseId={ex.id} videoId={ex.video.id} resumeAt={resumeAt} track={!ex.is_closed && !ex.video_completed} onProgress={onProgress} />
+            <YouTubePlayer target={{ kind: 'exercise', id: ex.id }} videoId={ex.video.id} resumeAt={resumeAt} track={!ex.is_closed && !ex.video_completed} onProgress={onProgress} />
             <div className="watch-progress" aria-live="polite">
               <div className="watch-bar" role="progressbar" aria-valuenow={ex.percent} aria-valuemin={0} aria-valuemax={100} aria-label="Vidéo regardée">
                 <span style={{ width: `${ex.percent}%` }} className={ex.video_completed ? 'done' : ''} />
@@ -77,9 +89,11 @@ export default function ExerciseDetail() {
               <p className="helper">
                 {ex.video_completed
                   ? 'Vidéo regardée en entier. Merci !'
-                  : `Vous avez regardé ${ex.percent} % de la vidéo. Pour la valider, regardez-la en entier : les passages avancés rapidement ne comptent pas.`}
+                  : ex.is_closed
+                    ? `Vous aviez regardé ${ex.percent} % de la vidéo avant la fermeture. Elle reste consultable, sans être comptée.`
+                    : `Vous avez regardé ${ex.percent} % de la vidéo. Pour la valider, regardez-la en entier : les passages avancés rapidement ne comptent pas.`}
               </p>
-              {!ex.video_completed && resumeAt > 5 && <p className="helper">▶ La lecture reprend là où vous vous étiez arrêté.</p>}
+              {!ex.video_completed && !ex.is_closed && resumeAt > 5 && <p className="helper">▶ La lecture reprend là où vous vous étiez arrêté.</p>}
             </div>
           </section>
         )}
