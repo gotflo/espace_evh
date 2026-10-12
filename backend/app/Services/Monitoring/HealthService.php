@@ -128,12 +128,16 @@ class HealthService
             'note' => $driver === 'twilio_verify' ? null : 'Mode « log » : les codes ne partent pas par SMS (développement uniquement).',
         ];
 
+        // Courriels : en production, le pilote « log » n'envoie rien (alerte). Echecs des dernieres 24 h.
         $mailer = (string) config('mail.default');
+        $mailFailed = DB::table('outbound_messages')->where('channel', 'email')->where('status', 'failed')
+            ->where('updated_at', '>=', now()->subDay())->count();
         $health['checks']['mail'] = [
-            'ok' => true,
+            'ok' => \App\Services\Messenger::emailDeliverable() && $mailFailed < 3,
             'configured' => ! in_array($mailer, ['log', 'array'], true),
             'driver' => $mailer,
-            'note' => in_array($mailer, ['log', 'array'], true) ? 'Aucun envoi de courriel configuré (MAIL_MAILER).' : null,
+            'failed_24h' => $mailFailed,
+            'note' => \App\Services\Messenger::emailDeliverable() ? null : 'Aucun envoi de courriel configuré (MAIL_MAILER) : les courriels ne partent pas.',
         ];
 
         $health['checks']['scheduler'] = [

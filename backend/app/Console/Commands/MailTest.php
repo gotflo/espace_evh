@@ -27,6 +27,11 @@ class MailTest extends Command
             .' · identifiant '.(config('mail.mailers.smtp.username') ?: '(aucun)').' · mot de passe '.(config('mail.mailers.smtp.password') ? 'présent' : 'absent'));
         $this->line('Expéditeur : '.config('mail.from.name').' <'.config('mail.from.address').'> · sans adresse de réponse (noreply)');
         $this->line('Textos de notification : '.(TwilioMessagingClient::enabled() ? 'activés' : 'désactivés (TWILIO_SMS_FROM absent)'));
+        if (! Messenger::emailDeliverable()) {
+            $this->error('Aucun envoi de courriel configuré (MAIL_MAILER='.config('mail.default').') : rien ne partirait. Renseignez MAIL_MAILER=smtp et le serveur SMTP dans .env.');
+
+            return self::FAILURE;
+        }
 
         $app = rtrim((string) config('app.url'), '/');
         $people = [

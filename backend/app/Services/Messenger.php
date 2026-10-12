@@ -26,6 +26,18 @@ class Messenger
 
     private const MAX_ATTEMPTS = 5;
 
+    /** Motif enregistre quand aucun envoi de courriel n'est configure sur le serveur. */
+    public const MAIL_NOT_CONFIGURED = 'Non envoyé : aucun envoi de courriel configuré sur le serveur (MAIL_MAILER).';
+
+    /**
+     * Les courriels partent-ils vraiment ? Avec le pilote « log » ou « array », ils ne sont qu'ecrits dans un
+     * journal : accepte en developpement et pendant les tests, jamais compte comme un envoi ailleurs.
+     */
+    public static function emailDeliverable(): bool
+    {
+        return ! in_array((string) config('mail.default'), ['log', 'array'], true) || app()->environment('local', 'testing');
+    }
+
     // ---------------------------------------------------------------- Destinataires
 
     public static function emailOf(User $user): ?string
@@ -108,6 +120,14 @@ class Messenger
         foreach (['email' => (int) config('mail.per_minute', 20), 'sms' => (int) config('services.sms.per_minute', 30)] as $channel => $limit) {
             $due = OutboundMessage::where('channel', $channel)->where('status', 'pending')->where('available_at', '<=', $now)
                 ->orderBy('available_at')->orderBy('id')->limit(max(1, $limit))->get();
+            // Courriels sans envoi configure : marques « non envoyes » (jamais « envoyes »), sans tentative.
+            if ($channel === 'email' && ! self::emailDeliverable() && $due->isNotEmpty()) {
+                $failed += OutboundMessage::whereIn('id', $due->pluck('id'))->where('status', 'pending')
+                    ->update(['status' => 'failed', 'last_error' => self::MAIL_NOT_CONFIGURED, 'updated_at' => $now]);
+                Log::warning('Courriels non envoyés : aucun envoi configuré (MAIL_MAILER)', ['count' => $due->count()]);
+
+                continue;
+            }
             foreach ($due as $message) {
                 // Reserve le message (un seul envoi meme si deux taches tournent en meme temps).
                 $claimed = OutboundMessage::where('id', $message->id)->where('status', 'pending')
