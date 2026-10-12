@@ -3,6 +3,7 @@ import { api, ApiError } from '../api/client'
 import { getReference } from '../api/reference'
 import { useAuth } from '../auth/AuthContext'
 import { AppLayout } from '../components/AppLayout'
+import { PhotoCropper } from '../components/PhotoCropper'
 import { Link } from 'react-router-dom'
 import { CompletionCard } from '../components/profile/CompletionCard'
 import { FamilySection } from '../components/profile/FamilySection'
@@ -50,6 +51,8 @@ export default function MyProfile() {
   const [gender, setGender] = useState(profile?.gender === 'homme' || profile?.gender === 'femme' ? profile.gender : '')
   const [tribeId, setTribeId] = useState(profile?.tribe_id?.toString() ?? '')
   const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [cropping, setCropping] = useState<File | null>(null)
+  const pickedRef = useRef<File | null>(null) // photo d'origine, pour reprendre le cadrage
   const [photoPreview, setPhotoPreview] = useState<string | null>(profile?.photo_url ?? null)
   const [email, setEmail] = useState(profile?.email ?? '')
   const [marital, setMarital] = useState(profile?.marital_status ?? '')
@@ -75,10 +78,16 @@ export default function MyProfile() {
     api<{ completion: ProfileCompletion | null }>('/profile').then((r) => setCompletion(r.completion)).catch(() => {})
   }, [resetSpiritual])
 
+  // Photo choisie : cadrage d'abord (PhotoCropper), puis la version reduite remplace l'apercu.
   function onPickPhoto(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (!file) return
-    setPhotoFile(file); setPhotoPreview(URL.createObjectURL(file))
+    e.target.value = '' // la meme photo peut etre choisie a nouveau
+    if (file) { pickedRef.current = file; setCropping(file) }
+  }
+  function onPhotoReady(photo: File) {
+    setCropping(null)
+    setPhotoFile(photo)
+    setPhotoPreview((old) => { if (old?.startsWith('blob:')) URL.revokeObjectURL(old); return URL.createObjectURL(photo) })
   }
 
 
@@ -167,7 +176,11 @@ export default function MyProfile() {
               <div>
                 <button type="button" className="btn btn-ghost small" onClick={() => fileRef.current?.click()}>Choisir une photo</button>
                 <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickPhoto} />
-                <p className="helper">JPG ou PNG, 5 Mo max.</p>
+                {cropping && <PhotoCropper file={cropping} onCancel={() => setCropping(null)} onDone={onPhotoReady} />}
+                {photoFile && pickedRef.current && (
+                  <button type="button" className="btn-link photo-reframe" onClick={() => setCropping(pickedRef.current)}>Ajuster le cadrage</button>
+                )}
+                <p className="helper">Toute photo convient : vous la cadrez, puis elle est allégée automatiquement avant l’envoi.</p>
               </div>
             </div>
           </div>

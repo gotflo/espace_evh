@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\Admin\AccountController;
 use App\Http\Controllers\Api\Admin\AnnouncementController;
+use App\Http\Controllers\Api\Admin\AppearanceController as AdminAppearanceController;
 use App\Http\Controllers\Api\Admin\AppointmentController;
 use App\Http\Controllers\Api\Admin\AssignmentController;
 use App\Http\Controllers\Api\Admin\AttendanceController;
@@ -32,6 +33,7 @@ use App\Http\Controllers\Api\Admin\ValidationController;
 use App\Http\Controllers\Api\Admin\VerseController;
 use App\Http\Controllers\Api\Admin\VertumetreController;
 use App\Http\Controllers\Api\AgentController;
+use App\Http\Controllers\Api\AppearanceController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CalendarController;
 use App\Http\Controllers\Api\ClientErrorController;
@@ -71,34 +73,38 @@ use Illuminate\Support\Facades\Route;
 
 // --- Authentification par telephone (OTP SMS) ---
 // Rate limiting : bride les tentatives (anti-force brute / anti-spam SMS) par IP.
-Route::post('/auth/request-otp', [AuthController::class, 'requestOtp'])->middleware('throttle:8,1');
-Route::post('/auth/verify-otp', [AuthController::class, 'verifyOtp'])->middleware('throttle:12,1');
+// Limites propres a chaque route (3e parametre = compteur separe) : sans lui, toutes les limites d'une meme
+// adresse IP ou d'un meme compte partageaient un seul compteur (une limite de 8 comptait aussi les autres appels).
+Route::post('/auth/request-otp', [AuthController::class, 'requestOtp'])->middleware('throttle:8,1,otp-request');
+Route::post('/auth/verify-otp', [AuthController::class, 'verifyOtp'])->middleware('throttle:12,1,otp-verify');
 // Compte de gestion principal (sans code SMS) : le numero suffit sur un appareil de confiance ; un nouvel
 // appareil s'autorise une fois avec le code genere sur le serveur. Essais limites (adresse + verrouillage).
 Route::post('/auth/manager-activation', [AuthController::class, 'activateManager'])->middleware('throttle:manager-activation');
 
 // --- Abonnement calendrier (Google Agenda, iPhone, Outlook) : jeton personnel dans l'URL ---
 Route::get('/calendar/feed/{token}.ics', [CalendarController::class, 'ics'])
-    ->where('token', '[A-Za-z0-9]+')->middleware('throttle:30,1');
+    ->where('token', '[A-Za-z0-9]+')->middleware('throttle:30,1,calendar-feed');
 
 // --- Etat de sante (surveillance externe), sans donnee sensible ---
-Route::get('/health', HealthController::class)->middleware('throttle:30,1');
+Route::get('/health', HealthController::class)->middleware('throttle:30,1,health');
+// Apparence (images et textes affiches, aussi sur l'ecran de connexion) : publique, sans donnee personnelle.
+Route::get('/appearance', [AppearanceController::class, 'show'])->middleware('throttle:60,1,appearance');
 
 // --- Boutons « Accepter / Rejeter » du courriel de demande de suppression (lien signe, nominatif) ---
 // Le lien (GET) affiche une page qui envoie aussitot la decision (POST) ; signature verifiee dans le controleur.
 Route::get('/email-actions/deletion/{deletionRequest}/{decision}/{pastor}', [EmailActionController::class, 'showDeletion'])
-    ->whereIn('decision', ['approve', 'reject'])->whereNumber('pastor')->name('email.deletion')->middleware('throttle:30,1');
+    ->whereIn('decision', ['approve', 'reject'])->whereNumber('pastor')->name('email.deletion')->middleware('throttle:30,1,email-actions');
 Route::post('/email-actions/deletion/{deletionRequest}/{decision}/{pastor}', [EmailActionController::class, 'decideDeletion'])
-    ->whereIn('decision', ['approve', 'reject'])->whereNumber('pastor')->middleware('throttle:30,1');
+    ->whereIn('decision', ['approve', 'reject'])->whereNumber('pastor')->middleware('throttle:30,1,email-actions');
 // --- Boutons « Valider / Rejeter » du courriel d'une nouvelle inscription (meme fonctionnement) ---
 Route::get('/email-actions/membership/{member}/{decision}/{pastor}', [EmailActionController::class, 'showMembership'])
-    ->whereIn('decision', ['approve', 'reject'])->whereNumber('member')->whereNumber('pastor')->name('email.membership')->middleware('throttle:30,1');
+    ->whereIn('decision', ['approve', 'reject'])->whereNumber('member')->whereNumber('pastor')->name('email.membership')->middleware('throttle:30,1,email-actions');
 Route::post('/email-actions/membership/{member}/{decision}/{pastor}', [EmailActionController::class, 'decideMembership'])
-    ->whereIn('decision', ['approve', 'reject'])->whereNumber('member')->whereNumber('pastor')->middleware('throttle:30,1');
+    ->whereIn('decision', ['approve', 'reject'])->whereNumber('member')->whereNumber('pastor')->middleware('throttle:30,1,email-actions');
 
 // Accuse de reception d'un push, envoye par l'appareil (service worker, sans session) :
 // l'adresse d'abonnement, connue seulement du navigateur et du serveur, identifie l'appareil.
-Route::post('/push/receipt', [MyNotificationController::class, 'receipt'])->middleware('throttle:60,1');
+Route::post('/push/receipt', [MyNotificationController::class, 'receipt'])->middleware('throttle:60,1,push-receipt');
 
 // Erreurs d'affichage remontees par le navigateur (supervision), sans session obligatoire.
 Route::post('/monitor/client-errors', [ClientErrorController::class, 'store'])->middleware('throttle:client-errors');
@@ -260,6 +266,16 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
         // Reglages de la plateforme (rappels automatiques, horaires d'envoi, limites).
         Route::get('/settings', [SettingsController::class, 'index'])->middleware('permission:settings.manage');
         Route::put('/settings', [SettingsController::class, 'update'])->middleware('permission:settings.manage');
+        // Apparence : image de l'accueil et photos de l'ecran de connexion (envoi, cadrage, ordre, retour a l'origine).
+        Route::middleware('permission:settings.manage')->prefix('appearance')->group(function () {
+            Route::get('/', [AdminAppearanceController::class, 'index']);
+            Route::post('/home', [AdminAppearanceController::class, 'uploadHome'])->middleware('throttle:20,1,appearance-upload');
+            Route::put('/home', [AdminAppearanceController::class, 'positionHome']);
+            Route::delete('/home', [AdminAppearanceController::class, 'resetHome']);
+            Route::post('/login', [AdminAppearanceController::class, 'addLogin'])->middleware('throttle:20,1,appearance-upload');
+            Route::put('/login', [AdminAppearanceController::class, 'arrangeLogin']);
+            Route::delete('/login', [AdminAppearanceController::class, 'resetLogin']);
+        });
         Route::get('/accounts', [AccountController::class, 'index'])->middleware('permission:accounts.view');
 
         // Destinataires possibles d'une publication (tribus / GEMs / departements de sa portee).
@@ -294,7 +310,7 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
         Route::post('/appointments/{appointment}/assign', [AppointmentController::class, 'assign'])->middleware('module:appointments');
         Route::post('/appointments/{appointment}/cancel', [AppointmentController::class, 'cancel'])->middleware('module:appointments');
         Route::post('/appointments/{appointment}/outcome', [AppointmentController::class, 'outcome'])->middleware('module:appointments');
-        Route::post('/appointments/{appointment}/call', [AppointmentController::class, 'call'])->middleware('throttle:30,1')->middleware('module:appointments');
+        Route::post('/appointments/{appointment}/call', [AppointmentController::class, 'call'])->middleware('throttle:30,1,appointment-call')->middleware('module:appointments');
         Route::post('/appointments/{appointment}/urgency', [AppointmentController::class, 'urgency'])->middleware('module:appointments');
         Route::put('/appointment-availability', [AppointmentController::class, 'saveAvailability'])->middleware('module:appointments');
         Route::post('/appointment-availability/windows', [AppointmentController::class, 'addWindow'])->middleware('module:appointments');

@@ -31,6 +31,8 @@ const SHORTCUTS: { to: string; label: string; hint: string; icon: string; perm: 
   { to: '/admin/roles', label: 'Rôles', hint: 'Permissions par module', icon: ICONS.roles, perm: 'roles.manage' },
   { to: '/admin/organisation', label: 'Organisation', hint: 'Tribus et départements', icon: ICONS.org, perm: 'tribes.manage' },
   { to: '/admin/gems', label: 'GEMs', hint: 'Groupes des tribus', icon: ICONS.gem, perm: 'gems.manage' },
+  { to: '/admin/apparence', label: 'Apparence', hint: 'Images de l’accueil et de la connexion, textes', icon: ICONS.image, perm: 'settings.manage' },
+  { to: '/admin/reglages', label: 'Réglages', hint: 'Modules, rappels automatiques, délais', icon: ICONS.settings, perm: 'settings.manage' },
   { to: '/admin/journal', label: 'Journal', hint: 'Opérations de gestion', icon: ICONS.audit, perm: 'audit.view' },
 ]
 

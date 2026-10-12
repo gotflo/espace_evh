@@ -7,6 +7,7 @@ import { Icon } from '../components/Icon'
 import { VerseBanner } from '../components/VerseBanner'
 
 import type { Profile } from '../types'
+import { useAppearance } from '../appearance'
 
 /** Verification de la validation : toutes les 45 s quand l'ecran est visible, et au retour sur l'application. */
 const CHECK_EVERY = 45_000
@@ -17,6 +18,7 @@ const CHECK_EVERY = 45_000
  */
 export function AccountPending() {
   const { profile, setProfile, refresh, logout, membership } = useAuth()
+  const pendingMessage = useAppearance(false).appearance.texts.pending_message
   const [email, setEmail] = useState(profile?.email ?? '')
   const [editing, setEditing] = useState(!profile?.email)
   const [busy, setBusy] = useState(false)
@@ -81,7 +83,7 @@ export function AccountPending() {
           <span className="pending-status-icon"><Icon name="clock" size={20} /></span>
           <div>
             <strong>Compte en attente de validation</strong>
-            <p>Le pasteur va valider votre inscription. Votre espace s'ouvrira alors automatiquement.</p>
+            <p>{pendingMessage}</p>
           </div>
         </section>
 

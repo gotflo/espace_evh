@@ -7,6 +7,8 @@ import { AudiencePicker } from '../../components/AudiencePicker'
 import { SkeletonCard } from '../../components/Skeleton'
 import type { AnnouncementAdminItem, AudienceScope } from '../../types'
 import { Icon } from '../../components/Icon'
+import { ImageError, shrinkFile } from '../../utils/imagePipeline'
+import { toast } from '../../toast'
 
 const CATEGORIES = [
   { key: 'info', label: 'Information' },
@@ -30,6 +32,7 @@ export default function Announcements() {
   const [image, setImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [preparing, setPreparing] = useState(false) // image en cours d'allegement
   const fileRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(() => {
@@ -40,8 +43,15 @@ export default function Announcements() {
   useEffect(() => { load() }, [load])
   usePulse('announcements', load)
 
-  function onPickImage(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
+  // Image allegee sur l'appareil des le choix (1600 px, 450 Ko au plus) : l'envoi est rapide meme en 4G.
+  async function onPickImage(e: ChangeEvent<HTMLInputElement>) {
+    const picked = e.target.files?.[0]
+    e.target.value = ''
+    if (!picked) return
+    setPreparing(true)
+    const file = await shrinkFile(picked)
+      .catch((err) => { toast.error(err instanceof ImageError ? err.message : 'Cette image n’a pas pu être ouverte.'); return null })
+      .finally(() => setPreparing(false))
     if (!file) return
     setImage(file)
     setImagePreview(URL.createObjectURL(file))
@@ -99,8 +109,8 @@ export default function Announcements() {
           <div className="field">
             <label>Image <span className="helper" style={{ display: 'inline' }}>(optionnel , une annonce peut être juste une image)</span></label>
             <div className="image-picker">
-              <button type="button" className="image-drop" onClick={() => fileRef.current?.click()}>
-                {imagePreview ? <img src={imagePreview} alt="" /> : <Icon name="image" size={28} />}
+              <button type="button" className="image-drop" disabled={preparing} onClick={() => fileRef.current?.click()}>
+                {preparing ? <span className="spinner" aria-label="Préparation de l’image" /> : imagePreview ? <img src={imagePreview} alt="" /> : <Icon name="image" size={28} />}
               </button>
               <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickImage} />
               {image && <button className="btn-link" onClick={() => { setImage(null); setImagePreview(null) }}>Retirer l'image</button>}
@@ -113,7 +123,7 @@ export default function Announcements() {
             </select>
           </div>
           <AudiencePicker value={scopes} onChange={setScopes} />
-          <button className="btn btn-primary mt" disabled={busy || !hasContent || scopes.length === 0} onClick={publish}>
+          <button className="btn btn-primary mt" disabled={busy || preparing || !hasContent || scopes.length === 0} onClick={publish}>
             {busy ? <span className="spinner" /> : "Publier l'annonce"}
           </button>
         </section>

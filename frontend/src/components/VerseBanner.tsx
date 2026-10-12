@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
+import { srcSetOf, useAppearance } from '../appearance'
 import { usePulse } from '../pulse'
 
 export interface VerseContent { id: number | null; label: string; text: string; reference: string; message: string | null }
 
 const CACHE_KEY = 'evh_verse'
 
-/**
- * Image de fond du verset (servie par le site, deux tailles : telephone et ordinateur).
- * Un voile teal par-dessus garde le texte lisible quelle que soit la photo.
+/*
+ * Image de fond du verset : choisie et cadree par l'administration (page Apparence), deux tailles
+ * (telephone et ordinateur). Un voile teal par-dessus garde le texte lisible quelle que soit la photo.
  */
-const BACKGROUND = { small: '/verset/fond-800.jpg', large: '/verset/fond-1600.jpg', position: '62% 42%' }
 
 function cached(): VerseContent | null {
   try {
@@ -34,7 +34,9 @@ export function VerseCard({ verse }: { verse: VerseContent }) {
   const textRef = useRef<HTMLParagraphElement>(null)
   const [expanded, setExpanded] = useState(false)
   const [clamped, setClamped] = useState(false)
-  const [imageOk, setImageOk] = useState(true)
+  const background = useAppearance().appearance.home
+  const [failed, setFailed] = useState<string | null>(null)
+  const imageOk = failed !== background.small
 
   // Texte tres long sur petit ecran : replie avec « Lire la suite » (mesure apres affichage).
   useLayoutEffect(() => {
@@ -49,9 +51,9 @@ export function VerseCard({ verse }: { verse: VerseContent }) {
   return (
     <figure className={`verse-banner verse-${size} ${imageOk ? 'has-image' : ''}`}>
       {imageOk && (
-        <img className="verse-bg" src={BACKGROUND.small} srcSet={`${BACKGROUND.small} 800w, ${BACKGROUND.large} 1600w`}
-          sizes="(max-width: 980px) 100vw, 70vw" alt="" aria-hidden decoding="async" style={{ objectPosition: BACKGROUND.position }}
-          onError={() => setImageOk(false)} />
+        <img key={background.id} className="verse-bg" src={background.small} srcSet={srcSetOf(background)}
+          sizes="(max-width: 980px) 100vw, 70vw" alt="" aria-hidden decoding="async" style={{ objectPosition: background.position }}
+          onError={() => setFailed(background.small)} />
       )}
       <span className="verse-shade" aria-hidden />
       <div className="verse-body">

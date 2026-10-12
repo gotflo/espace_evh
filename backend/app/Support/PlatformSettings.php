@@ -22,7 +22,8 @@ class PlatformSettings
 
     /**
      * groupe => [titre, description, [cle => definition]].
-     * definition : type (bool|int), default, label, help, et pour int : min, max, unit.
+     * definition : type (bool|int|text), default, label, help, pour int : min, max, unit ; pour text : max
+     * (longueur), lines (zone de plusieurs lignes) et le texte d'origine en valeur par defaut.
      * « step » : etape de app:tick que le reglage active ou suspend.
      */
     public const GROUPS = [
@@ -97,6 +98,16 @@ class PlatformSettings
                 'label' => 'Relance pour accueillir un nouvel inscrit', 'help' => 'Délai avant de rappeler à ses responsables un nouvel inscrit pas encore accueilli.'],
             'followups.request_after_hours' => ['type' => 'int', 'default' => 48, 'min' => 12, 'max' => 168, 'unit' => 'heures',
                 'label' => 'Relance d’une demande sans réponse', 'help' => 'Délai avant de rappeler une demande (« Nous contacter ») à ceux qui la traitent.'],
+        ]],
+        'textes' => ['Textes affichés', 'Les messages vus par les membres. Le texte d’origine se rétablit d’un clic.', [
+            'texts.login_notice' => ['type' => 'text', 'default' => '', 'max' => 280, 'lines' => 2, 'label' => 'Message sur l’écran de connexion',
+                'help' => 'Affiché au-dessus du formulaire de connexion (par exemple un culte spécial). Laissez vide pour ne rien afficher.'],
+            'texts.welcome_title' => ['type' => 'text', 'default' => 'Bienvenue dans votre famille spirituelle', 'max' => 120, 'label' => 'Titre de bienvenue',
+                'help' => 'Première ouverture de l’application après l’inscription. Le prénom du membre est ajouté à la fin.'],
+            'texts.welcome_message' => ['type' => 'text', 'default' => 'Nous sommes heureux de vous accueillir sur My vasesdhonneur, l\'espace des Vases d\'Honneur Chicoutimi.', 'max' => 400, 'lines' => 3,
+                'label' => 'Message de bienvenue', 'help' => 'Affiché sous le titre de bienvenue.'],
+            'texts.pending_message' => ['type' => 'text', 'default' => 'Le pasteur va valider votre inscription. Votre espace s\'ouvrira alors automatiquement.', 'max' => 400, 'lines' => 3,
+                'label' => 'Message d’attente de validation', 'help' => 'Vu par une personne qui vient de s’inscrire, en attendant la validation de son compte.'],
         ]],
         'limites' => ['Limites', 'Pour ne pas déranger inutilement.', [
             'push.hourly_limit' => ['type' => 'int', 'default' => 6, 'min' => 3, 'max' => 20, 'unit' => 'par heure',
@@ -213,7 +224,7 @@ class PlatformSettings
                     'value' => self::get($key),
                     'default' => $def['default'],
                     'changed' => array_key_exists($key, $stored) && $stored[$key] !== null && self::cast($def, $stored[$key]) !== $def['default'],
-                ] + array_intersect_key($def, array_flip(['min', 'max', 'unit']));
+                ] + array_intersect_key($def, array_flip(['min', 'max', 'unit', 'lines']));
             }
             $groups[] = ['id' => $id, 'title' => $title, 'description' => $description, 'settings' => $settings];
         }
@@ -247,6 +258,23 @@ class PlatformSettings
             if ($def['type'] === 'bool') {
                 if (! is_bool($value)) {
                     $errors["values.{$key}"] = ['Choisissez activé ou désactivé.'];
+
+                    continue;
+                }
+            } elseif ($def['type'] === 'text') {
+                if (! is_string($value)) {
+                    $errors["values.{$key}"] = ['Écrivez un texte.'];
+
+                    continue;
+                }
+                $value = self::cleanText($value, (int) ($def['lines'] ?? 1) > 1);
+                if (mb_strlen($value) > $def['max']) {
+                    $errors["values.{$key}"] = ["Ce texte est trop long : {$def['max']} caractères au plus."];
+
+                    continue;
+                }
+                if ($value === '' && $def['default'] !== '') {
+                    $errors["values.{$key}"] = ['Écrivez un texte, ou cliquez sur « Rétablir » pour revenir au texte d’origine.'];
 
                     continue;
                 }
@@ -291,6 +319,20 @@ class PlatformSettings
 
     private static function cast(array $def, mixed $value): mixed
     {
-        return $def['type'] === 'bool' ? (bool) $value : (int) $value;
+        return match ($def['type']) {
+            'bool' => (bool) $value,
+            'text' => (string) $value,
+            default => (int) $value,
+        };
+    }
+
+    /** Texte saisi : espaces de bord retires, caracteres invisibles supprimes, sauts de ligne limites. */
+    private static function cleanText(string $value, bool $multiline): string
+    {
+        $value = str_replace(["\r\n", "\r"], "\n", $value);
+        $value = (string) preg_replace('/[\x{0000}-\x{0009}\x{000B}-\x{001F}\x{007F}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}]/u', '', $value);
+        $value = $multiline ? (string) preg_replace("/\n{3,}/", "\n\n", $value) : str_replace("\n", ' ', $value);
+
+        return trim((string) preg_replace('/[ \t]{2,}/', ' ', $value));
     }
 }

@@ -192,6 +192,29 @@ jamais la seule protection.
   de chaque route (administration et espace membre) ; données des nouvelles tables ajoutées à la fiche « impact » de
   suppression d’un compte.
 
+### 16. Photos allégées, cadrage et Apparence (sans code)
+- **Photo de profil** : à la sélection, la photo s’ouvre dans une fenêtre de cadrage (glisser pour placer le visage dans
+  le cercle, pincer / molette / curseur pour zoomer, Pivoter, Recentrer). À la validation, elle est réduite sur le
+  téléphone : 512 × 512, 180 Ko au plus (une photo de 48 Mpx est prête en moins d’une seconde) ; « Ajuster le cadrage »
+  rouvre la fenêtre avant l’enregistrement. Même chose à l’inscription.
+- **Annonces et événements** : l’image est allégée dès qu’elle est choisie (1600 px, 450 Ko au plus ; GIF gardés).
+- **Serveur** (`App\Support\ImageOptimizer`) : chaque image envoyée est réouverte, orientée, réduite (photo 640 px,
+  contenus 1600 px) et réenregistrée en JPEG sans métadonnées (position GPS…). Image de plus de 50 millions de pixels
+  refusée avant ouverture (protection contre les « bombes de décompression »). L’ancienne photo n’est supprimée
+  qu’une fois la nouvelle enregistrée.
+- **Images déjà en ligne** : `php artisan app:images-optimize --dry-run` (compte), puis `php artisan app:images-optimize`
+  (réduit les photos et images lourdes, met à jour leur chemin sans toucher à la date de modification, supprime
+  l’ancien fichier).
+- **Gestion › Apparence** (Pasteur Résident et compte de gestion, permission `settings.manage`) : image de l’accueil
+  (fond du verset) avec cadrage et aperçus ordinateur / téléphone ; photos de l’écran de connexion (ajout, ordre,
+  recadrage, retrait, 8 au plus) ; textes affichés (message sur l’écran de connexion, titre et message de bienvenue,
+  message d’attente de validation). Tout revient à l’origine d’un clic ; chaque action est journalisée ; les
+  écrans ouverts se mettent à jour seuls. Les données sont dans `platform_settings` (clé `appearance`) : aucune
+  migration. Fichiers dans `storage/app/public/appearance`.
+- **Limites de fréquence** : chaque limite de route a désormais son propre compteur (avant, une limite comme « 30 appels
+  du protocole par minute » comptait tous les appels de la personne, et les essais de connexion d’une même adresse
+  comptaient aussi les autres appels publics : risque de blocage injustifié, par exemple sur le Wi-Fi de l’église).
+
 ## Base de données (migration additive et réversible)
 `2026_10_12_100001_permissions_by_module_and_platform_manager` :
 - `users.platform_manager_at` (vide pour tous les comptes existants) ;
@@ -201,8 +224,9 @@ jamais la seule protection.
 - permissions du catalogue créées / renommées, attributions de compatibilité, suppression de `content.manage`.
 - `2026_10_12_100003_create_department_join_requests_table` (inscriptions aux services, permission `departments.approve`) ;
 - `2026_10_12_100004_create_resource_views_table` (lecture des vidéos des RM : `resource_views`, `resolution_resources.media_duration`) ;
-- `2026_10_12_100005_create_platform_settings_table` (réglages, permission `settings.manage`).
-Retour arrière : `php artisan migrate:rollback --step=5` (recrée `content.manage` pour les rôles qui modifiaient les
+- `2026_10_12_100005_create_platform_settings_table` (réglages, permission `settings.manage`) ;
+- `2026_10_12_100006_restrict_platform_settings_permission` (réglages réservés au Pasteur Résident et au compte de gestion).
+Retour arrière : `php artisan migrate:rollback --step=6` (recrée `content.manage` pour les rôles qui modifiaient les
 versets, retire les nouvelles permissions, colonnes et tables). Aucune donnée de membre n'est modifiée.
 
 ## Mise en ligne (Hostinger)
@@ -225,8 +249,8 @@ En cas de compromission : `php artisan app:platform-manager --revoke` (statut re
 retirés ; une nouvelle activation demandera un nouveau code), ou blocage du compte depuis la console de supervision.
 
 ## Tests
-`php artisan test` : 288 tests, tous verts (dont `PlatformManagerTest`, `PermissionsByModuleTest`, `ResourcesAndVideoLinksTest`,
-`EmailTestBannerTest`, `PlatformSettingsTest` et le test du pouls immédiat dans `RobustnessTest`), `tsc`, `eslint`,
+`php artisan test` : 301 tests, tous verts (SQLite et MySQL) (dont `PlatformManagerTest`, `PermissionsByModuleTest`, `ResourcesAndVideoLinksTest`,
+`EmailTestBannerTest`, `PlatformSettingsTest`, `AppearanceAndImagesTest` et le test du pouls immédiat dans `RobustnessTest`), `tsc`, `eslint`,
 `check-accents`, `check-api-routes` (vérifie aussi les adresses préchargées), `npm run build`. Essais dans le navigateur
 sur une copie de la base (compte de gestion, Pasteur Résident, fidèle), mesures en conditions de production (build,
 caches Laravel, OPcache) et contrôle automatique de débordement à 320, 375, 768, 960 et 1440 px : aucun débordement.

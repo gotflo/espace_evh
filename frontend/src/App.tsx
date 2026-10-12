@@ -68,6 +68,7 @@ const PlatformHome = page(() => import('./pages/admin/PlatformHome'), true, '/ad
 const Accounts = page(() => import('./pages/admin/Accounts'), true, '/admin/comptes')
 const Resources = page(() => import('./pages/admin/Resources'), true, '/admin/ressources')
 const Settings = page(() => import('./pages/admin/Settings'), true, '/admin/reglages')
+const AppearancePage = page(() => import('./pages/admin/Appearance'), true, '/admin/apparence')
 
 // Ouverture de l'application deja connecte : la page demandee se telecharge pendant la
 // verification du compte (au lieu d'attendre la fin de celle-ci), et l'accueil lit aussi
@@ -265,6 +266,7 @@ export default function App() {
         <Route path="/admin/versets" element={<RequireAuth requireComplete anyPermission={['verses.view']}><Verses /></RequireAuth>} />
         <Route path="/admin/ressources" element={<RequireAuth requireComplete anyPermission={['resources.view']}><Resources /></RequireAuth>} />
         <Route path="/admin/reglages" element={<RequireAuth requireComplete anyPermission={['settings.manage']}><Settings /></RequireAuth>} />
+        <Route path="/admin/apparence" element={<RequireAuth requireComplete anyPermission={['settings.manage']}><AppearancePage /></RequireAuth>} />
         <Route path="/admin/gestion" element={<RequireAuth requireComplete anyPermission={['platform.manage']}><PlatformHome /></RequireAuth>} />
         <Route path="/admin/comptes" element={<RequireAuth requireComplete anyPermission={['accounts.view']}><Accounts /></RequireAuth>} />
         <Route path="/admin/journal" element={<RequireAuth requireComplete anyPermission={['audit.view']}><AuditLog /></RequireAuth>} />

@@ -10,6 +10,7 @@ import { DEFAULT_COUNTRY, type Country } from '../data/countries'
 import { CountrySelect } from '../components/CountrySelect'
 import { LoginBackdrop } from '../components/LoginBackdrop'
 import { AsYouType, isValidPhoneNumber, type CountryCode } from 'libphonenumber-js'
+import { useAppearance } from '../appearance'
 
 type VerifyResponse = AuthPayload & { token: string; is_new_account?: boolean }
 /**
@@ -24,6 +25,8 @@ const DEVICE_KEY = 'evh_manager_device'
 const readDevice = () => { try { return localStorage.getItem(DEVICE_KEY) } catch { return null } }
 
 export default function Login() {
+  // Message de l'administration (page Apparence), par exemple un culte special.
+  const loginNotice = useAppearance(false).appearance.texts.login_notice
   const [step, setStep] = useState<Step>('phone')
   const [country, setCountry] = useState<Country>(DEFAULT_COUNTRY)
   const [national, setNational] = useState('')
@@ -132,6 +135,7 @@ export default function Login() {
       <LoginBackdrop />
       <div className="card login-card">
         <Brand subtitle={APP_NAME} />
+        {loginNotice && <p className="login-notice" role="note">{loginNotice}</p>}
 
         {step === 'phone' && (
           <form onSubmit={requestCode}>

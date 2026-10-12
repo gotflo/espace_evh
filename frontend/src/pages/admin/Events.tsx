@@ -7,7 +7,9 @@ import { SkeletonCard } from '../../components/Skeleton'
 import { AudiencePicker } from '../../components/AudiencePicker'
 import type { AudienceScope, EventAdminItem, EventCategory, EventParticipants, Recurrence } from '../../types'
 import { Icon } from '../../components/Icon'
-import { useDirty } from '../../utils/dirty'import { ModalLayer } from '../../components/ModalLayer'
+import { useDirty } from '../../utils/dirty'
+import { ModalLayer } from '../../components/ModalLayer'
+import { ImageError, shrinkFile } from '../../utils/imagePipeline'
 
 
 const RECURRENCES: { key: Recurrence; label: string }[] = [
@@ -61,6 +63,7 @@ export default function Events() {
   const [existingImage, setExistingImage] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [preparing, setPreparing] = useState(false) // image en cours d'allegement
   const formState = useDirty({ form, image: image?.name ?? null })
   const [participants, setParticipants] = useState<EventParticipants | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -91,8 +94,15 @@ export default function Events() {
     })
     clearImage(); setExistingImage(e.image_url); setError(''); setMode('form'); formState.reset()
   }
-  function onPickImage(ev: ChangeEvent<HTMLInputElement>) {
-    const file = ev.target.files?.[0]
+  // Image allegee sur l'appareil des le choix (1600 px, 450 Ko au plus) : l'envoi est rapide meme en 4G.
+  async function onPickImage(ev: ChangeEvent<HTMLInputElement>) {
+    const picked = ev.target.files?.[0]
+    ev.target.value = ''
+    if (!picked) return
+    setPreparing(true)
+    const file = await shrinkFile(picked)
+      .catch((err) => { setError(err instanceof ImageError ? err.message : 'Cette image n’a pas pu être ouverte.'); return null })
+      .finally(() => setPreparing(false))
     if (!file) return
     setImage(file); setImagePreview(URL.createObjectURL(file))
   }
@@ -224,8 +234,8 @@ export default function Events() {
           <div className="field">
             <label>Image (optionnel)</label>
             <div className="image-picker">
-              <button type="button" className="image-drop" onClick={() => fileRef.current?.click()}>
-                {imagePreview
+              <button type="button" className="image-drop" disabled={preparing} onClick={() => fileRef.current?.click()}>
+                {preparing ? <span className="spinner" aria-label="Préparation de l’image" /> : imagePreview
                   ? <img src={imagePreview} alt="" />
                   : existingImage ? <img src={existingImage} alt="" /> : <Icon name="image" size={28} />}
               </button>
@@ -236,7 +246,7 @@ export default function Events() {
             </div>
           </div>
           <AudiencePicker value={form.scopes} onChange={(scopes) => setForm((f) => ({ ...f, scopes }))} />
-          <button className="btn btn-primary mt" disabled={busy || !form.title.trim() || !form.starts_at || form.scopes.length === 0 || (!!form.id && !formState.dirty)} onClick={save}>
+          <button className="btn btn-primary mt" disabled={busy || preparing || !form.title.trim() || !form.starts_at || form.scopes.length === 0 || (!!form.id && !formState.dirty)} onClick={save}>
             {busy ? <span className="spinner" /> : form.id ? 'Enregistrer' : "Créer l'événement"}
           </button>
         </section>

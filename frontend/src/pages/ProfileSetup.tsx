@@ -9,6 +9,7 @@ import { Brand } from '../components/Brand'
 import { Icon } from '../components/Icon'
 import { useDirty } from '../utils/dirty'
 import { toast } from '../toast'
+import { PhotoCropper } from '../components/PhotoCropper'
 
 const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 
@@ -28,6 +29,8 @@ export default function ProfileSetup() {
   const emailInvalid = email.trim() !== '' && !/^\S+@\S+\.\S+$/.test(email.trim())
   const [tribeId, setTribeId] = useState(profile?.tribe_id?.toString() ?? '')
   const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [cropping, setCropping] = useState<File | null>(null)
+  const pickedRef = useRef<File | null>(null) // photo d'origine, pour reprendre le cadrage
   const [photoPreview, setPhotoPreview] = useState<string | null>(profile?.photo_url ?? null)
 
   const [error, setError] = useState('')
@@ -57,11 +60,16 @@ export default function ProfileSetup() {
     document.getElementById('tribu')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [registration.reopened, tribes.length])
 
+  // Photo choisie : cadrage d'abord (PhotoCropper), puis la version reduite remplace l'apercu.
   function onPickPhoto(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (!file) return
-    setPhotoFile(file)
-    setPhotoPreview(URL.createObjectURL(file))
+    e.target.value = '' // la meme photo peut etre choisie a nouveau
+    if (file) { pickedRef.current = file; setCropping(file) }
+  }
+  function onPhotoReady(photo: File) {
+    setCropping(null)
+    setPhotoFile(photo)
+    setPhotoPreview((old) => { if (old?.startsWith('blob:')) URL.revokeObjectURL(old); return URL.createObjectURL(photo) })
   }
 
   async function submit(e: FormEvent) {
@@ -141,7 +149,11 @@ export default function ProfileSetup() {
                   Choisir une photo
                 </button>
                 <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickPhoto} />
-                <p className="helper">Facultatif. JPG ou PNG, 5 Mo max.</p>
+                {cropping && <PhotoCropper file={cropping} onCancel={() => setCropping(null)} onDone={onPhotoReady} />}
+                {photoFile && pickedRef.current && (
+                  <button type="button" className="btn-link photo-reframe" onClick={() => setCropping(pickedRef.current)}>Ajuster le cadrage</button>
+                )}
+                <p className="helper">Facultatif. Toute photo convient : vous la cadrez, puis elle est allégée automatiquement.</p>
               </div>
             </div>
           </div>

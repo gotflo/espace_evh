@@ -8,6 +8,7 @@ use App\Models\EventParticipation;
 use App\Services\Notifier;
 use App\Support\Audience;
 use App\Support\Audit;
+use App\Support\ImageOptimizer;
 use App\Support\PlatformManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -72,7 +73,7 @@ class EventController extends Controller
         $data = $this->validated($request);
         $scopes = Audience::resolve($request->user(), Audience::fromRequest($request));
         if ($request->hasFile('image')) {
-            $data['image_path'] = $request->file('image')->store('events', 'public');
+            $data['image_path'] = ImageOptimizer::store($request->file('image'), 'events', ImageOptimizer::CONTENT);
         }
 
         $event = DB::transaction(function () use ($data, $scopes, $request) {
@@ -100,7 +101,7 @@ class EventController extends Controller
             if ($event->image_path) {
                 Storage::disk('public')->delete($event->image_path);
             }
-            $data['image_path'] = $request->file('image')->store('events', 'public');
+            $data['image_path'] = ImageOptimizer::store($request->file('image'), 'events', ImageOptimizer::CONTENT);
         }
 
         $before = [$event->starts_at?->toIso8601String(), $event->location, $event->recurrence, $event->all_day];

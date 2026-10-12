@@ -7,6 +7,7 @@ use App\Models\Announcement;
 use App\Services\Notifier;
 use App\Support\Audience;
 use App\Support\Audit;
+use App\Support\ImageOptimizer;
 use App\Support\PlatformManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -60,7 +61,7 @@ class AnnouncementController extends Controller
             $announcement = Announcement::create([
                 'title' => $data['title'] ?? null,
                 'body' => $data['body'] ?? null,
-                'image_path' => $request->hasFile('image') ? $request->file('image')->store('announcements', 'public') : null,
+                'image_path' => $request->hasFile('image') ? ImageOptimizer::store($request->file('image'), 'announcements', ImageOptimizer::CONTENT) : null,
                 'category' => $data['category'],
                 'created_by' => $author->id,
             ]);

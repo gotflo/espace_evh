@@ -9,6 +9,7 @@ use App\Services\MembershipService;
 use App\Services\Notifier;
 use App\Support\Audit;
 use App\Support\GemRules;
+use App\Support\ImageOptimizer;
 use App\Support\ProfileCompletion;
 use App\Support\Recipients;
 use App\Support\Registration;
@@ -92,11 +93,11 @@ class ProfileController extends Controller
         $before = $profile->only(['first_name', 'last_name', 'gender', 'birth_day', 'birth_month', 'tribe_id', 'email', 'marital_status', 'wedding_day', 'wedding_month', 'civility']);
 
         if ($request->hasFile('photo')) {
-            // Supprime l'ancienne photo si presente.
+            // Photo reduite (640 px, sans metadonnees), puis l'ancienne est supprimee.
+            $data['photo_path'] = ImageOptimizer::store($request->file('photo'), 'photos', ImageOptimizer::AVATAR, 'photo');
             if ($profile->photo_path) {
                 \Storage::disk('public')->delete($profile->photo_path);
             }
-            $data['photo_path'] = $request->file('photo')->store('photos', 'public');
         }
 
         // Les services (departements) ne se choisissent plus ici : demande depuis « Service », validee par le responsable.

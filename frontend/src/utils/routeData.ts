@@ -38,6 +38,7 @@ const ROUTE_DATA: Record<string, string[]> = {
   '/admin/organisation': ['/admin/organization'],
   '/admin/roles': ['/admin/roles', '/admin/permissions'],
   '/admin/reglages': ['/admin/settings'],
+  '/admin/apparence': ['/admin/appearance', '/admin/settings'],
 }
 
 /** Lien survole ou touche : ses donnees sont lues en avance (une fois toutes les 20 s au plus). */

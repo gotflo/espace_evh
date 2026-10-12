@@ -205,6 +205,7 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
           {canAccounts && <NavLink to="/admin/comptes" className="nav-item"><Icon path={ICONS.profile} /><span>Comptes</span></NavLink>}
           {canManageRoles && <NavLink to="/admin/roles" className="nav-item"><Icon path={ICONS.roles} /><span>Rôles</span></NavLink>}
           {canAudit && <NavLink to="/admin/journal" className="nav-item"><Icon path={ICONS.audit} /><span>Journal</span></NavLink>}
+          {canSettings && <NavLink to="/admin/apparence" className="nav-item"><Icon path={ICONS.image} /><span>Apparence</span></NavLink>}
           {canSettings && <NavLink to="/admin/reglages" className="nav-item"><Icon path={ICONS.settings} /><span>Réglages</span></NavLink>}
         </nav>
 
