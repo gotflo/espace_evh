@@ -254,8 +254,10 @@ Toutes les migrations de cette version ont une méthode `down()` testée (retour
 | Membre | soi-même | son espace |
 
 - Un rôle peut être attribué plusieurs fois avec des périmètres différents (ex. un AP sur 3 tribus).
-- Les **responsables de département** sont désignés dans Organisation (table `department_leaders`) et reçoivent
-  automatiquement les droits utiles sur leur département (suivi des membres, répétitions, événements).
+- Les **responsables de département** (table `department_leaders`, 5 au plus) se nomment au choix dans Organisation ou
+  en attribuant le rôle de base « Responsable de département » sur le département : les deux restent synchronisés
+  (`App\Support\DepartmentLeadership`), retirer l'un retire l'autre. Ils reçoivent automatiquement les droits utiles sur
+  leur département (suivi des membres, validation des inscriptions, répétitions, événements), en plus de ceux du rôle.
 - Le rôle « Responsable » a été supprimé : ses titulaires sont devenus responsables de département, sans perte de droits.
 - Chaque requête est vérifiée **côté serveur** : permission (`permission:xxx`) puis périmètre (`MemberScope`, `Audience`).
   Masquer un bouton dans l'interface n'est jamais considéré comme une protection.

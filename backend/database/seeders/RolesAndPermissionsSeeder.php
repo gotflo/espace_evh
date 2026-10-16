@@ -4,6 +4,8 @@ namespace Database\Seeders;
 
 use App\Models\Permission;
 use App\Models\Role;
+use App\Models\User;
+use App\Support\DepartmentLeadership;
 use App\Support\PermissionCatalog;
 use Illuminate\Database\Seeder;
 
@@ -29,8 +31,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'announcements.publish', 'events.manage', 'requests.handle',
         ];
 
-        // --- Hierarchie de discipulat. La responsabilite d'un departement n'est pas un role :
-        // elle se definit sur le departement (Organisation) et donne des droits equivalents.
+        // --- Hierarchie de discipulat. La responsabilite d'un departement se definit au choix dans
+        // Organisation ou par le role « Responsable de departement » : les deux restent synchronises.
         $roles = [
             // Pasteur Resident (PR) : tous les droits.
             'super_admin' => [
@@ -84,6 +86,13 @@ class RolesAndPermissionsSeeder extends Seeder
                 'description' => 'Peut agir sur le fidèle désigné : suivi spirituel, notes, demandes, statut.',
                 'scope_kind' => 'member', 'rank' => 35, 'is_system' => true,
                 'permissions' => ['members.view_scope', 'members.edit', 'spiritual.view', 'spiritual.record', 'evaluations.manage', 'requests.handle', 'exercises.respond'],
+            ],
+            // Responsable de departement : synchronise avec Organisation (App\Support\DepartmentLeadership).
+            DepartmentLeadership::ROLE => [
+                'name' => 'Responsable de département',
+                'description' => 'Responsable d’un département : suit ses membres, valide les inscriptions, fait l’appel des répétitions et publie ses événements.',
+                'scope_kind' => 'department', 'rank' => 30, 'is_system' => true,
+                'permissions' => User::DEPARTMENT_LEADER_PERMISSIONS,
             ],
             // Communication : publie pour toute l'eglise.
             'communication' => [

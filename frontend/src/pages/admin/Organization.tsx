@@ -61,7 +61,7 @@ function LeadersEditor({ item, onDone }: { item: OrgItem; onDone: (saved: boolea
 
   return (
     <div className="leaders-editor">
-      <p className="helper">Jusqu'à 5 responsables. Ils peuvent suivre les membres du département, faire l'appel des répétitions et publier ses événements. Une personne choisie hors du département y est ajoutée.</p>
+      <p className="helper">Jusqu'à 5 responsables. Ils peuvent suivre les membres du département, faire l'appel des répétitions et publier ses événements. Une personne choisie hors du département y est ajoutée. Le rôle « Responsable de département » suit : attribué ou retiré avec la nomination (et inversement depuis la fiche du membre).</p>
       {selected.length > 0 && (
         <div className="leaders-options">
           {selected.map((id) => (

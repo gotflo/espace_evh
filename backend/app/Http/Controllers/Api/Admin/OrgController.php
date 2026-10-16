@@ -8,6 +8,7 @@ use App\Models\Profile;
 use App\Models\Tribe;
 use App\Services\Notifier;
 use App\Support\Audit;
+use App\Support\DepartmentLeadership;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -99,6 +100,8 @@ class OrgController extends Controller
         $before = $department->leaders()->pluck('users.id')->sort()->values()->all();
         $department->leaders()->sync($ids);
         Audit::log('department.leaders_updated', $department, null, ['leaders' => $before], ['leaders' => $ids]);
+        // Le role « Responsable de departement » suit la liste (attribue aux nouveaux, retire aux anciens).
+        DepartmentLeadership::syncRole($department, $before, $ids, $request->user()->id);
         foreach (array_diff($ids, $before) as $newLeader) {
             Notifier::send([$newLeader], 'role', "Responsable du département {$department->name}",
                 'Vous pouvez désormais suivre ses membres, faire l\'appel des répétitions et publier ses événements.', '/tableau-de-bord');
@@ -117,6 +120,7 @@ class OrgController extends Controller
     public function destroyDepartment(Department $department): JsonResponse
     {
         Audit::log('department.deleted', $department, null, ['name' => $department->name], [], ['member_profile_ids' => $department->members()->pluck('profiles.id')]);
+        DepartmentLeadership::forget($department);
         $department->delete();
 
         return response()->json(['message' => 'Département supprimé.']);

@@ -16,6 +16,7 @@ use App\Services\MembershipService;
 use App\Services\Monitoring\Monitor;
 use App\Services\OtpService;
 use App\Services\Sms\TwilioVerifyException;
+use App\Support\DepartmentLeadership;
 use App\Support\LocalTestMode;
 use App\Support\Phone;
 use App\Support\PlatformManager;
@@ -357,6 +358,9 @@ class AuthController extends Controller
             'scope_id' => $d->id,
             'scope_name' => $d->name,
         ]);
+        // Le role « Responsable de departement » d'un departement dirige est deja dans $leaderships : pas de doublon.
+        $roles = $user->roles->reject(fn ($r) => DepartmentLeadership::isLeaderRole($r, $r->pivot->scope_kind)
+            && $user->ledDepartments->contains('id', (int) $r->pivot->scope_id));
 
         return [
             // Derniere visite AVANT celle-ci (mise a jour apres la reponse) : sert a l'accueil
@@ -377,7 +381,7 @@ class AuthController extends Controller
             ],
             'is_super_admin' => $user->isSuperAdmin(),
             'is_platform_manager' => false,
-            'roles' => $user->roles->map(fn ($r) => [
+            'roles' => $roles->map(fn ($r) => [
                 'key' => $r->key,
                 'name' => $r->name,
                 'scope_kind' => $r->pivot->scope_kind,

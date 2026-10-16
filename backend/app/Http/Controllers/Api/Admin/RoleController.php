@@ -12,6 +12,7 @@ use App\Models\Tribe;
 use App\Models\User;
 use App\Services\Notifier;
 use App\Support\Audit;
+use App\Support\DepartmentLeadership;
 use App\Support\GemRules;
 use App\Support\PermissionCatalog;
 use App\Support\PlatformManager;
@@ -288,6 +289,12 @@ class RoleController extends Controller
             }
         }
 
+        // Responsable de departement : memes conditions que dans Organisation (profil complet, 5 au plus).
+        $leadsDepartment = DepartmentLeadership::isLeaderRole($role, $scopeKind);
+        if ($leadsDepartment) {
+            DepartmentLeadership::assertCanLead(Department::findOrFail($scopeId), $user->id);
+        }
+
         $duplicate = DB::table('role_user')->where([
             'user_id' => $user->id, 'role_id' => $role->id,
             'scope_kind' => $scopeKind, 'scope_id' => $scopeId,
@@ -315,6 +322,10 @@ class RoleController extends Controller
         // Nommer un Garde sur un GEM le designe aussitot comme responsable de ce GEM (un seul Garde par GEM).
         if ($scopeKind === 'gem' && $scopeId && $role->key === 'garde') {
             GemRules::appointLeader(Gem::findOrFail($scopeId), $user->id, $actor->id);
+        }
+        // Le role de responsable de departement le nomme aussitot responsable dans Organisation.
+        if ($leadsDepartment) {
+            DepartmentLeadership::appoint(Department::findOrFail($scopeId), $user->id);
         }
 
         return response()->json(['message' => 'Rôle attribué.']);
@@ -347,6 +358,10 @@ class RoleController extends Controller
         // Retirer le role Garde d'un GEM : ce GEM n'a plus de responsable.
         if ($row->scope_kind === 'gem' && $row->scope_id && $revoked?->key === 'garde') {
             Gem::whereKey($row->scope_id)->where('leader_user_id', $user->id)->update(['leader_user_id' => null]);
+        }
+        // Retirer le role de responsable de departement : il n'est plus responsable dans Organisation.
+        if ($row->scope_id && DepartmentLeadership::isLeaderRole($revoked, $row->scope_kind) && ($department = Department::find($row->scope_id))) {
+            DepartmentLeadership::dismiss($department, $user->id);
         }
 
         return response()->json(['message' => 'Rôle retiré.']);

@@ -8,6 +8,7 @@ use App\Models\Gem;
 use App\Models\Profile;
 use App\Models\Tribe;
 use App\Models\User;
+use App\Support\DepartmentLeadership;
 use App\Support\Like;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -81,7 +82,9 @@ class AccountController extends Controller
                         default => null,
                     },
                 ])->values(),
-                'led_departments' => $u->ledDepartments->pluck('name')->values(),
+                // Deja affiche par le role « Responsable de departement » sur ce departement : pas de doublon.
+                'led_departments' => $u->ledDepartments->reject(fn ($d) => $u->roles->contains(fn ($r) => DepartmentLeadership::isLeaderRole($r, $r->pivot->scope_kind)
+                    && (int) $r->pivot->scope_id === (int) $d->id))->pluck('name')->values(),
             ])->values(),
             'total' => $total,
             'page' => $page,

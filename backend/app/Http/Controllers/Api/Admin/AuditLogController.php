@@ -60,6 +60,7 @@ class AuditLogController extends Controller
         'service_join.rejected' => 'Inscription à un service refusée',
         'service_join.cancelled' => 'Demande d’inscription à un service retirée',
         'department.leaders_updated' => 'Responsables de département modifiés',
+        'department.leaders_synced' => 'Responsables de département et rôle synchronisés',
         'announcement.published' => 'Annonce publiée',
         'announcement.deleted' => 'Annonce supprimée',
         'event.created' => 'Événement créé',
