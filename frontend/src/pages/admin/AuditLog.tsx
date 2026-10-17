@@ -11,21 +11,27 @@ interface AuditResponse { logs: AuditEntry[]; has_more: boolean; actions: { key:
 const GROUPS: { key: string; label: string; personal?: boolean }[] = [
   { key: '', label: 'Toutes les actions' },
   { key: 'fiss.', label: 'FISS', personal: true },
+  { key: 'vertumetre.', label: 'Vertumètre', personal: true },
   { key: 'tribe', label: 'Tribus', personal: true },
   { key: 'member.', label: 'Membres', personal: true },
+  { key: 'members.relanced', label: 'Relances des membres' },
   { key: 'family.', label: 'Famille', personal: true },
   { key: 'profile.', label: 'Profils', personal: true },
+  { key: 'appointment.', label: 'Rendez-vous', personal: true },
   { key: 'role.', label: 'Rôles' },
   { key: 'verse.', label: 'Versets' },
   { key: 'resolution_resource.', label: 'Ressources' },
   { key: 'assignment.', label: 'Devoirs (DS)' },
   { key: 'service.', label: 'Horaires' },
   { key: 'department.', label: 'Départements' },
+  // Nomination ou synchronisation des responsables (department.leaders_updated / leaders_synced).
+  { key: 'department.leaders_', label: 'Responsables de département' },
   { key: 'announcement.', label: 'Annonces' },
   { key: 'event.', label: 'Événements' },
   { key: 'exercise.', label: 'Exercices' },
   { key: 'evaluation.', label: 'Notes', personal: true },
   { key: 'report.', label: 'Rapports', personal: true },
+  { key: 'settings.', label: 'Réglages' },
 ]
 
 function fmt(v: unknown): string {

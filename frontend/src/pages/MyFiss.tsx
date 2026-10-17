@@ -184,6 +184,14 @@ export default function MyFiss() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  // Abandon de la modification d'une fiche passee : son brouillon est oublie, et la saisie du mois
+  // en cours (son propre brouillon) revient telle quelle. Avant, le formulaire vide l'effacait.
+  function cancelEdit() {
+    if (editing?.id) clearDraft(`fiss:${editing.id}`)
+    setEditing(null)
+    setForm(data && !data.current ? (readDraft<FissForm>('fiss:new') ?? EMPTY) : { ...EMPTY })
+  }
+
   async function save() {
     setBusy(true)
     const body = Object.fromEntries(FIELDS.map((k) => [k, form[k]]))
@@ -266,7 +274,7 @@ export default function MyFiss() {
             <strong>Modification de la fiche {de(editing.period_label)}</strong>
             <span>Après enregistrement, la fiche sera de nouveau verrouillée.</span>
           </div>
-          <button className="btn btn-ghost small" onClick={() => { setEditing(null); setForm(EMPTY) }}>Annuler</button>
+          <button className="btn btn-ghost small" onClick={cancelEdit}>Annuler</button>
         </div>
       )}
 

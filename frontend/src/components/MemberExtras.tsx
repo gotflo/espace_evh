@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, ApiError } from '../api/client'
 import type { AuditEntry, FamilyOverview, MemberExerciseItem, ProfileCompletion } from '../types'
+import { MARITAL_LABEL } from '../utils/french'
+import { LoadError } from './LoadError'
 
 /** Completion du profil vue par un responsable : pourcentage et champs manquants. */
 export function MemberCompletion({ completion }: { completion: ProfileCompletion }) {
@@ -47,7 +49,7 @@ export function MemberFamily({ family, maritalStatus, wedding }: { family: Famil
     <section className="panel mt">
       <div className="panel-head"><h3>Famille</h3></div>
       <div className="detail-list">
-        {maritalStatus && <div className="detail-line"><span>Situation</span><strong>{maritalStatus}</strong></div>}
+        {maritalStatus && <div className="detail-line"><span>Situation</span><strong>{MARITAL_LABEL[maritalStatus] ?? maritalStatus}</strong></div>}
         {spouseName && (
           <div className="detail-line">
             <span>Conjoint(e)</span>
@@ -116,13 +118,19 @@ const EXERCISE_STATUS: Record<string, string> = { done: 'Terminé', in_progress:
 /** Exercices adresses au membre (30 derniers) : statut, avancement de la video, reponse ecrite. */
 export function MemberExercises({ userId }: { userId: string }) {
   const [data, setData] = useState<{ exercises: MemberExerciseItem[]; summary: { total: number; done: number } } | null>(null)
+  const [error, setError] = useState('')
   const [open, setOpen] = useState(false)
   const [shown, setShown] = useState<number | null>(null)
 
+  // Une erreur de lecture n'est jamais affichee comme « aucun exercice » : message et « Réessayer ».
+  function fetchExercises() {
+    setError('')
+    api<{ exercises: MemberExerciseItem[]; summary: { total: number; done: number } }>(`/admin/members/${userId}/exercises`)
+      .then(setData).catch((err) => setError(err instanceof ApiError ? err.firstMessage : 'Erreur.'))
+  }
   function toggle() {
     setOpen(!open)
-    if (!data) api<{ exercises: MemberExerciseItem[]; summary: { total: number; done: number } }>(`/admin/members/${userId}/exercises`)
-      .then(setData).catch(() => setData({ exercises: [], summary: { total: 0, done: 0 } }))
+    if (!data && !error) fetchExercises()
   }
 
   return (
@@ -130,7 +138,7 @@ export function MemberExercises({ userId }: { userId: string }) {
       <button className="panel-head panel-toggle" onClick={toggle} aria-expanded={open}>
         <h3>Exercices{data ? <span className="count-soft"> {data.summary.done}/{data.summary.total}</span> : null}</h3><span aria-hidden>{open ? '▴' : '▾'}</span>
       </button>
-      {open && (data === null ? <span className="spinner" /> : data.exercises.length === 0 ? (
+      {open && (error ? <LoadError message={error} onRetry={fetchExercises} compact /> : data === null ? <span className="spinner" /> : data.exercises.length === 0 ? (
         <p className="helper">Aucun exercice ne lui a encore été donné.</p>
       ) : (
         <ul className="member-ex-list">

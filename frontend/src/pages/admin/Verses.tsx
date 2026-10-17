@@ -4,7 +4,7 @@ import { usePulse } from '../../pulse'
 import { AppLayout } from '../../components/AppLayout'
 import { VerseCard, type VerseContent } from '../../components/VerseBanner'
 import { Icon } from '../../components/Icon'
-import { useDirty } from '../../utils/dirty'import { ModalLayer } from '../../components/ModalLayer'
+import { confirmDiscard, useDirty } from '../../utils/dirty'import { ModalLayer } from '../../components/ModalLayer'
 
 
 type VerseState = 'draft' | 'scheduled' | 'live' | 'expired'
@@ -51,6 +51,8 @@ function VerseEditor({ verse, can, onClose, onSaved }: { verse: Verse | null; ca
   // Texte existant : « Publier » (ou « Brouillon ») seulement s'il y a un changement a enregistrer.
   const changes = useDirty({ label, text, reference, message, schedule, startsAt, endsAt, pinned })
   const sameStatus = (status: 'draft' | 'published') => !!verse && verse.status === status && !changes.dirty
+  // Clic sur le fond : confirmation si quelque chose a ete saisi ou modifie.
+  const requestClose = () => { if (confirmDiscard(changes.dirty)) onClose() }
 
   async function save(status: 'draft' | 'published') {
     setBusy(true); setErrors({})
@@ -71,7 +73,7 @@ function VerseEditor({ verse, can, onClose, onSaved }: { verse: Verse | null; ca
   const valid = label.trim() && text.trim().length >= 5 && reference.trim()
 
   return (
-    <ModalLayer className="modal-overlay" onMouseDown={onClose}>
+    <ModalLayer className="modal-overlay" onMouseDown={requestClose}>
       <div className="modal-box verse-editor" role="dialog" aria-modal="true" aria-label={verse ? 'Modifier le texte' : 'Nouveau texte'} onMouseDown={(e) => e.stopPropagation()}>
         <div className="panel-head">
           <h3>{verse ? 'Modifier le texte' : 'Nouveau texte'}</h3>

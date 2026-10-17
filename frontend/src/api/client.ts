@@ -5,8 +5,23 @@ const TOKEN_KEY = 'evh_token'
 
 export const auth = {
   get: () => localStorage.getItem(TOKEN_KEY),
-  set: (t: string) => { cache.clear(); cachedAt.clear(); localStorage.setItem(TOKEN_KEY, t) },
+  set: (t: string) => { cache.clear(); cachedAt.clear(); expiredShown = false; localStorage.setItem(TOKEN_KEY, t) },
   clear: () => { cache.clear(); cachedAt.clear(); localStorage.removeItem(TOKEN_KEY) },
+}
+
+/**
+ * Session expiree (401 sur un appel authentifie, hors connexion) : l'etat de connexion est remis
+ * a zero (AuthContext s'y abonne, la page protegee renvoie vers /connexion) et la personne est
+ * prevenue une seule fois, meme si plusieurs lectures echouent en meme temps.
+ */
+let expiredShown = false
+let expired: (() => void) | null = null
+export function onSessionExpired(cb: (() => void) | null) { expired = cb }
+function sessionExpired() {
+  if (expiredShown) return
+  expiredShown = true
+  toast.warning('Votre session a expiré : reconnectez-vous.')
+  expired?.()
 }
 
 /**
@@ -203,9 +218,18 @@ async function request<T>(path: string, method: string, opts: Options): Promise<
   const data = await res.json().catch(() => ({}))
 
   if (!res.ok) {
-    if (res.status === 401) auth.clear()
-    // Messages techniques (anglais) remplaces par un texte clair.
-    const technical = !data.message || /^(Server Error|Too Many Attempts\.|This action is unauthorized\.|Unauthenticated\.|Not Found)$/i.test(data.message)
+    // Jeton refuse : oublie seulement s'il est encore celui de la session (une reponse tardive ne
+    // deconnecte pas un compte ouvert entre-temps). Les appels de connexion (/auth/...) ne
+    // signalent pas une session expiree.
+    if (res.status === 401 && needAuth && token && auth.get() === token) {
+      auth.clear()
+      if (!path.startsWith('/auth/')) sessionExpired()
+    }
+    // Messages techniques (anglais) remplaces par un texte clair, y compris le 404 de Laravel
+    // (« No query results for model [App\Models\Event] 42 »).
+    const technical = !data.message
+      || /^(Server Error|Too Many Attempts\.|This action is unauthorized\.|Unauthenticated\.|Not Found)$/i.test(data.message)
+      || (res.status === 404 && /^No query results for model/i.test(data.message))
     const friendly = res.status === 429 ? 'Trop de tentatives. Patientez une minute puis réessayez.'
       : res.status >= 500 ? 'Le serveur a rencontré un problème. Réessayez dans un instant.'
         : res.status === 403 ? "Vous n'avez pas l'autorisation d'effectuer cette action."

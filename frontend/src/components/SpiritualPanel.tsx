@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError } from '../api/client'
 import type { SpiritualData } from '../types'
+import { ymd } from '../utils/events'
 
-const TODAY = new Date().toISOString().slice(0, 10)
+/** Date du jour locale, calculee a chaque usage (ni UTC, ni figee au chargement de l'ecran). */
+const today = () => ymd(new Date())
 
 export function SpiritualPanel({ userId, canRecord }: { userId: string; canRecord: boolean }) {
   const [data, setData] = useState<SpiritualData | null>(null)
@@ -10,7 +12,7 @@ export function SpiritualPanel({ userId, canRecord }: { userId: string; canRecor
 
   // Formulaire d'ajout d'entree
   const [type, setType] = useState('')
-  const [date, setDate] = useState(TODAY)
+  const [date, setDate] = useState(today)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -30,7 +32,7 @@ export function SpiritualPanel({ userId, canRecord }: { userId: string; canRecor
     setBusy(true)
     await run(async () => {
       await api(`/admin/members/${userId}/spiritual/entries`, { method: 'POST', body: { type, entry_date: date, note } })
-      setType(''); setNote(''); setDate(TODAY)
+      setType(''); setNote(''); setDate(today())
     })
     setBusy(false)
   }
@@ -73,7 +75,7 @@ export function SpiritualPanel({ userId, canRecord }: { userId: string; canRecor
               <option value="">Type d'événement...</option>
               {data.entry_types.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
             </select>
-            <input className="input" type="date" aria-label="Date" max={TODAY} value={date} onChange={(e) => setDate(e.target.value)} />
+            <input className="input" type="date" aria-label="Date" max={today()} value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
           <textarea aria-label="Note (facultatif)" className="input" rows={2} placeholder="Note (facultatif)" value={note} onChange={(e) => setNote(e.target.value)} />
           <button className="btn btn-primary small" disabled={busy || !type} onClick={addEntry}>

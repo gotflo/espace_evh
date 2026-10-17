@@ -5,15 +5,17 @@ import { useAuth } from '../../auth/AuthContext'
 import { AppLayout } from '../../components/AppLayout'
 import type { AttendanceMember, AttendanceStatus, Department, RosterData } from '../../types'
 import { ymd } from '../../utils/events'
-import { useDirty } from '../../utils/dirty'
+import { confirmDiscard, useDirty } from '../../utils/dirty'
+import { LoadError } from '../../components/LoadError'
 
-// Date locale (et non UTC : le soir, toISOString donnerait deja le lendemain).
-const TODAY = ymd(new Date())
+// Date locale (et non UTC : le soir, toISOString donnerait deja le lendemain), calculee a chaque
+// usage : un ecran ouvert avant minuit propose bien le jour suivant.
+const today = () => ymd(new Date())
 const EVENTS = ['Culte', 'Culte du dimanche', 'Réunion de prière', 'Étude biblique', 'Répétition', 'Autre']
 const REH_STATUS: { key: AttendanceStatus; label: string }[] = [
   { key: 'present', label: 'Présent' },
   { key: 'retard', label: 'Retard' },
-  { key: 'absent_justifie', label: 'Excuse' },
+  { key: 'absent_justifie', label: 'Excusé' },
   { key: 'absent', label: 'Absent' },
 ]
 
@@ -29,13 +31,14 @@ export default function Attendance() {
   useEffect(() => { if (seesAll) getReference().then((r) => setAllDepartments(r.departments)).catch(() => {}) }, [seesAll])
   const departments = seesAll ? allDepartments : myDepartments
 
-  const [date, setDate] = useState(TODAY)
+  const [date, setDate] = useState(today)
   const [event, setEvent] = useState('Culte')
   const [kind, setKind] = useState<'culte' | 'repetition'>('culte')
   const [departmentId, setDepartmentId] = useState('')
   const scopeQuery = departmentId ? `&department_id=${departmentId}` : ''
   const [members, setMembers] = useState<AttendanceMember[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [hidden, setHidden] = useState(0)
@@ -45,17 +48,21 @@ export default function Attendance() {
   const resetSheet = sheet.reset
 
   const load = useCallback(() => {
-    setLoading(true)
+    setLoading(true); setLoadError('')
     api<RosterData>(`/admin/attendance?date=${date}&event=${encodeURIComponent(event)}&kind=${kind}${scopeQuery}`)
       .then((r) => {
         setMembers(r.members.map((m) => ({ ...m, status: m.status ?? (kind === 'repetition' ? 'absent' : null) })))
         setHidden(r.inactive_hidden ?? 0)
         resetSheet()
       })
-      .catch(() => setMembers([]))
+      .catch((err) => { setMembers([]); resetSheet(); setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.') })
       .finally(() => setLoading(false))
   }, [date, event, kind, scopeQuery, resetSheet])
   useEffect(() => { load() }, [load])
+
+  // Autre date, evenement, type ou departement : une feuille cochee mais non enregistree n'est
+  // jamais perdue sans confirmation.
+  const switchSheet = (apply: () => void) => { if (confirmDiscard(sheet.dirty)) apply() }
 
   // Recherche : filtre la feuille ET retrouve un fidele inactif qui revient (masque par defaut).
   useEffect(() => {
@@ -105,11 +112,11 @@ export default function Attendance() {
         <div className="attendance-controls">
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Date</label>
-            <input aria-label="Date" className="input" type="date" max={TODAY} value={date} onChange={(e) => setDate(e.target.value)} />
+            <input aria-label="Date" className="input" type="date" max={today()} value={date} onChange={(e) => { const d = e.target.value; switchSheet(() => setDate(d)) }} />
           </div>
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Événement</label>
-            <select aria-label="Événement" className="select" value={event} onChange={(e) => setEvent(e.target.value)}>
+            <select aria-label="Événement" className="select" value={event} onChange={(e) => { const ev = e.target.value; switchSheet(() => setEvent(ev)) }}>
               {EVENTS.map((ev) => <option key={ev} value={ev}>{ev}</option>)}
             </select>
           </div>
@@ -118,12 +125,15 @@ export default function Attendance() {
         <div className="field mt" style={{ marginBottom: 0 }}>
           <label>Type de session</label>
           <div className="pill-choices">
-            <button type="button" className={`pill-choice ${kind === 'culte' ? 'on' : ''}`} onClick={() => setKind('culte')}>Culte / activité</button>
+            <button type="button" className={`pill-choice ${kind === 'culte' ? 'on' : ''}`} onClick={() => { if (kind !== 'culte') switchSheet(() => setKind('culte')) }}>Culte / activité</button>
             <button type="button" className={`pill-choice ${kind === 'repetition' ? 'on' : ''}`} onClick={() => {
-              setKind('repetition')
-              if (event === 'Culte') setEvent('Répétition')
-              // Une repetition est celle d'un departement : le premier de ses departements par defaut.
-              if (!departmentId && !seesAll && myDepartments.length > 0) setDepartmentId(String(myDepartments[0].id))
+              if (kind === 'repetition') return
+              switchSheet(() => {
+                setKind('repetition')
+                if (event === 'Culte') setEvent('Répétition')
+                // Une repetition est celle d'un departement : le premier de ses departements par defaut.
+                if (!departmentId && !seesAll && myDepartments.length > 0) setDepartmentId(String(myDepartments[0].id))
+              })
             }}>Répétition (retards)</button>
           </div>
         </div>
@@ -131,7 +141,7 @@ export default function Attendance() {
         {departments.length > 0 && (
           <div className="field mt" style={{ marginBottom: 0 }}>
             <label htmlFor="attendance-department">Département</label>
-            <select id="attendance-department" className="select" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
+            <select id="attendance-department" className="select" value={departmentId} onChange={(e) => { const id = e.target.value; switchSheet(() => setDepartmentId(id)) }}>
               <option value="">{seesAll ? 'Toute l’église' : 'Tout mon périmètre'}</option>
               {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
@@ -204,7 +214,8 @@ export default function Attendance() {
               </button>
             )
           ))}
-          {!loading && members.length === 0 && <p className="helper center">Aucun fidèle actif dans votre périmètre.</p>}
+          {!loading && loadError && <LoadError message={loadError} onRetry={load} compact />}
+          {!loading && !loadError && members.length === 0 && <p className="helper center">Aucun fidèle actif dans votre périmètre.</p>}
           {!loading && members.length > 0 && shown.length === 0 && comebacks.length === 0 && <p className="helper center">Aucun fidèle ne correspond à « {query} ».</p>}
         </div>
 

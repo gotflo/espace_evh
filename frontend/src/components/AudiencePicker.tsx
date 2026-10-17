@@ -1,17 +1,24 @@
 import { useEffect, useState } from 'react'
-import { api } from '../api/client'
+import { api, auth } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
 import type { AudienceOptions, AudienceScope } from '../types'
 import { MultiSelect } from './MultiSelect'
 
-let cache: AudienceOptions | null = null
+// Memoire propre a la session : cle = jeton + roles. Un autre compte (ou des roles modifies) ne
+// recoit jamais les destinataires du precedent.
+let cache: { key: string; opts: AudienceOptions } | null = null
 
-/** Destinataires autorises pour l'utilisateur (charges une fois). */
+/** Destinataires autorises pour l'utilisateur (charges une fois par session et par jeu de roles). */
 export function useAudienceOptions(): AudienceOptions | null {
-  const [opts, setOpts] = useState<AudienceOptions | null>(cache)
+  const { roles } = useAuth()
+  const roleSignature = roles.map((r) => [r.key, r.scope_kind, r.scope_id].join(':')).join(',')
+  const cacheKey = (auth.get() ?? '') + '|' + roleSignature
+  const [opts, setOpts] = useState<AudienceOptions | null>(() => (cache?.key === cacheKey ? cache.opts : null))
   useEffect(() => {
-    if (cache) return
-    api<AudienceOptions>('/admin/audiences').then((o) => { cache = o; setOpts(o) }).catch(() => setOpts({ church: false, tribes: [], gems: [], departments: [] }))
-  }, [])
+    if (cache?.key === cacheKey) { setOpts(cache.opts); return }
+    setOpts(null)
+    api<AudienceOptions>('/admin/audiences').then((o) => { cache = { key: cacheKey, opts: o }; setOpts(o) }).catch(() => setOpts({ church: false, tribes: [], gems: [], departments: [] }))
+  }, [cacheKey])
   return opts
 }
 

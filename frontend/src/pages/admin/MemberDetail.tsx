@@ -15,6 +15,7 @@ import { PersonName } from '../../components/PersonName'
 import { MemberDeletion } from '../../components/MemberDeletion'
 import { Icon } from '../../components/Icon'
 import { useDirty } from '../../utils/dirty'
+import { LoadError } from '../../components/LoadError'
 
 export default function MemberDetail() {
   const { id } = useParams()
@@ -26,7 +27,8 @@ export default function MemberDetail() {
   const canManageEval = hasPermission('evaluations.manage')
   const canRecordSpiritual = hasPermission('spiritual.record')
   const canFissHistory = hasPermission('fiss.review') || hasPermission('audit.view')
-  const canExercises = hasPermission('exercises.assign')
+  // Meme permission que l'appel /admin/members/{id}/exercises (sinon un bloc toujours refuse).
+  const canExercises = hasPermission('exercises.view_responses')
 
   const [data, setData] = useState<MemberDetailData | null>(null)
   const [roleOptions, setRoleOptions] = useState<RoleOption[]>([])
@@ -46,14 +48,22 @@ export default function MemberDetail() {
   const belonging = useDirty({ belongTribe, belongGem, belongDepts })
   const resetBelonging = belonging.reset
 
+  const [loadError, setLoadError] = useState('')
+
   const load = useCallback(() => {
+    setLoadError('')
     api<MemberDetailData>(`/admin/members/${id}`).then((d) => {
       setData(d)
       setBelongTribe(d.profile?.tribe_id?.toString() ?? '')
       setBelongGem(d.profile?.gem_id?.toString() ?? '')
       setBelongDepts(d.profile?.departments?.map((x) => x.id) ?? [])
       resetBelonging()
-    }).catch(() => setData(null))
+    }).catch((err) => {
+      // Fiche de ce membre deja affichee : elle reste (une actualisation ratee ne la fait pas
+      // disparaitre) ; sinon, message et « Réessayer » au lieu d'un chargement sans fin.
+      setData((d) => (d && String(d.user.id) === id ? d : null))
+      setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
+    })
   }, [id, resetBelonging])
 
   useEffect(() => { load() }, [load])
@@ -126,7 +136,11 @@ export default function MemberDetail() {
   const back = <button className="btn btn-ghost small" onClick={() => navigate('/admin/membres')}>← Membres</button>
 
   if (!data) {
-    return <AppLayout title="Fiche membre" actions={back}><span className="spinner" /></AppLayout>
+    return (
+      <AppLayout title="Fiche membre" actions={back}>
+        {loadError ? <LoadError message={loadError} onRetry={load} /> : <span className="spinner" />}
+      </AppLayout>
+    )
   }
 
   const p = data.profile
@@ -183,7 +197,7 @@ export default function MemberDetail() {
               <span className="mini-label">Statut d'activité</span>
               <p className="helper" style={{ marginTop: 0, marginBottom: '0.6rem' }}>
                 {data.user.activity_override
-                  ? `Force manuellement : ${data.user.activity === 'active' ? 'Actif' : 'Inactif'}`
+                  ? `Forcé manuellement : ${data.user.activity === 'active' ? 'Actif' : 'Inactif'}`
                   : `Calcul automatique (${data.user.activity === 'active' ? 'Actif' : 'Inactif'})`}
               </p>
               <div className="activity-buttons">

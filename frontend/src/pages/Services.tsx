@@ -6,7 +6,7 @@ import { AppLayout } from '../components/AppLayout'
 import { SkeletonCard } from '../components/Skeleton'
 import type { ServiceItem } from '../types'
 import { Icon } from '../components/Icon'
-import { toast } from '../toast'import { ModalLayer } from '../components/ModalLayer'
+import { ModalLayer } from '../components/ModalLayer'
 
 
 /** Servir : le fidele demande a rejoindre un ou plusieurs departements ; le responsable valide chaque demande. */
@@ -27,8 +27,8 @@ export default function Services() {
   async function join(s: ServiceItem) {
     setConfirmJoin(null); setBusy(s.id)
     try {
-      const r = await api<{ message: string }>(`/me/services/${s.id}/join`, { method: 'POST', toast: false })
-      toast.success(r.message)
+      // Toast automatique : message du serveur en cas de succes, erreur sinon (toast: false masquait aussi les erreurs).
+      await api<{ message: string }>(`/me/services/${s.id}/join`, { method: 'POST' })
       load(); refresh()
     } catch { /* le toast d'erreur est affiche automatiquement */ } finally { setBusy(null) }
   }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, prefetch, peek } from '../api/client'
+import { api, ApiError, prefetch, peek } from '../api/client'
+import { LoadError } from '../components/LoadError'
 import { useAuth } from '../auth/AuthContext'
 import { usePulse } from '../pulse'
 import { AppLayout } from '../components/AppLayout'
@@ -38,8 +39,12 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(() => (canViewMembers ? peek<Stats>('/admin/stats') ?? null : null))
   const [welcome, setWelcome] = useState(false)
 
+  const [statsError, setStatsError] = useState('')
+  // Echec : les derniers chiffres connus restent ; sinon message et « Réessayer » (pas de squelette sans fin).
   const loadStats = useCallback(() => {
-    if (canViewMembers) api<Stats>('/admin/stats').then(setStats).catch(() => setStats(null))
+    if (!canViewMembers) return
+    setStatsError('')
+    api<Stats>('/admin/stats').then(setStats).catch((err) => setStatsError(err instanceof ApiError ? err.firstMessage : 'Erreur.'))
   }, [canViewMembers])
 
   useEffect(() => { loadStats() }, [loadStats])
@@ -105,7 +110,9 @@ export default function Dashboard() {
       <FissSummary />
       {canViewMembers ? (
         <>
-          {stats === null ? (
+          {stats === null && statsError ? (
+            <LoadError message={statsError} onRetry={loadStats} compact />
+          ) : stats === null ? (
             <div className="stat-row">
               {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="skeleton-tile" />)}
             </div>

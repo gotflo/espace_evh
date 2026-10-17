@@ -8,12 +8,14 @@ import type { MyExercise } from '../types'
 import { deadlineLabel } from '../utils/exercises'
 import { clearDraft, readDraft, useDraft } from '../utils/drafts'
 import { Icon } from '../components/Icon'
+import { LoadError } from '../components/LoadError'
 
 export default function ExerciseDetail() {
   const { id } = useParams()
   const { hasPermission } = useAuth()
   const [ex, setEx] = useState<MyExercise | null>(null)
   const [missing, setMissing] = useState(false)
+  const [loadError, setLoadError] = useState('')
   const [text, setText] = useState('')
   const [editing, setEditing] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -26,8 +28,13 @@ export default function ExerciseDetail() {
       setText(r.exercise.my_response ?? readDraft<string>(`exercise:${id}`) ?? '')
       setEditing(!r.exercise.my_response)
       setResumeAt((prev) => prev ?? r.exercise.resume_at ?? 0)
-    }).catch(() => setMissing(true))
+    }).catch((err) => {
+      // « Introuvable » seulement s'il l'est vraiment (404/403) ; une panne propose « Réessayer ».
+      if (err instanceof ApiError && (err.status === 404 || err.status === 403)) setMissing(true)
+      else setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
+    })
   }, [id])
+  const retry = () => { setLoadError(''); load() }
   useEffect(() => { load() }, [load])
 
   function onProgress(r: WatchResult) {
@@ -54,7 +61,13 @@ export default function ExerciseDetail() {
       </AppLayout>
     )
   }
-  if (!ex || resumeAt === null) return <AppLayout title="Exercice" actions={back}><div className="skeleton skeleton-card" /></AppLayout>
+  if (!ex || resumeAt === null) {
+    return (
+      <AppLayout title="Exercice" actions={back}>
+        {loadError ? <LoadError message={loadError} onRetry={retry} /> : <div className="skeleton skeleton-card" />}
+      </AppLayout>
+    )
+  }
 
   const deadline = deadlineLabel(ex.closes_at, ex.is_closed)
   const canRespond = hasPermission('exercises.respond') && ex.requires_response && !ex.is_closed

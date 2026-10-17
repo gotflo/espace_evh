@@ -21,6 +21,7 @@ function LeadersEditor({ item, onDone }: { item: OrgItem; onDone: (saved: boolea
   const [selected, setSelected] = useState<number[]>(initial)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Person[]>([])
+  const [searchError, setSearchError] = useState('')
   const [rehearsal, setRehearsal] = useState(!!item.tracks_rehearsal)
   const [busy, setBusy] = useState(false)
 
@@ -29,17 +30,27 @@ function LeadersEditor({ item, onDone }: { item: OrgItem; onDone: (saved: boolea
       .then((r) => { setMembers(r.members); setKnown((k) => mergePeople(k, r.members)) }).catch(() => setMembers([]))
   }, [item.id])
 
-  // Recherche dans toute l'eglise (a partir de 2 lettres, apres une courte pause de frappe).
+  // Recherche dans toute l'eglise (a partir de 2 lettres, apres une courte pause de frappe), par
+  // la route « candidates » reservee a la gestion des departements : le compte de gestion n'a pas
+  // acces a la liste des membres.
   useEffect(() => {
     const q = query.trim()
+    setSearchError('')
     if (q.length < 2) { setResults([]); return }
     const t = window.setTimeout(() => {
-      api<{ members: { user_id: number; full_name: string }[] }>(`/admin/members?per_page=8&q=${encodeURIComponent(q)}`)
-        .then((r) => setResults(r.members.map((m) => ({ user_id: m.user_id, name: m.full_name }))))
-        .catch(() => setResults([]))
+      api<{ members: Person[] }>(`/admin/departments/${item.id}/candidates?q=${encodeURIComponent(q)}`)
+        .then((r) => r.members)
+        // Serveur sans cette route (version precedente) : ancienne recherche dans les membres.
+        .catch((err) => {
+          if (!(err instanceof ApiError && err.status === 404)) throw err
+          return api<{ members: { user_id: number; full_name: string }[] }>(`/admin/members?per_page=8&q=${encodeURIComponent(q)}`)
+            .then((r) => r.members.map((m) => ({ user_id: m.user_id, name: m.full_name })))
+        })
+        .then(setResults)
+        .catch((err) => { setResults([]); setSearchError(err instanceof ApiError ? err.firstMessage : 'La recherche a échoué. Réessayez.') })
     }, 300)
     return () => window.clearTimeout(t)
-  }, [query])
+  }, [query, item.id])
 
   const toggle = (p: Person) => {
     setKnown((k) => mergePeople(k, [p]))
@@ -82,6 +93,7 @@ function LeadersEditor({ item, onDone }: { item: OrgItem; onDone: (saved: boolea
       )}
       <input className="input mt-sm" type="search" aria-label="Rechercher un membre de l'église" placeholder="Rechercher un membre de l'église…"
         value={query} onChange={(e) => setQuery(e.target.value)} />
+      {searchError && <div className="alert alert-error mt-sm" role="alert">{searchError}</div>}
       {results.length > 0 && (
         <div className="leaders-options mt-sm">
           {results.filter((p) => !selected.includes(p.user_id) && !memberIds.includes(p.user_id)).map((p) => (
@@ -103,9 +115,10 @@ function LeadersEditor({ item, onDone }: { item: OrgItem; onDone: (saved: boolea
   )
 }
 
-function OrgSection({ title, singular, items, endpoint, canManage, showLeaders, onChange, onError }: {
+function OrgSection({ title, addLabel, items, endpoint, canManage, showLeaders, onChange, onError }: {
   title: string
-  singular: string
+  /** Champ d'ajout, accorde : « Nouvelle tribu », « Nouveau département ». */
+  addLabel: string
   items: OrgItem[]
   endpoint: string
   canManage: boolean
@@ -124,20 +137,21 @@ function OrgSection({ title, singular, items, endpoint, canManage, showLeaders, 
     finally { setBusy(false) }
   }
 
-  const add = () => name.trim() && call(async () => {
+  // Entree pressee deux fois : un seul ajout (rien tant que le precedent est en cours).
+  const add = () => !busy && name.trim() && call(async () => {
     await api(`/admin/${endpoint}`, { method: 'POST', body: { name: name.trim() } })
     setName('')
   })
 
   const rename = (it: OrgItem) => {
-    const next = window.prompt(`Renommer "${it.name}"`, it.name)
+    const next = window.prompt(`Renommer « ${it.name} »`, it.name)
     if (next && next.trim() && next.trim() !== it.name) {
       call(() => api(`/admin/${endpoint}/${it.id}`, { method: 'PUT', body: { name: next.trim() } }))
     }
   }
 
   const remove = (it: OrgItem) => {
-    if (window.confirm(`Supprimer "${it.name}" ? Les membres n'y seront plus rattaches.`)) {
+    if (window.confirm(`Supprimer « ${it.name} » ? Les membres n'y seront plus rattachés.`)) {
       call(() => api(`/admin/${endpoint}/${it.id}`, { method: 'DELETE' }))
     }
   }
@@ -148,9 +162,9 @@ function OrgSection({ title, singular, items, endpoint, canManage, showLeaders, 
 
       {canManage && (
         <div className="org-add">
-          <input className="input" aria-label={`Nouveau ${singular}`} placeholder={`Nouveau ${singular}...`} value={name}
+          <input className="input" aria-label={addLabel} placeholder={`${addLabel}…`} value={name}
             onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') add() }} />
+            onKeyDown={(e) => { if (e.key === 'Enter' && !busy) add() }} />
           <button className="btn btn-primary small" disabled={busy || !name.trim()} onClick={add}>Ajouter</button>
         </div>
       )}
@@ -198,10 +212,10 @@ export default function Organization() {
     <AppLayout title="Organisation" subtitle="Tribus et départements de l'église">
       {error && <div className="alert alert-error">{error}</div>}
       <div className="detail-grid">
-        <OrgSection title="Tribus" singular="tribu" endpoint="tribes"
+        <OrgSection title="Tribus" addLabel="Nouvelle tribu" endpoint="tribes"
           items={data?.tribes ?? []} canManage={hasPermission('tribes.manage')}
           onChange={load} onError={setError} />
-        <OrgSection title="Départements" singular="departement" endpoint="departments"
+        <OrgSection title="Départements" addLabel="Nouveau département" endpoint="departments"
           items={data?.departments ?? []} canManage={hasPermission('departments.manage')}
           showLeaders onChange={load} onError={setError} />
       </div>

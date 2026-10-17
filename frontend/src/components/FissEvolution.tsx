@@ -39,8 +39,8 @@ export function FissEvolution({ current, previous, previousLabel }: {
       <button className="fiss-evolution-head" onClick={() => setOpen((o) => !o)}>
         <span className="fiss-evolution-icon">{TREND_ARROW[cmp.overall]}</span>
         <div className="fiss-evolution-text">
-          <strong>Evolution : {TREND_LABEL[cmp.overall]}{cmp.diff !== 0 ? ` (${cmp.diff > 0 ? '+' : ''}${cmp.diff} pts)` : ''}</strong>
-          <small>Par rapport a {previousLabel ?? 'le mois précédent'} · {changed.length} element(s) modifie(s)</small>
+          <strong>Évolution : {TREND_LABEL[cmp.overall]}{cmp.diff !== 0 ? ` (${cmp.diff > 0 ? '+' : ''}${cmp.diff} pts)` : ''}</strong>
+          <small>{previousLabel ? `Par rapport à ${previousLabel}` : 'Par rapport au mois précédent'} · {changed.length} élément{changed.length > 1 ? 's' : ''} modifié{changed.length > 1 ? 's' : ''}</small>
         </div>
         <span className="fiss-evolution-toggle">{open ? 'Masquer' : 'Voir ce qui a changé'}</span>
       </button>

@@ -8,6 +8,8 @@ import { Icon } from '../../components/Icon'
 import { usePulse } from '../../pulse'
 import type { Assignment } from '../../types'
 import { de } from '../../utils/french'
+import { confirmDiscard, useDirty } from '../../utils/dirty'
+import { LoadError } from '../../components/LoadError'
 import { useYouTubePreview } from '../../utils/youtubePreview'import { ModalLayer } from '../../components/ModalLayer'
 
 
@@ -36,6 +38,9 @@ function AssignmentEditor({ item, maxMb, onClose, onSaved }: { item: Assignment 
 
   const tooBig = !!file && file.size > maxMb * 1024 * 1024
   const hasMedia = type === 'video' ? !!url.trim() : !!file || keepAudio || !!url.trim()
+  // Clic sur le fond : confirmation si quelque chose a ete saisi ou modifie.
+  const changes = useDirty({ title, speaker, type, url, file: file?.name ?? null, keepAudio, instructions, notify })
+  const requestClose = () => { if (confirmDiscard(changes.dirty)) onClose() }
 
   async function save() {
     setBusy(true); setErrors({})
@@ -58,7 +63,7 @@ function AssignmentEditor({ item, maxMb, onClose, onSaved }: { item: Assignment 
   const err = (k: string) => errors[k]?.[0] && <p className="helper editor-error">{errors[k][0]}</p>
 
   return (
-    <ModalLayer className="modal-overlay" onMouseDown={onClose}>
+    <ModalLayer className="modal-overlay" onMouseDown={requestClose}>
       <div className="modal-box gr-modal" role="dialog" aria-modal="true" aria-label={item ? 'Modifier le devoir' : 'Publier un devoir'} onMouseDown={(e) => e.stopPropagation()}>
         <div className="panel-head">
           <h3>{item ? 'Modifier le devoir' : 'Publier un devoir'}</h3>
@@ -285,11 +290,17 @@ function ResolutionsTab() {
   const [period, setPeriod] = useState(thisMonth)
   const [filter, setFilter] = useState<'all' | 'taken' | 'missing'>('all')
   const [data, setData] = useState<RmData | null>(() => peek<RmData>(`/admin/resolutions?period=${thisMonth}`) ?? null)
-  const load = useCallback(() => { api<RmData>(`/admin/resolutions?period=${period}`).then(setData).catch(() => setData(null)) }, [period])
+  const [error, setError] = useState('')
+  const load = useCallback(() => {
+    setError('')
+    api<RmData>(`/admin/resolutions?period=${period}`).then(setData)
+      .catch((err) => { setData(null); setError(err instanceof ApiError ? err.firstMessage : 'Erreur.') })
+  }, [period])
   useEffect(() => { load() }, [load])
   usePulse('resolutions', load)
 
-  if (!data) return <SkeletonCard />
+  // Echec de lecture : message et « Réessayer » (et non un squelette sans fin).
+  if (!data) return error ? <LoadError message={error} onRetry={load} /> : <SkeletonCard />
   const list = data.members.filter((m) => filter === 'all' || (filter === 'taken' ? m.taken : !m.taken))
   const pct = data.total ? Math.round((data.taken / data.total) * 100) : 0
 
@@ -339,10 +350,15 @@ function VertumetreTab() {
   const [period, setPeriod] = useState(thisMonth)
   const [filter, setFilter] = useState<'all' | 'filled' | 'missing'>('all')
   const [data, setData] = useState<VtData | null>(null)
-  const load = useCallback(() => { api<VtData>(`/admin/vertumetre?period=${period}`).then(setData).catch(() => setData(null)) }, [period])
+  const [error, setError] = useState('')
+  const load = useCallback(() => {
+    setError('')
+    api<VtData>(`/admin/vertumetre?period=${period}`).then(setData)
+      .catch((err) => { setData(null); setError(err instanceof ApiError ? err.firstMessage : 'Erreur.') })
+  }, [period])
   useEffect(() => { load() }, [load])
 
-  if (!data) return <SkeletonCard />
+  if (!data) return error ? <LoadError message={error} onRetry={load} /> : <SkeletonCard />
   const list = data.members.filter((m) => filter === 'all' || (filter === 'filled' ? m.filled : !m.filled))
   const pct = data.total ? Math.round((data.filled / data.total) * 100) : 0
 

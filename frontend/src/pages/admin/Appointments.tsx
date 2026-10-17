@@ -6,6 +6,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { Icon } from '../../components/Icon'
 import { SkeletonCard } from '../../components/Skeleton'
 import { usePulse } from '../../pulse'
+import { ymd } from '../../utils/events'
 import type { AdminAppointmentsData, AppointmentItem, AppointmentSession, AppointmentSlot, AppointmentUrgency } from '../../types'
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
@@ -333,7 +334,7 @@ function Availability({ data, hostId, reload, onDialog }: { data: AdminAppointme
       <section className="panel">
         <div className="panel-head"><h3>Une date en plus</h3></div>
         <div className="appt-extra-form">
-          <input className="input" type="date" aria-label="Date" min={new Date().toISOString().slice(0, 10)} value={extra.date} onChange={(e) => setExtra({ ...extra, date: e.target.value })} />
+          <input className="input" type="date" aria-label="Date" min={ymd(new Date())} value={extra.date} onChange={(e) => setExtra({ ...extra, date: e.target.value })} />
           <input className="input" type="time" aria-label="Début" value={extra.starts_at} onChange={(e) => setExtra({ ...extra, starts_at: e.target.value })} />
           <input className="input" type="time" aria-label="Fin" value={extra.ends_at} onChange={(e) => setExtra({ ...extra, ends_at: e.target.value })} />
           <button className="btn btn-primary small" disabled={busy || !extra.date || !extra.starts_at || !extra.ends_at || extra.starts_at >= extra.ends_at} onClick={addExtra}>Ajouter</button>

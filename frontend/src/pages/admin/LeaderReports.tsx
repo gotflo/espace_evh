@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { api, ApiError, peek } from '../../api/client'
 import { AppLayout } from '../../components/AppLayout'
 import { Icon } from '../../components/Icon'
+import { LoadError } from '../../components/LoadError'
 import { SkeletonCard } from '../../components/Skeleton'
 import { ReportView } from '../../components/leaderReports/ReportView'
 import { ReportWizard } from '../../components/leaderReports/ReportWizard'
@@ -110,6 +111,7 @@ export default function LeaderReports() {
   const [params, setParams] = useSearchParams()
   const [data, setData] = useState<LeaderReportsData | null>(() => peek<LeaderReportsData>('/admin/leader-reports') ?? null)
   const [denied, setDenied] = useState(false)
+  const [loadError, setLoadError] = useState('')
   const [period, setPeriod] = useState('')
 
   // ?remplir=tribe:3&mois=2026-09 : questionnaire ; ?rapport=12 : lecture.
@@ -122,9 +124,15 @@ export default function LeaderReports() {
   const listing = !filling && !reading
 
   const load = useCallback(() => {
+    setLoadError('')
     api<LeaderReportsData>(period ? `/admin/leader-reports?period=${period}` : '/admin/leader-reports')
       .then((d) => { setData(d); setDenied(false) })
-      .catch(() => setDenied(true))
+      // Seul un refus (403) signifie « aucun rapport à votre charge » ; une panne ou une coupure
+      // reseau affiche un message et « Réessayer ».
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 403) setDenied(true)
+        else setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
+      })
   }, [period])
   useEffect(() => { if (listing) load() }, [load, listing])
   usePulse('leader_reports', load, listing)
@@ -159,9 +167,10 @@ export default function LeaderReports() {
           <p>Les rapports mensuels sont remplis par les patriarches et les responsables de département.</p>
         </div>
       ) : data === null ? (
-        <div className="validation-grid"><SkeletonCard /><SkeletonCard /></div>
+        loadError ? <LoadError message={loadError} onRetry={load} /> : <div className="validation-grid"><SkeletonCard /><SkeletonCard /></div>
       ) : (
         <>
+          {loadError && <LoadError message={loadError} onRetry={load} compact />}
           {data.mine.length > 0 && (
             <section className="mt-0">
               <h3 className="section-label">Mes rapports</h3>
@@ -193,7 +202,7 @@ export default function LeaderReports() {
                         <small>
                           {r.status === 'submitted'
                             ? `Envoyé le ${fmtDay(r.submitted_at)}${r.author ? ` par ${r.author}` : ''}`
-                            : r.leaders.length ? `En attente · ${r.leaders.join(', ')}` : 'Aucun patriarche désigné'}
+                            : r.leaders.length ? `En attente · ${r.leaders.join(', ')}` : r.kind === 'tribe' ? 'Aucun patriarche désigné' : 'Aucun responsable désigné'}
                         </small>
                       </span>
                       {r.status === 'submitted' && <span className="chip-soft">{r.souls_count} âme(s)</span>}

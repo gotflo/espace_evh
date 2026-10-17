@@ -4,6 +4,7 @@ import { usePulse } from '../pulse'
 import { Icon } from './Icon'
 import { SkeletonCard } from './Skeleton'
 import { toast } from '../toast'
+import { confirmDiscard, useDirty } from '../utils/dirty'
 import type { ResolutionResource, ResolutionResourceGroup } from '../types'
 import { isYouTubeLink, useYouTubePreview } from '../utils/youtubePreview'import { ModalLayer } from './ModalLayer'
 
@@ -33,6 +34,9 @@ function ResourceEditor({ item, themes, can, onClose, onSaved }: {
   })
   // Sans la permission « publier » : brouillons seulement, et une ressource publiee ne se modifie pas.
   const lockedPublished = !can.publish && item?.status === 'published'
+  // Clic sur le fond : confirmation si quelque chose a ete saisi ou modifie.
+  const changes = useDirty({ theme, url, title, author, note, status })
+  const requestClose = () => { if (confirmDiscard(changes.dirty)) onClose() }
 
   async function save() {
     setBusy(true); setErrors({})
@@ -49,7 +53,7 @@ function ResourceEditor({ item, themes, can, onClose, onSaved }: {
   const err = (k: string) => errors[k]?.[0] && <p className="helper editor-error">{errors[k][0]}</p>
 
   return (
-    <ModalLayer className="modal-overlay" onMouseDown={onClose}>
+    <ModalLayer className="modal-overlay" onMouseDown={requestClose}>
       <div className="modal-box modal-wide" role="dialog" aria-modal="true" aria-label={item ? 'Modifier la ressource' : 'Nouvelle ressource'} onMouseDown={(e) => e.stopPropagation()}>
         <div className="panel-head">
           <h3>{item ? 'Modifier la ressource' : 'Nouvelle ressource'}</h3>

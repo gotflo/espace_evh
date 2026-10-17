@@ -25,7 +25,7 @@ const NUM_FIELDS: [keyof FissForm, string][] = [
 ]
 const SANCT_FIELDS: [keyof FissForm, string][] = [
   ['sanctification_corps', 'Sanctif. corps'],
-  ['sanctification_ame', 'Sanctif. ame'],
+  ['sanctification_ame', 'Sanctif. âme'],
   ['sanctification_esprit', 'Sanctif. esprit'],
 ]
 

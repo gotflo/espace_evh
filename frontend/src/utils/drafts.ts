@@ -6,12 +6,17 @@ const PREFIX = 'evh_draft:'
 const MAX_AGE = 14 * 86400000
 
 export function readDraft<T>(key: string): T | null {
+  return readDraftEntry<T>(key)?.v ?? null
+}
+
+/** Brouillon et son heure d'enregistrement (ms) : a comparer a la derniere version du serveur. */
+export function readDraftEntry<T>(key: string): { v: T; at: number } | null {
   try {
     const raw = localStorage.getItem(PREFIX + key)
     if (!raw) return null
     const { v, at } = JSON.parse(raw) as { v: T; at: number }
     if (Date.now() - at > MAX_AGE) { localStorage.removeItem(PREFIX + key); return null }
-    return v
+    return { v, at }
   } catch { return null }
 }
 

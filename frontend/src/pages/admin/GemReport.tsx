@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, peek } from '../../api/client'
+import { api, ApiError, peek } from '../../api/client'
 import { AppLayout } from '../../components/AppLayout'
 import { Icon } from '../../components/Icon'
+import { LoadError } from '../../components/LoadError'
 import { SkeletonCard } from '../../components/Skeleton'
 import { WeekReportView } from '../../components/leaderReports/WeekReportView'
 import { fmtDay } from '../../utils/leaderReports'
@@ -131,9 +132,16 @@ function GemCard({ gem, data, onSaved }: { gem: GemReportGem; data: GemReportsDa
 export default function GemReport() {
   const [data, setData] = useState<GemReportsData | null>(() => peek<GemReportsData>('/admin/gem-reports') ?? null)
   const [denied, setDenied] = useState(false)
+  const [loadError, setLoadError] = useState('')
 
+  // Seul un refus (403) signifie « réservé aux Gardes » ; une panne affiche « Réessayer ».
   const load = useCallback(() => {
-    api<GemReportsData>('/admin/gem-reports').then((d) => { setData(d); setDenied(false) }).catch(() => setDenied(true))
+    setLoadError('')
+    api<GemReportsData>('/admin/gem-reports').then((d) => { setData(d); setDenied(false) })
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 403) setDenied(true)
+        else setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
+      })
   }, [])
   useEffect(() => { load() }, [load])
 
@@ -146,7 +154,7 @@ export default function GemReport() {
           <p>Le rapport hebdomadaire est rempli par le Garde de chaque GEM.</p>
         </div>
       ) : data === null ? (
-        <div className="panel-grid"><SkeletonCard /></div>
+        loadError ? <LoadError message={loadError} onRetry={load} /> : <div className="panel-grid"><SkeletonCard /></div>
       ) : (
         <div className="gr-page">
           <p className="helper gr-intro">

@@ -5,6 +5,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { AppLayout } from '../../components/AppLayout'
 import { SkeletonCard } from '../../components/Skeleton'
 import { Icon } from '../../components/Icon'
+import { confirmDiscard, useDirty } from '../../utils/dirty'
 import type { ServiceSlot } from '../../types'import { ModalLayer } from '../../components/ModalLayer'
 
 
@@ -26,6 +27,9 @@ function Editor({ slot, onClose, onSaved }: { slot: ServiceSlot | null; onClose:
   const [busy, setBusy] = useState(false)
 
   const endBad = hasEnd && (!end || end <= start)
+  // Clic sur le fond : confirmation si quelque chose a ete saisi ou modifie.
+  const changes = useDirty({ title, day, start, hasEnd, end, category, description, notify })
+  const requestClose = () => { if (confirmDiscard(changes.dirty)) onClose() }
 
   async function save() {
     setBusy(true); setErrors({})
@@ -41,7 +45,7 @@ function Editor({ slot, onClose, onSaved }: { slot: ServiceSlot | null; onClose:
   const err = (k: string) => errors[k]?.[0] && <p className="helper editor-error">{errors[k][0]}</p>
 
   return (
-    <ModalLayer className="modal-overlay" onMouseDown={onClose}>
+    <ModalLayer className="modal-overlay" onMouseDown={requestClose}>
       <div className="modal-box" role="dialog" aria-modal="true" aria-label={slot ? 'Modifier le rendez-vous' : 'Nouveau rendez-vous'} onMouseDown={(e) => e.stopPropagation()}>
         <div className="panel-head">
           <h3>{slot ? 'Modifier le rendez-vous' : 'Nouveau rendez-vous'}</h3>

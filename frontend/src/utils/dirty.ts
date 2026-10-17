@@ -14,3 +14,11 @@ export function useDirty(value: unknown): { dirty: boolean; reset: () => void } 
   const reset = useCallback(() => { base.current = null; rerender((n) => n + 1) }, [])
   return { dirty: base.current !== current, reset }
 }
+
+/**
+ * Fermeture d'une fenetre (clic sur le fond, Echap) : rien a perdre, ou la personne confirme
+ * qu'elle abandonne sa saisie.
+ */
+export function confirmDiscard(dirty: boolean): boolean {
+  return !dirty || window.confirm('Abandonner les modifications non enregistrées ?')
+}

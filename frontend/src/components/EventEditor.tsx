@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import type { AudienceScope, EventCategory, EventOccurrence, Recurrence } from '../types'
-import { CAT_LABEL, parseYmd, ymd } from '../utils/events'
+import { addDays, CAT_LABEL, ymd } from '../utils/events'
 import { AudiencePicker } from './AudiencePicker'
-import { useDirty } from '../utils/dirty'
+import { confirmDiscard, useDirty } from '../utils/dirty'
 import { ModalLayer } from './ModalLayer'
 
 const RECURRENCES: { key: Recurrence; label: string }[] = [
@@ -75,15 +75,23 @@ export function EventEditor({ date, event, onClose, onSaved }: {
 
   const [f, setF] = useState(init)
   const [busy, setBusy] = useState(false)
+  // Garde immediate (Entree pressee deux fois avant le rendu suivant) : un seul envoi.
+  const busyRef = useRef(false)
   const changes = useDirty(f)
   const set = <K extends keyof typeof init>(k: K, v: (typeof init)[K]) => setF((prev) => ({ ...prev, [k]: v }))
 
+  // Fond ou Echap : la saisie en cours n'est jamais perdue sans confirmation. Nouvel evenement :
+  // les destinataires par defaut (poses automatiquement) ne comptent pas comme une saisie.
+  const dirty = useDirty({ ...f, scopes: editing ? f.scopes : null }).dirty
+  const requestClose = useCallback(() => { if (confirmDiscard(dirty)) onClose() }, [dirty, onClose])
+
   useEffect(() => { titleRef.current?.focus() }, [])
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    // Echap deja traite par une liste ouverte (destinataires) : il ne ferme que cette liste.
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented) requestClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [requestClose])
 
   const church = f.audience === 'church'
   const endBeforeStart = !f.allDay && f.end && `${f.endDate}T${f.end}` < `${f.date}T${f.start}`
@@ -91,7 +99,8 @@ export function EventEditor({ date, event, onClose, onSaved }: {
     && (!church || f.scopes.length > 0)
 
   async function save() {
-    if (!valid) return
+    if (!valid || busyRef.current) return
+    busyRef.current = true
     setBusy(true)
     const body: Record<string, unknown> = {
       title: f.title.trim(), category: f.category,
@@ -111,7 +120,7 @@ export function EventEditor({ date, event, onClose, onSaved }: {
       else if (editing) await api(`/me/events/${event!.event_id}`, { method: 'PUT', body })
       else await api('/me/events', { method: 'POST', body })
       onSaved(); onClose()
-    } catch { /* toast automatique */ } finally { setBusy(false) }
+    } catch { /* toast automatique */ } finally { busyRef.current = false; setBusy(false) }
   }
 
   async function remove() {
@@ -126,7 +135,7 @@ export function EventEditor({ date, event, onClose, onSaved }: {
   }
 
   return (
-    <ModalLayer className="modal-overlay" onMouseDown={onClose}>
+    <ModalLayer className="modal-overlay" onMouseDown={requestClose}>
       <div className="modal-box editor-modal" role="dialog" aria-modal="true" aria-label={editing ? 'Modifier' : 'Programmer'}
         onMouseDown={(e) => e.stopPropagation()}>
         <div className="panel-head">
@@ -144,7 +153,7 @@ export function EventEditor({ date, event, onClose, onSaved }: {
         {editing && event?.recurring && <p className="helper editor-note">Les changements s'appliquent à toute la série.</p>}
 
         <input ref={titleRef} aria-label="Titre" className="input editor-title" placeholder={church ? 'Titre (ex. Culte de louange)' : 'Titre (ex. Rendez-vous avec mon Garde)'}
-          value={f.title} onChange={(e) => set('title', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') save() }} />
+          value={f.title} onChange={(e) => set('title', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !busy) save() }} />
 
         <div className="cat-chips" role="radiogroup" aria-label="Catégorie">
           {CATS.map((c) => (
@@ -195,7 +204,7 @@ export function EventEditor({ date, event, onClose, onSaved }: {
             </label>
           )}
           {!f.allDay && f.endDate === f.date && (
-            <button className="btn-link" onClick={() => set('endDate', ymd(new Date(parseYmd(f.date).getTime() + 86400000)))}>Sur plusieurs jours</button>
+            <button className="btn-link" onClick={() => set('endDate', addDays(f.date, 1))}>Sur plusieurs jours</button>
           )}
         </div>
         {endBeforeStart && <p className="helper editor-error">La fin doit être après le début.</p>}

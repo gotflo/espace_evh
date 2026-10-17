@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { api, peek } from '../api/client'
+import { api, ApiError, peek } from '../api/client'
 import { AppLayout } from '../components/AppLayout'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Icon } from '../components/Icon'
@@ -108,6 +108,7 @@ export default function Appointments() {
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [gone, setGone] = useState('')
   // Quatre dates d'abord (les deux prochaines semaines) : la suite sur demande.
   const [more, setMore] = useState(false)
 
@@ -118,7 +119,17 @@ export default function Appointments() {
   }
 
   const load = useCallback(() => {
-    api<MyAppointmentsData>(hostId ? `/me/appointments?host=${hostId}` : '/me/appointments').then((d) => { setData(d); if (!hostId && d.host_id) setHostId(d.host_id) }).catch(() => {})
+    api<MyAppointmentsData>(hostId ? `/me/appointments?host=${hostId}` : '/me/appointments')
+      .then((d) => { setGone(''); setData(d); if (!hostId && d.host_id) setHostId(d.host_id) })
+      .catch((err) => {
+        // Ce pasteur ne recoit plus de rendez-vous (404) : ses creneaux disparaissent (plus de
+        // reservation impossible a confirmer) et le message du serveur est affiche.
+        if (err instanceof ApiError && err.status === 404) {
+          setGone(err.firstMessage)
+          setChoice(null)
+          setData((d) => (d ? { ...d, sessions: [], accepting: false } : d))
+        }
+      })
   }, [hostId])
   useEffect(() => { load() }, [load])
   usePulse('appointments', load)
@@ -181,7 +192,7 @@ export default function Appointments() {
           {data.active ? (
             <ActiveCard a={data.active} onCancel={() => setCancelling(true)} />
           ) : !data.accepting ? (
-            <div className="empty-state"><Icon name="clock" size={28} /><h3>Pas de rendez-vous pour le moment</h3><p>{host?.name ?? 'Le pasteur'} ne prend pas de nouveaux rendez-vous en ce moment. Revenez bientôt.</p></div>
+            <div className="empty-state"><Icon name="clock" size={28} /><h3>Pas de rendez-vous pour le moment</h3><p>{gone || `${host?.name ?? 'Le pasteur'} ne prend pas de nouveaux rendez-vous en ce moment. Revenez bientôt.`}</p></div>
           ) : (
             <>
               <section className="panel appt-step">

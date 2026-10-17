@@ -45,7 +45,7 @@ function toLocalInput(iso: string | null): string {
 const EMPTY = {
   id: 0, title: '', description: '', category: 'culte' as EventCategory,
   starts_at: '', ends_at: '', location: '',
-  all_day: false, recurrence: 'none' as Recurrence, recurrence_until: '',
+  all_day: false, recurrence: 'none' as Recurrence, recurrence_until: '', remind_all: false,
   scopes: [] as AudienceScope[],
 }
 
@@ -90,7 +90,7 @@ export default function Events() {
       id: e.id, title: e.title, description: e.description ?? '', category: e.category,
       starts_at: toLocalInput(e.starts_at), ends_at: toLocalInput(e.ends_at), location: e.location ?? '',
       all_day: e.all_day, recurrence: e.recurrence ?? 'none', recurrence_until: e.recurrence_until ?? '',
-      scopes: e.scopes,
+      remind_all: !!e.remind_all, scopes: e.scopes,
     })
     clearImage(); setExistingImage(e.image_url); setError(''); setMode('form'); formState.reset()
   }
@@ -111,14 +111,17 @@ export default function Events() {
     setError(''); setBusy(true)
     const fd = new FormData()
     fd.append('title', form.title)
-    if (form.description) fd.append('description', form.description)
+    // Champs facultatifs toujours envoyes : vides, ils sont effaces (le serveur recoit null).
+    fd.append('description', form.description)
     fd.append('category', form.category)
     fd.append('starts_at', form.starts_at)
-    if (form.ends_at) fd.append('ends_at', form.ends_at)
-    if (form.location) fd.append('location', form.location)
+    fd.append('ends_at', form.ends_at)
+    fd.append('location', form.location)
     fd.append('all_day', form.all_day ? '1' : '0')
     fd.append('recurrence', form.recurrence)
-    if (form.recurrence !== 'none' && form.recurrence_until) fd.append('recurrence_until', form.recurrence_until)
+    fd.append('recurrence_until', form.recurrence !== 'none' ? form.recurrence_until : '')
+    // Rappel a tous (cultes) : valeur actuelle conservee, sinon le serveur la remettait a zero.
+    fd.append('remind_all', form.remind_all ? '1' : '0')
     fd.append('scopes', JSON.stringify(form.scopes))
     if (image) fd.append('image', image)
     // Laravel : envoi multipart en POST + _method=PUT pour la modification.
@@ -142,7 +145,7 @@ export default function Events() {
   const past = items.filter((e) => e.is_past)
 
   return (
-    <AppLayout title="Événements" subtitle="Cultes, reunions, formations, sorties..."
+    <AppLayout title="Événements" subtitle="Cultes, réunions, formations, sorties…"
       actions={mode === 'list' ? <button className="btn btn-primary small" onClick={openNew}>+ Nouvel événement</button> : undefined}>
       {error && <div className="alert alert-error">{error}</div>}
 
@@ -150,10 +153,10 @@ export default function Events() {
         <ModalLayer className="modal-overlay" onClick={() => setParticipants(null)}>
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
             <div className="panel-head">
-              <h3>Participants , {participants.title}</h3>
+              <h3>Participants : {participants.title}</h3>
               <button className="btn-link" onClick={() => setParticipants(null)}>Fermer</button>
             </div>
-            <h4 className="section-label">Presents ({participants.going.length})</h4>
+            <h4 className="section-label">Présents ({participants.going.length})</h4>
             <div className="participant-list">
               {participants.going.map((p) => (
                 <span key={p.user_id} className="participant-chip">{p.name}{p.volunteer ? ' (volontaire)' : ''}</span>
@@ -242,7 +245,7 @@ export default function Events() {
               <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickImage} />
               {image
                 ? <button className="btn-link" onClick={clearImage}>Annuler l'image</button>
-                : existingImage && <span className="helper">Image actuelle , choisir un fichier pour la remplacer.</span>}
+                : existingImage && <span className="helper">Image actuelle : choisir un fichier pour la remplacer.</span>}
             </div>
           </div>
           <AudiencePicker value={form.scopes} onChange={(scopes) => setForm((f) => ({ ...f, scopes }))} />

@@ -7,8 +7,12 @@ import { ColumnChart, HBarChart, LineChart, Meter, VIZ } from '../../components/
 import { toast } from '../../toast'
 import type { ReportData, ReportMemberRow, ReportOptions } from '../../types'
 import { Icon } from '../../components/Icon'
+import { LoadError } from '../../components/LoadError'
 
 interface MembersPage { members: ReportMemberRow[]; total: number; has_more: boolean }
+
+/** « 1 membre », « 0 membre », « 3 membres » (pluriel francais a partir de 2). */
+const count = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`
 
 type Tab = 'overview' | 'members'
 type Filter = 'all' | 'active' | 'inactive' | 'incomplete' | 'fiss_missing'
@@ -75,6 +79,8 @@ export default function Reports() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const [options, setOptions] = useState<ReportOptions | null>(null)
+  const [optionsError, setOptionsError] = useState('')
+  const [reportError, setReportError] = useState('')
   const [scope, setScope] = useState(params.get('scope') ?? '')
   const [months, setMonths] = useState(Number(params.get('mois')) || 6)
   const [tab, setTab] = useState<Tab>((params.get('vue') as Tab) || 'overview')
@@ -89,12 +95,15 @@ export default function Reports() {
   const [query, setQuery] = useState('')
   const [exporting, setExporting] = useState(false)
 
-  useEffect(() => {
+  // Echec de lecture : message et « Réessayer », jamais « Aucune tribu » ni un squelette sans fin.
+  const loadOptions = useCallback(() => {
+    setOptionsError('')
     api<ReportOptions>('/admin/reports/options').then((o) => {
       setOptions(o)
       setScope((s) => s || (o.church ? 'church' : o.mine ? 'mine' : o.tribes[0] ? `tribe:${o.tribes[0].id}` : ''))
-    }).catch(() => setOptions({ church: false, mine: false, tribes: [] }))
+    }).catch((err) => setOptionsError(err instanceof ApiError ? err.firstMessage : 'Erreur.'))
   }, [])
+  useEffect(() => { loadOptions() }, [loadOptions])
 
   useEffect(() => {
     if (scope) setParams({ scope, mois: String(months), vue: tab }, { replace: true })
@@ -102,9 +111,11 @@ export default function Reports() {
 
   const loadReport = useCallback(() => {
     if (!scope) return
-    setLoading(true)
+    setLoading(true); setReportError('')
     api<ReportData>(`/admin/reports?scope=${encodeURIComponent(scope)}&months=${months}`)
-      .then(setReport).catch(() => setReport(null)).finally(() => setLoading(false))
+      .then(setReport)
+      .catch((err) => { setReport(null); setReportError(err instanceof ApiError ? err.firstMessage : 'Erreur.') })
+      .finally(() => setLoading(false))
   }, [scope, months])
   useEffect(() => { loadReport() }, [loadReport])
 
@@ -159,6 +170,9 @@ export default function Reports() {
     } catch (err) { toast.error(err instanceof ApiError ? err.firstMessage : 'La génération du PDF a échoué. Réessayez.') } finally { setExporting(false) }
   }
 
+  if (!options && optionsError) {
+    return <AppLayout title="Rapports"><LoadError message={optionsError} onRetry={loadOptions} /></AppLayout>
+  }
   if (options && !options.church && options.tribes.length === 0) {
     return (
       <AppLayout title="Rapports">
@@ -194,12 +208,12 @@ export default function Reports() {
       </div>
 
       {tab === 'overview' && (
-        !report || loading && !report ? (
+        !report && reportError && !loading ? <LoadError message={reportError} onRetry={loadReport} /> : !report || loading && !report ? (
           <div className="kpi-grid">{Array.from({ length: 8 }, (_, i) => <div key={i} className="skeleton skeleton-tile" />)}</div>
         ) : (
           <div className={loading ? 'is-refreshing' : ''}>
             <div className="kpi-grid">
-              <Kpi label="Membres" value={String(k!.members)} sub={`${k!.active} actifs · ${k!.inactive} inactifs`} />
+              <Kpi label="Membres" value={String(k!.members)} sub={`${count(k!.active, 'actif', 'actifs')} · ${count(k!.inactive, 'inactif', 'inactifs')}`} />
               <Kpi label="Vie spirituelle" value={pct(k!.spiritual_score)} sub="moyenne des FISS remplies" tone={k!.spiritual_score !== null && k!.spiritual_score >= 60 ? 'good' : undefined} />
               <Kpi label="FISS du mois" value={pct(k!.fiss_rate)} sub={`${k!.fiss_missing} actif(s) sans fiche`} tone={k!.fiss_missing > 0 ? 'warn' : 'good'} />
               <Kpi label="Assiduité" value={pct(k!.attendance_rate)} sub="présences aux cultes" />
@@ -257,7 +271,7 @@ export default function Reports() {
                   {report.tribes.filter((t) => t.members > 0).map((t) => (
                     <button key={t.id} className="tribe-card" onClick={() => setScope(`tribe:${t.id}`)}>
                       <strong>{t.name}</strong>
-                      <span>{t.members} membres · {t.active} actifs</span>
+                      <span>{count(t.members, 'membre', 'membres')} · {count(t.active, 'actif', 'actifs')}</span>
                       <span>FISS {pct(t.fiss_rate)} · profils {t.completion_avg ?? '—'} %</span>
                     </button>
                   ))}

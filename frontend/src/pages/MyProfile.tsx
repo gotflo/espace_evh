@@ -101,19 +101,18 @@ export default function MyProfile() {
       const fd = new FormData()
       fd.append('first_name', firstName)
       fd.append('last_name', lastName)
-      if (birthDay) fd.append('birth_day', birthDay)
-      if (birthMonth) fd.append('birth_month', birthMonth)
       fd.append('gender', gender)
       if (tribeId && !profile?.tribe_id) fd.append('tribe_id', tribeId)
       if (profile?.tribe_id) fd.append('tribe_id', String(profile.tribe_id))
       if (photoFile) fd.append('photo', photoFile)
-      if (email) fd.append('email', email)
-      if (marital) fd.append('marital_status', marital)
-      if (civility) fd.append('civility', civility)
-      if (marital === 'marie' && weddingDay) fd.append('wedding_day', weddingDay)
-      if (marital === 'marie' && weddingMonth) fd.append('wedding_month', weddingMonth)
-      if (tshirt) fd.append('tshirt_size', tshirt)
-      if (yearVerse) fd.append('year_verse', yearVerse)
+      // Champs facultatifs toujours envoyes : un champ vide efface la valeur (recu null par le
+      // serveur), sinon « Profil enregistré » s'affichait sans rien effacer.
+      const optional: Record<string, string> = {
+        birth_day: birthDay, birth_month: birthMonth, email: email.trim(), marital_status: marital, civility,
+        wedding_day: marital === 'marie' ? weddingDay : '', wedding_month: marital === 'marie' ? weddingMonth : '',
+        tshirt_size: tshirt, year_verse: yearVerse.trim(),
+      }
+      Object.entries(optional).forEach(([k, v]) => fd.append(k, v))
       const res = await api<{ profile: Profile; completion: ProfileCompletion }>('/profile', { method: 'POST', body: fd })
       setProfile(res.profile); setPhotoFile(null); setCompletion(res.completion); personal.reset()
     } catch (err) {

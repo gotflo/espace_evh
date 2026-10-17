@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
-import { clearDraft, readDraft, useDraft } from '../../utils/drafts'
+import { clearDraft, readDraftEntry, useDraft } from '../../utils/drafts'
 import { fmtDay, isVisible, KIND_LABEL, stepErrors, visibleAnswers } from '../../utils/leaderReports'
 import type { LeaderReportForm, LeaderReportKind, ReportAnswer, ReportAnswers, ReportQuestion } from '../../types'
 import { SkeletonCard } from '../Skeleton'
@@ -135,11 +135,16 @@ export function ReportWizard({ kind, scopeId, period, onClose, onSent }: {
     setFailed(false)
     api<LeaderReportForm>(`/admin/leader-reports/form?kind=${kind}&scope_id=${scopeId}&period=${period}`)
       .then((f) => {
-        const local = readDraft<ReportAnswers>(draftKey)
+        const local = readDraftEntry<ReportAnswers>(draftKey)
+        // La saisie restee sur cet appareil n'est reprise que si elle est plus recente que la
+        // version du serveur (rapport continue sur un autre appareil : le serveur l'emporte).
+        // Serveur sans updated_at (version precedente) ou rapport jamais enregistre : reprise.
+        const serverAt = f.updated_at ? Date.parse(f.updated_at) : NaN
+        const resume = local !== null && (Number.isNaN(serverAt) || local.at > serverAt)
+        if (local && !resume) clearDraft(draftKey)
         setForm(f)
-        // La saisie restee sur cet appareil est plus recente que la version du serveur.
-        setAnswers(local ?? f.answers ?? {})
-        setDirty(local !== null)
+        setAnswers(resume ? local.v : f.answers ?? {})
+        setDirty(resume)
       })
       .catch(() => setFailed(true))
   }, [kind, scopeId, period, draftKey])

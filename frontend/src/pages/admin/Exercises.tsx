@@ -6,6 +6,7 @@ import { AppLayout } from '../../components/AppLayout'
 import { AudiencePicker } from '../../components/AudiencePicker'
 import type { AudienceScope, ExerciseListItem, ExerciseStatus, ExerciseTracking } from '../../types'
 import { deadlineLabel } from '../../utils/exercises'
+import { localIso } from '../../utils/events'
 import { isYouTubeLink, useYouTubePreview } from '../../utils/youtubePreview'
 import { Icon } from '../../components/Icon'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
@@ -77,7 +78,8 @@ function Tracking({ id, onBack }: { id: number; onBack: () => void }) {
           <span className="helper">{deadlineLabel(ex.closes_at, ex.is_closed) ?? 'Sans date limite'}</span>
           <div className="completion-bar mt-sm" aria-label={`${pct} % ont terminé`}><span className="good" style={{ width: `${pct}%` }} /></div>
           <span className="helper"><strong>{sm.done}</strong> sur {sm.total} ont terminé ({pct} %)</span>
-          {!ex.is_closed && sm.done < sm.total && (
+          {/* Relance seulement s'il reste quelqu'un a relancer (calcule par le serveur ; ancien test sinon). */}
+          {!ex.is_closed && (sm.remindable !== undefined ? sm.remindable > 0 : sm.done < sm.total) && (
             <button className="btn btn-ghost small tracking-remind" disabled={reminding} onClick={remind}>
               {reminding ? <span className="spinner" /> : <><Icon name="bell" size={15} /> Relancer</>}
             </button>
@@ -136,7 +138,7 @@ function Tracking({ id, onBack }: { id: number; onBack: () => void }) {
 // ---------------------------------------------------------------- Formulaire de creation
 
 function NewExercise({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
-  const inWeek = new Date(Date.now() + 7 * 86400000)
+  const inWeek = new Date(); inWeek.setDate(inWeek.getDate() + 7) // jours de calendrier (changement d'heure)
   const [kind, setKind] = useState<'video' | 'written'>('video')
   const [url, setUrl] = useState('')
   const [title, setTitle] = useState('')
@@ -174,7 +176,8 @@ function NewExercise({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
           type: kind === 'video' ? 'video' : writtenType,
           video_url: kind === 'video' ? url.trim() : null,
           requires_response: kind === 'video' ? requiresResponse : true,
-          closes_at: closesAt,
+          // Heure locale envoyee en ISO avec son decalage (sinon le serveur la lisait dans son fuseau).
+          closes_at: closesAt ? localIso(closesAt) : null,
         },
       })
       onDone()

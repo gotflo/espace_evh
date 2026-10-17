@@ -18,6 +18,25 @@ export function parseYmd(s: string): Date {
   return new Date(y, m - 1, d)
 }
 
+/** AAAA-MM-JJ decale de n jours de calendrier (sans 24 h fixes : juste aux changements d'heure). */
+export function addDays(dateYmd: string, n: number): string {
+  const d = parseYmd(dateYmd)
+  d.setDate(d.getDate() + n)
+  return ymd(d)
+}
+
+/**
+ * « AAAA-MM-JJTHH:mm » (heure locale de l'appareil) -> ISO avec le decalage local, ex.
+ * 2026-10-23T21:00:00-04:00 : le serveur sait de quelle heure il s'agit, quel que soit son fuseau.
+ */
+export function localIso(value: string): string {
+  const d = new Date(value)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const off = -d.getTimezoneOffset()
+  const abs = Math.abs(off)
+  return `${ymd(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}:00${off >= 0 ? '+' : '-'}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`
+}
+
 /** « 19h00 » */
 export function hhmm(iso: string): string {
   const d = new Date(iso)

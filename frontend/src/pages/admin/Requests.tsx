@@ -9,7 +9,7 @@ import { Icon } from '../../components/Icon'
 const NEXT: { key: RequestStatus; label: string }[] = [
   { key: 'nouvelle', label: 'Nouvelle' },
   { key: 'en_cours', label: 'En cours' },
-  { key: 'traitee', label: 'Traitee' },
+  { key: 'traitee', label: 'Traitée' },
 ]
 
 export default function Requests() {

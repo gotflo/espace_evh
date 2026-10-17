@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
-import { api, ApiError, auth as tokenStore } from '../api/client'
+import { api, ApiError, auth as tokenStore, onSessionExpired } from '../api/client'
 import { forgetPushOnThisDevice } from '../push'
 import { setUnread } from '../notifications'
 import { rememberPreviousVisit } from '../utils/visit'
@@ -59,10 +59,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (p.settings) setSettings(p.settings)
   }, [])
 
-  const reset = () => {
+  const reset = useCallback(() => {
     setUser(null); setProfileState(null); setRoles([]); setPermissions([]); setIsSuperAdmin(false); setIsPlatformManager(false)
     setMembership({ status: 'approved', submitted: true })
-  }
+  }, [])
+
+  // Session expiree pendant l'utilisation (401) : deconnecte ; la page protegee renvoie vers
+  // /connexion en retenant la page demandee (ouverte de nouveau juste apres la connexion).
+  useEffect(() => {
+    onSessionExpired(() => { setUnread(0); reset() })
+    return () => onSessionExpired(null)
+  }, [reset])
 
   const refresh = useCallback(async () => {
     if (!tokenStore.get()) { setLoading(false); return }
@@ -81,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     setLoading(false)
-  }, [apply])
+  }, [apply, reset])
 
   useEffect(() => { refresh() }, [refresh])
 

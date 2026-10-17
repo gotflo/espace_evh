@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError } from '../api/client'
 import type { EvaluationItem } from '../types'
+import { ymd } from '../utils/events'
 
-function today() { return new Date().toISOString().slice(0, 10) }
+/** Date du jour locale (toISOString donnait la date UTC : le lendemain en soiree). */
+function today() { return ymd(new Date()) }
 
 export function EvaluationsPanel({ userId, canManage = true }: { userId: string; canManage?: boolean }) {
   const [items, setItems] = useState<EvaluationItem[]>([])

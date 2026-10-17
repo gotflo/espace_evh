@@ -1,24 +1,28 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, peek } from '../api/client'
+import { api, ApiError, peek } from '../api/client'
+import { toast } from '../toast'
+import { addDays, ymd } from '../utils/events'
 import { AppLayout } from '../components/AppLayout'
 import { PushSettings } from '../components/PushSettings'
 import { NotificationPrefs } from '../components/NotificationPrefs'
 import { SkeletonCard } from '../components/Skeleton'
 import { usePulse } from '../pulse'
-import { NOTIF_ICON, setUnread, timeAgo, useUnreadCount } from '../notifications'
+import { getUnread, NOTIF_ICON, setUnread, timeAgo, useUnreadCount } from '../notifications'
 import type { AppNotification, NotificationPage } from '../types'
 import { Icon } from '../components/Icon'
 
-/** Regroupement : Aujourd'hui / Hier / Cette semaine / Plus ancien. */
+/**
+ * Regroupement : Aujourd'hui / Hier / Cette semaine / Plus ancien. Jours de calendrier compares
+ * (AAAA-MM-JJ), et non des tranches de 24 h : juste aussi le lendemain d'un changement d'heure.
+ */
 function bucket(iso: string | null): string {
   if (!iso) return 'Plus ancien'
-  const d = new Date(iso)
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  const diffDays = Math.floor((today.getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86400000)
-  if (diffDays <= 0) return "Aujourd'hui"
-  if (diffDays === 1) return 'Hier'
-  if (diffDays < 7) return 'Cette semaine'
+  const day = ymd(new Date(iso))
+  const today = ymd(new Date())
+  if (day >= today) return "Aujourd'hui"
+  if (day === addDays(today, -1)) return 'Hier'
+  if (day > addDays(today, -7)) return 'Cette semaine'
   return 'Plus ancien'
 }
 
@@ -64,9 +68,19 @@ export default function Notifications() {
   }
 
   async function remove(n: AppNotification) {
+    const at = items?.findIndex((x) => x.id === n.id) ?? -1
     setItems((prev) => prev?.filter((x) => x.id !== n.id) ?? null)
     if (!n.read) setUnread(unread - 1)
-    await api(`/me/notifications/${n.id}`, { method: 'DELETE', toast: false }).catch(() => {})
+    try {
+      await api(`/me/notifications/${n.id}`, { method: 'DELETE', toast: false })
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) return // deja retiree (autre appareil)
+      // Suppression refusee ou reseau coupe : la notification revient a sa place, avec l'erreur.
+      setItems((prev) => (!prev || prev.some((x) => x.id === n.id) ? prev
+        : at < 0 ? [n, ...prev] : [...prev.slice(0, at), n, ...prev.slice(at)]))
+      if (!n.read) setUnread(getUnread() + 1)
+      toast.error(err instanceof ApiError ? err.firstMessage : 'La notification n’a pas pu être retirée. Réessayez.')
+    }
   }
 
   async function readAll() {

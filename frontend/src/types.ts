@@ -281,7 +281,8 @@ export interface ExerciseTracking {
     requires_response: boolean; closes_at: string | null; is_closed: boolean; target: string
     author: ExerciseAuthor | null
   }
-  summary: { total: number; done: number; in_progress: number; todo: number; skipped: number }
+  /** remindable : personnes que « Relancer » toucherait (absent sur un serveur plus ancien). */
+  summary: { total: number; done: number; in_progress: number; todo: number; skipped: number; remindable?: number }
   members: ExerciseTrackingRow[]
 }
 
@@ -928,6 +929,8 @@ export interface LeaderReportForm extends LeaderReportScope {
   answers: ReportAnswers
   steps: ReportStep[]
   context: LeaderReportContext
+  /** Dernier enregistrement sur le serveur (ISO), null si jamais enregistre. */
+  updated_at?: string | null
 }
 export interface LeaderReportDetail extends LeaderReportScope {
   id: number

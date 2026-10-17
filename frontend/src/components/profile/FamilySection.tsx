@@ -3,12 +3,10 @@ import { api } from '../../api/client'
 import type { FamilyOverview, FamilyPerson } from '../../types'
 import { Icon } from '../Icon'
 import { useDirty } from '../../utils/dirty'
+import { MARITAL_LABEL } from '../../utils/french'
 
 const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
-const MARITAL = [
-  ['celibataire', 'Célibataire'], ['marie', 'Marié(e)'], ['fiance', 'Fiancé(e)'],
-  ['veuf', 'Veuf(ve)'], ['divorce', 'Divorcé(e)'], ['concubinage', 'En concubinage'],
-]
+const MARITAL = Object.entries(MARITAL_LABEL)
 
 /** Recherche d'un membre inscrit (nom, tribu, mois de naissance pour distinguer les homonymes). */
 function PersonSearch({ onPick, placeholder, excludeMarried }: { onPick: (p: FamilyPerson) => void; placeholder: string; excludeMarried?: boolean }) {
@@ -96,16 +94,19 @@ export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, on
   const load = useCallback(() => { api<FamilyOverview>('/me/family').then(apply).catch(() => {}) }, [apply])
   useEffect(() => { load() }, [load])
 
-  async function run(fn: () => Promise<{ family?: FamilyOverview } | unknown>) {
+  /** Vrai si l'enregistrement a reussi (en cas d'echec, le toast d'erreur est deja affiche). */
+  async function run(fn: () => Promise<{ family?: FamilyOverview } | unknown>): Promise<boolean> {
     setWorking(true)
     try {
       const r = await fn() as { family?: FamilyOverview }
       if (r?.family) apply(r.family); else load()
-    } catch { /* toast */ } finally { setWorking(false) }
+      return true
+    } catch { return false /* toast */ } finally { setWorking(false) }
   }
 
-  const designate = (p: FamilyPerson) => run(() => api('/me/family/spouse', { method: 'PUT', body: { user_id: p.user_id } })).then(() => setPick(null))
-  const saveName = () => run(() => api('/me/family/spouse', { method: 'PUT', body: { name: spouseName.trim() || null } })).then(() => setNameOnly(false))
+  // Echec : le formulaire du conjoint reste ouvert, la saisie n'est pas perdue.
+  const designate = (p: FamilyPerson) => run(() => api('/me/family/spouse', { method: 'PUT', body: { user_id: p.user_id } })).then((ok) => { if (ok) setPick(null) })
+  const saveName = () => run(() => api('/me/family/spouse', { method: 'PUT', body: { name: spouseName.trim() || null } })).then((ok) => { if (ok) setNameOnly(false) })
   const removeSpouse = () => { if (confirm('Retirer ce lien conjugal ? Il sera retiré des deux côtés.')) run(() => api('/me/family/spouse', { method: 'PUT', body: {} })) }
   const respond = (id: number, ok: boolean) => run(() => api(ok ? `/me/family/links/${id}/confirm` : `/me/family/links/${id}/decline`, { method: 'POST' }))
 

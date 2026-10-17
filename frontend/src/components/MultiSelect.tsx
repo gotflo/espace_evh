@@ -49,12 +49,17 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Choisirâ€
     else if (e.key === 'Enter') { e.preventDefault(); if (filtered[active]) toggle(filtered[active].value) }
     else if (e.key === 'Escape') { e.preventDefault(); setOpen(false) }
   }
+  // Echap avec la liste ouverte (ou que soit le focus dedans) : ferme la liste seulement, et
+  // l'evenement est marque comme traite pour que la fenetre qui la contient reste ouverte.
+  function onRootKey(e: KeyboardEvent) {
+    if (open && e.key === 'Escape') { e.preventDefault(); setOpen(false) }
+  }
 
   const byValue = useMemo(() => new Map(options.map((o) => [o.value, o])), [options])
   let lastGroup: string | undefined
 
   return (
-    <div className={`ms ${open ? 'is-open' : ''} ${disabled ? 'is-disabled' : ''}`} ref={rootRef}>
+    <div className={`ms ${open ? 'is-open' : ''} ${disabled ? 'is-disabled' : ''}`} ref={rootRef} onKeyDown={onRootKey}>
       <div className="ms-trigger" role="combobox" aria-expanded={open} aria-controls={listId} aria-haspopup="listbox"
         aria-label={label} tabIndex={disabled ? -1 : 0}
         onClick={() => !disabled && setOpen(true)}

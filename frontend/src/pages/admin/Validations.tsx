@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
-import { api, peek } from '../../api/client'
+import { api, ApiError, peek } from '../../api/client'
 import { AppLayout } from '../../components/AppLayout'
+import { LoadError } from '../../components/LoadError'
 import { SkeletonCard } from '../../components/Skeleton'
 import { usePulse } from '../../pulse'
 import type { MembershipRequest, ValidationFissItem, ValidationsData, ValidationTribeItem } from '../../types'
@@ -166,9 +167,14 @@ export default function Validations() {
   const [data, setData] = useState<ValidationsData | null>(() => peek<ValidationsData>('/admin/validations') ?? null)
   const [busy, setBusy] = useState<string | null>(null)
   const [rejecting, setRejecting] = useState<MembershipRequest | null>(null)
+  const [loadError, setLoadError] = useState('')
 
+  // Echec de lecture : jamais « Tout est à jour » (des demandes peuvent attendre) ; la derniere
+  // liste connue reste affichee, sinon message et « Réessayer ».
   const load = useCallback(() => {
-    api<ValidationsData>('/admin/validations').then(setData).catch(() => setData((p) => p ?? { fiss: [], tribes: [], count: 0 }))
+    setLoadError('')
+    api<ValidationsData>('/admin/validations').then(setData)
+      .catch((err) => setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.'))
   }, [])
   useEffect(() => { load() }, [load])
   usePulse('validations', load)
@@ -311,7 +317,7 @@ export default function Validations() {
       )}
 
       {data === null ? (
-        <div className="validation-grid"><SkeletonCard /><SkeletonCard /></div>
+        loadError ? <LoadError message={loadError} onRetry={load} /> : <div className="validation-grid"><SkeletonCard /><SkeletonCard /></div>
       ) : data.count === 0 ? (
         <div className="empty-state">
           <Icon name="validate" size={28} />

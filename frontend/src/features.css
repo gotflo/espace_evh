@@ -11,6 +11,9 @@
 .empty-state p { font-size: 0.88rem; }
 .empty-state.compact { padding: 1rem 0.5rem; }
 .empty-state.compact > span { font-size: 1.5rem; }
+/* Chargement impossible (LoadError) : message long replie, icone d'alerte discrete. */
+.load-error p { overflow-wrap: anywhere; }
+.load-error > svg { display: block; margin: 0 auto 0.5rem; color: #b42318; opacity: 0.8; }
 .tabs.small .tab { font-size: 0.82rem; padding: 0.35rem 0.8rem; }
 .toolbar-actions { display: flex; gap: 1rem; align-items: center; }
 .nav-count {

@@ -37,6 +37,18 @@ function rangeFor(view: View, cursor: Date): { from: Date; to: Date } {
   return { from, to }
 }
 
+/**
+ * Jour selectionne ramene dans la periode affichee apres un changement de semaine ou de mois :
+ * meme jour de la semaine, ou meme quantieme (borne au dernier jour du mois). Sinon le detail
+ * affichait un jour hors de la grille.
+ */
+function keepSelected(view: View, cursor: Date, selected: string): string {
+  const s = parseYmd(selected)
+  if (view === 'week') return ymd(addDays(mondayOf(cursor), (s.getDay() + 6) % 7))
+  const last = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate()
+  return ymd(new Date(cursor.getFullYear(), cursor.getMonth(), Math.min(s.getDate(), last)))
+}
+
 function itemDate(i: CalendarItem): string { return i.kind === 'event' ? i.occurs_on : i.date }
 
 /** Ordre dans une journee : feries, anniversaires, journee entiere, taches, puis par heure. */
@@ -145,8 +157,10 @@ export default function Calendar() {
   }, [])
 
   const move = useCallback((dir: -1 | 1) => {
-    setCursor((c) => view === 'week' ? addDays(c, dir * 7) : new Date(c.getFullYear(), c.getMonth() + dir, 1))
-  }, [view])
+    const next = view === 'week' ? addDays(cursor, dir * 7) : new Date(cursor.getFullYear(), cursor.getMonth() + dir, 1)
+    setCursor(next)
+    setSelectedDay((s) => keepSelected(view, next, s))
+  }, [view, cursor])
 
   function goToday() {
     const now = new Date()
@@ -290,7 +304,12 @@ export default function Calendar() {
             <span>{labelCap}</span>
             <input ref={monthInput} type="month" className="cal-month-input" tabIndex={-1} aria-hidden
               value={`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`}
-              onChange={(e) => { if (e.target.value) { const [y, m] = e.target.value.split('-').map(Number); setCursor(new Date(y, m - 1, 1)) } }} />
+              onChange={(e) => {
+                if (!e.target.value) return
+                const [y, m] = e.target.value.split('-').map(Number)
+                const next = new Date(y, m - 1, 1)
+                setCursor(next); setSelectedDay((s) => keepSelected(view, next, s))
+              }} />
           </button>
           <label className="cal-switch">
             <input type="checkbox" checked={details} onChange={(e) => setDetails(e.target.checked)} />

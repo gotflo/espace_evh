@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, peek } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { fillUrl, KIND_LABEL } from '../utils/leaderReports'
+import { de } from '../utils/french'
 import type { GemReportsData, LeaderReportsData } from '../types'
 import { Icon } from './Icon'
 
@@ -27,7 +28,7 @@ export function LeaderReportReminder() {
           onClick={() => navigate(fillUrl(s.kind, s.scope_id, data.due_period))}>
           <span className="fiss-reminder-icon"><Icon name="clipboard" size={26} /></span>
           <div style={{ flex: 1, textAlign: 'left' }}>
-            <strong>Rapport de {data.due_label} à envoyer</strong>
+            <strong>Rapport {de(data.due_label)} à envoyer</strong>
             <small>{KIND_LABEL[s.kind]} {s.scope_name} · un questionnaire guidé, quelques minutes suffisent.</small>
           </div>
           <span className="fiss-reminder-cta">Remplir →</span>
