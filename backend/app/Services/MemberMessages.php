@@ -87,11 +87,12 @@ class MemberMessages
 
     /**
      * Plus d'une semaine sans connexion : ce qui attend le membre depuis sa derniere visite (devoirs,
-     * exercices, annonces, notifications), sans reproche. Une fois par absence (cle avec la date de visite).
+     * exercices, annonces, notifications), sans reproche. Une fois par absence (cle avec la date de visite),
+     * sauf relance manuelle (app:relance) qui fournit sa propre cle.
      *
      * @param  array<string, mixed>  $summary  WelcomeBackService::for()
      */
-    public static function absence(User $user, int $days, array $summary): ?string
+    public static function absence(User $user, int $days, array $summary, ?string $dedupe = null): ?string
     {
         $items = array_values(array_filter([
             $summary['assignments']['count'] ? self::count($summary['assignments']['count'], 'devoir à faire', 'devoirs à faire') : null,
@@ -103,7 +104,7 @@ class MemberMessages
         $url = self::url('/tableau-de-bord');
         $seen = collect([$user->last_seen_at, $user->last_login_at])->filter()->max();
 
-        return Messenger::toMember($user, 'absence', 'absence:'.$user->id.':'.$seen?->timestamp, [
+        return Messenger::toMember($user, 'absence', $dedupe ?? 'absence:'.$user->id.':'.$seen?->timestamp, [
             'subject' => 'Votre espace My vasesdhonneur vous attend',
             'view' => 'absence-reminder',
             'data' => [

@@ -63,6 +63,7 @@ class AuditLogController extends Controller
         'department.leaders_synced' => 'Responsables de département et rôle synchronisés',
         'announcement.published' => 'Annonce publiée',
         'announcement.deleted' => 'Annonce supprimée',
+        'members.relanced' => 'Relance des membres envoyée',
         'event.created' => 'Événement créé',
         'event.updated' => 'Événement modifié',
         'event.deleted' => 'Événement supprimé',
