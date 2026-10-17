@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Rapport hebdomadaire d'un Garde pour son GEM (presences au culte et a la rencontre).
+ * Rapport hebdomadaire d'un Garde pour son GEM (presences au culte du dimanche et a la rencontre de la tribu).
  * week_start (lundi) reste une chaine AAAA-MM-JJ : comparaison directe, quelle que soit la base.
  */
 class GemWeeklyReport extends Model

@@ -8,7 +8,7 @@ import { WeekReportView } from '../../components/leaderReports/WeekReportView'
 import { fmtDay } from '../../utils/leaderReports'
 import type { GemReportGem, GemReportsData, GemReportRow } from '../../types'
 
-/** Formulaire de la semaine : deux cases par membre (culte, rencontre) et un mot facultatif. */
+/** Formulaire de la semaine : deux cases par membre (culte du dimanche, rencontre de la tribu) et un mot facultatif. */
 function WeekForm({ gem, week, onSaved, onCancel }: { gem: GemReportGem; week: string; onSaved: () => void; onCancel?: () => void }) {
   const initial = (): GemReportRow[] => gem.members.map((m) => {
     const sent = gem.current?.attendance.find((r) => r.user_id === m.user_id)
@@ -45,7 +45,7 @@ function WeekForm({ gem, week, onSaved, onCancel }: { gem: GemReportGem; week: s
     <div className="gr-form">
       <label className="check-line gr-meeting">
         <input type="checkbox" checked={meeting} onChange={(e) => setMeeting(e.target.checked)} />
-        <span>La rencontre du GEM a eu lieu cette semaine</span>
+        <span>La rencontre de la tribu a eu lieu cette semaine</span>
       </label>
       <div className="table-scroll">
         <table className="gr-table">
@@ -53,7 +53,7 @@ function WeekForm({ gem, week, onSaved, onCancel }: { gem: GemReportGem; week: s
             <tr>
               <th scope="col">Membre</th>
               <th scope="col">Culte du dimanche<button type="button" className="btn-link gr-all" onClick={() => setAll('culte', !allCulte)}>{allCulte ? 'Aucun' : 'Tous'}</button></th>
-              {meeting && <th scope="col">Rencontre du GEM<button type="button" className="btn-link gr-all" onClick={() => setAll('rencontre', !allMeeting)}>{allMeeting ? 'Aucun' : 'Tous'}</button></th>}
+              {meeting && <th scope="col">Rencontre de la tribu<button type="button" className="btn-link gr-all" onClick={() => setAll('rencontre', !allMeeting)}>{allMeeting ? 'Aucun' : 'Tous'}</button></th>}
             </tr>
           </thead>
           <tbody>
@@ -61,7 +61,7 @@ function WeekForm({ gem, week, onSaved, onCancel }: { gem: GemReportGem; week: s
               <tr key={r.user_id}>
                 <th scope="row">{r.name}</th>
                 <td><input type="checkbox" className="gr-box" checked={r.culte} aria-label={`${r.name} : présent au culte`} onChange={() => toggle(r.user_id, 'culte')} /></td>
-                {meeting && <td><input type="checkbox" className="gr-box" checked={r.rencontre} aria-label={`${r.name} : présent à la rencontre`} onChange={() => toggle(r.user_id, 'rencontre')} /></td>}
+                {meeting && <td><input type="checkbox" className="gr-box" checked={r.rencontre} aria-label={`${r.name} : présent à la rencontre de la tribu`} onChange={() => toggle(r.user_id, 'rencontre')} /></td>}
               </tr>
             ))}
           </tbody>
@@ -128,7 +128,7 @@ function GemCard({ gem, data, onSaved }: { gem: GemReportGem; data: GemReportsDa
   )
 }
 
-/** Rapport hebdomadaire du Garde : presences des membres de son GEM au culte et a la rencontre. */
+/** Rapport hebdomadaire du Garde : presences des membres de son GEM au culte et a la rencontre de la tribu. */
 export default function GemReport() {
   const [data, setData] = useState<GemReportsData | null>(() => peek<GemReportsData>('/admin/gem-reports') ?? null)
   const [denied, setDenied] = useState(false)
@@ -158,7 +158,7 @@ export default function GemReport() {
       ) : (
         <div className="gr-page">
           <p className="helper gr-intro">
-            Cochez les membres présents au culte du dimanche et à la rencontre du GEM. Le rapport part automatiquement à votre patriarche et à l'Assistant Pasteur de la tribu.
+            Cochez les membres présents au culte du dimanche et à la rencontre de la tribu. Le rapport part automatiquement à votre patriarche et à l'Assistant Pasteur de la tribu.
           </p>
           {data.gems.map((gem) => <GemCard key={gem.gem_id} gem={gem} data={data} onSaved={load} />)}
         </div>

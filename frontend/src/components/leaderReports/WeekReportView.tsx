@@ -9,7 +9,7 @@ export function WeekReportView({ report }: { report: GemWeekReport }) {
         <div className="kpi-mini"><strong>{report.culte_count}/{report.members_count}</strong><span>au culte du dimanche</span></div>
         <div className="kpi-mini">
           <strong>{report.meeting_held ? `${report.meeting_count}/${report.members_count}` : '—'}</strong>
-          <span>{report.meeting_held ? 'à la rencontre du GEM' : 'pas de rencontre du GEM'}</span>
+          <span>{report.meeting_held ? 'à la rencontre de la tribu' : 'pas de rencontre de la tribu'}</span>
         </div>
       </div>
       <div className="table-scroll">

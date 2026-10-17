@@ -111,7 +111,7 @@ function GardeDetail({ gemId, onBack }: { gemId: number; onBack: () => void }) {
         </div>
         <div className="kpi">
           <span className="kpi-value">{i.meetings_held}/{sent}</span>
-          <span className="kpi-label">Rencontres du GEM tenues</span>
+          <span className="kpi-label">Rencontres de la tribu tenues</span>
           <span className="kpi-sub">présence : {pct(i.meeting_rate)}</span>
         </div>
         {i.fiss_filled !== null && (

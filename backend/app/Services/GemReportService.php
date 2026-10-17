@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Rapport hebdomadaire des Gardes (un par GEM et par semaine, du lundi au dimanche) :
- * - presence de chaque membre du GEM au culte du dimanche et a la rencontre du GEM, plus un mot ;
+ * - presence de chaque membre du GEM au culte du dimanche et a la rencontre hebdomadaire de la tribu, plus un mot ;
  * - le rapport d'une semaine se remplit a partir de son dimanche et jusqu'au samedi suivant
  *   (il reste modifiable pendant ce delai, puis il est fige) ;
  * - a l'envoi, le patriarche et l'Assistant Pasteur de la tribu sont prevenus ;

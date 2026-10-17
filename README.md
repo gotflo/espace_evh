@@ -96,7 +96,7 @@
   spirituelle, mois à venir, âmes gagnées et intégrées avec leurs **noms listés automatiquement**) ;
   l'AP de la tribu et les pasteurs voient les rapports reçus et ceux qui manquent, et les exportent en **PDF**.
 - **Rapport hebdomadaire des Gardes** : présence de chaque membre du GEM au culte du dimanche et à la rencontre
-  du GEM, envoyé automatiquement au patriarche et à l'AP de la tribu.
+  hebdomadaire de la tribu, envoyé automatiquement au patriarche et à l'AP de la tribu.
 - **Responsables** : annuaire toujours à jour des AP, patriarches, responsables de département et Gardes avec leur
   appartenance (pasteurs : toute l'église ; AP et patriarches : leurs tribus) ; la **fiche d'un Garde** montre comment
   il mène son GEM (rapports, présences, FISS des membres, activité de suivi).
@@ -335,7 +335,7 @@ Service unique `App\Services\Notifier` :
 ### Rapport hebdomadaire des Gardes et annuaire des responsables
 
 - `/admin/rapport-gem` (Garde) : une semaine va du lundi au dimanche ; son rapport se remplit à partir du dimanche et
-  reste modifiable jusqu'au samedi suivant. Présence de chaque membre au culte du dimanche et à la rencontre du GEM,
+  reste modifiable jusqu'au samedi suivant. Présence de chaque membre au culte du dimanche et à la rencontre de la tribu,
   plus un mot facultatif. Les présences déjà pointées dans Présences sont précochées. À l'envoi : notification au
   patriarche et à l'AP de la tribu.
 - `/admin/responsables` : annuaire lu dans les rôles et l'organisation (aucune saisie). Autorité pastorale : AP,
