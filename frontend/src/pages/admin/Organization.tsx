@@ -38,8 +38,8 @@ function LeadersEditor({ item, onDone }: { item: OrgItem; onDone: (saved: boolea
     setSearchError('')
     if (q.length < 2) { setResults([]); return }
     const t = window.setTimeout(() => {
-      api<{ members: Person[] }>(`/admin/departments/${item.id}/candidates?q=${encodeURIComponent(q)}`)
-        .then((r) => r.members)
+      api<{ candidates?: Person[]; members?: Person[] }>(`/admin/departments/${item.id}/candidates?q=${encodeURIComponent(q)}`)
+        .then((r) => r.candidates ?? r.members ?? [])
         // Serveur sans cette route (version precedente) : ancienne recherche dans les membres.
         .catch((err) => {
           if (!(err instanceof ApiError && err.status === 404)) throw err
