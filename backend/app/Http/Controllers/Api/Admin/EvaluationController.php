@@ -15,7 +15,7 @@ class EvaluationController extends Controller
     /** Notes d'un fidele (pour un responsable). */
     public function index(Request $request, User $user): JsonResponse
     {
-        abort_unless($request->user()->canViewMember($user), 403, 'Accès refusé.');
+        abort_unless($request->user()->canViewMember($user, 'evaluations.manage'), 403, 'Accès refusé.');
 
         $items = Evaluation::with('author.profile')
             ->where('user_id', $user->id)
@@ -31,7 +31,7 @@ class EvaluationController extends Controller
 
     public function store(Request $request, User $user): JsonResponse
     {
-        abort_unless($request->user()->canManageMember($user), 403, 'Consultation seule : vous ne pouvez pas noter ce fidèle.');
+        abort_unless($request->user()->canManageMember($user, 'evaluations.manage'), 403, 'Consultation seule : vous ne pouvez pas noter ce fidèle.');
 
         $data = $request->validate([
             'type' => ['required', 'in:'.implode(',', array_keys(EvaluationCatalog::TYPES))],
@@ -58,7 +58,7 @@ class EvaluationController extends Controller
 
     public function destroy(Request $request, Evaluation $evaluation): JsonResponse
     {
-        abort_unless($request->user()->canManageMember($evaluation->member), 403, 'Consultation seule : action non autorisée.');
+        abort_unless($request->user()->canManageMember($evaluation->member, 'evaluations.manage'), 403, 'Consultation seule : action non autorisée.');
         $uid = $evaluation->user_id;
         \App\Support\Audit::log('evaluation.deleted', $evaluation, $evaluation->user_id, $evaluation->only(['type', 'title', 'score', 'evaluated_on']));
         $evaluation->delete();

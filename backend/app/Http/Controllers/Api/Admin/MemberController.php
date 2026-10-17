@@ -140,7 +140,7 @@ class MemberController extends Controller
      */
     public function setActivity(Request $request, User $user): JsonResponse
     {
-        abort_unless($request->user()->canManageMember($user), 403, 'Action non autorisée sur ce membre.');
+        abort_unless($request->user()->canManageMember($user, 'members.edit'), 403, 'Action non autorisée sur ce membre.');
         $data = $request->validate(['status' => ['required', 'in:active,inactive,auto']]);
 
         $old = $user->activity_override;
@@ -161,7 +161,7 @@ class MemberController extends Controller
     public function updateBelonging(Request $request, User $user): JsonResponse
     {
         $actor = $request->user();
-        abort_unless($actor->canManageMember($user), 403, 'Action non autorisée sur ce membre.');
+        abort_unless($actor->canManageMember($user, 'members.edit'), 403, 'Action non autorisée sur ce membre.');
 
         $data = $request->validate([
             'tribe_id' => ['nullable', 'exists:tribes,id'],

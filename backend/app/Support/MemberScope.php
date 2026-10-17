@@ -14,8 +14,11 @@ use Illuminate\Database\Eloquent\Builder;
  */
 class MemberScope
 {
-    /** Membres que l'utilisateur peut consulter. */
-    public static function scopeProfiles(Builder $query, User $user): Builder
+    /**
+     * Membres que l'utilisateur peut consulter ; avec une permission, seulement dans la portee des
+     * roles qui la donnent (voir User::scopesFor).
+     */
+    public static function scopeProfiles(Builder $query, User $user, ?string $permission = null): Builder
     {
         $table = $query->getModel()->getTable();
         // Inscription inachevee (tribu non choisie...) : la personne n'apparait chez aucun responsable.
@@ -24,10 +27,10 @@ class MemberScope
             return $query;
         }
 
-        $tribeIds = $user->scopeTribeIds();
-        $deptIds = $user->scopeDepartmentIds();
-        $gemIds = $user->scopeGemIds();
-        $memberIds = $user->scopeMemberIds();
+        if ($permission && ! $user->hasPermission($permission)) {
+            return $query->whereRaw('1 = 0');
+        }
+        ['tribe' => $tribeIds, 'department' => $deptIds, 'gem' => $gemIds, 'member' => $memberIds] = $user->scopesFor($permission);
 
         return $query->where(function ($sub) use ($tribeIds, $deptIds, $gemIds, $memberIds, $table) {
             $applied = false;
@@ -54,20 +57,20 @@ class MemberScope
     }
 
     /** Membres sur lesquels l'utilisateur peut agir (meme portee que la consultation). */
-    public static function manageableProfiles(Builder $query, User $user): Builder
+    public static function manageableProfiles(Builder $query, User $user, ?string $permission = null): Builder
     {
-        return self::scopeProfiles($query, $user);
+        return self::scopeProfiles($query, $user, $permission);
     }
 
     /** Ids des utilisateurs visibles par cet utilisateur. */
-    public static function visibleUserIds(User $user): array
+    public static function visibleUserIds(User $user, ?string $permission = null): array
     {
-        return self::scopeProfiles(Profile::query(), $user)->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+        return self::scopeProfiles(Profile::query(), $user, $permission)->pluck('user_id')->map(fn ($id) => (int) $id)->all();
     }
 
-    public static function manageableUserIds(User $user): array
+    public static function manageableUserIds(User $user, ?string $permission = null): array
     {
-        return self::visibleUserIds($user);
+        return self::visibleUserIds($user, $permission);
     }
 
     /** L'utilisateur a-t-il une portee restreinte (n'est pas une autorite pastorale) ? */

@@ -27,7 +27,7 @@ class AttendanceController extends Controller
         $event = $this->eventName($request->query('event') ?: 'Culte', $department);
         $kind = $request->query('kind') === 'repetition' ? 'repetition' : 'culte';
 
-        $profiles = $this->scopedProfiles($request->user(), $department);
+        $profiles = $this->scopedProfiles($request->user(), $department, 'attendance.view');
         $records = Attendance::where('attended_on', $date)->where('event', $event)->where('kind', $kind)
             ->whereIn('member_user_id', $profiles->pluck('user_id'))
             ->get()->keyBy('member_user_id');
@@ -87,7 +87,7 @@ class AttendanceController extends Controller
         $kind = $data['kind'] ?? 'culte';
         $department = $this->department($request);
         $data['event'] = $this->eventName($data['event'], $department);
-        $rosterIds = $this->scopedProfiles($request->user(), $department)->pluck('user_id');
+        $rosterIds = $this->scopedProfiles($request->user(), $department, 'attendance.record')->pluck('user_id');
         $recordedBy = $request->user()->id;
         $valid = ['present', 'retard', 'absent_justifie', 'absent'];
 
@@ -136,12 +136,12 @@ class AttendanceController extends Controller
      * Membres dont l'utilisateur fait l'appel : toute l'eglise ou sa portee d'action (GEM, tribu, dept...),
      * limitee aux membres d'un departement quand il est choisi (appel d'une repetition).
      */
-    private function scopedProfiles(User $user, ?Department $department = null): Collection
+    private function scopedProfiles(User $user, ?Department $department, string $permission): Collection
     {
         $query = Profile::with(['tribe', 'user:id,activity_status,activity_override'])->has('user')
             ->when($department, fn ($q) => $q->whereHas('departments', fn ($d) => $d->whereKey($department->id)));
 
-        return \App\Support\MemberScope::manageableProfiles($query, $user)
+        return \App\Support\MemberScope::manageableProfiles($query, $user, $permission)
             ->orderBy('last_name')->orderBy('first_name')->get();
     }
 

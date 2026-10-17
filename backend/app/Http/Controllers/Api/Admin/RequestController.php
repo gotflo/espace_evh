@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
-use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\MyRequestController;
+use App\Http\Controllers\Controller;
 use App\Models\MemberRequest;
 use App\Services\Notifier;
 use App\Support\MemberScope;
@@ -17,7 +17,8 @@ class RequestController extends Controller
     {
         $user = $request->user();
         $scoped = MemberScope::isScoped($user);
-        $visibleIds = $scoped ? MemberScope::manageableUserIds($user) : null;
+        // Ses propres demandes vont a ses responsables a lui : jamais dans sa propre liste.
+        $visibleIds = $scoped ? array_diff(MemberScope::manageableUserIds($user, 'requests.handle'), [$user->id]) : null;
 
         $base = MemberRequest::query();
         if ($scoped) {
@@ -26,7 +27,7 @@ class RequestController extends Controller
 
         $items = (clone $base)->with('sender.profile', 'handler.profile', 'replier.profile')
             ->orderByRaw("CASE status WHEN 'nouvelle' THEN 0 WHEN 'en_cours' THEN 1 ELSE 2 END")
-            ->latest()->get()
+            ->latest()->limit(300)->get()
             ->map(fn (MemberRequest $r) => [
                 'id' => $r->id,
                 'category' => $r->category,
@@ -53,7 +54,7 @@ class RequestController extends Controller
     /** Repondre a une demande (le responsable ecrit une reponse au fidele). */
     public function reply(Request $request, MemberRequest $memberRequest): JsonResponse
     {
-        abort_unless($request->user()->canManageMember($memberRequest->sender), 403, 'Hors de votre portée.');
+        abort_unless($request->user()->canManageMember($memberRequest->sender, 'requests.handle'), 403, 'Hors de votre portée.');
         $data = $request->validate(['reply' => ['required', 'string', 'max:3000']]);
 
         $memberRequest->update([
@@ -76,7 +77,7 @@ class RequestController extends Controller
         $user = $request->user();
         $q = MemberRequest::where('status', 'nouvelle');
         if (MemberScope::isScoped($user)) {
-            $q->whereIn('user_id', MemberScope::manageableUserIds($user) ?: [0]);
+            $q->whereIn('user_id', array_diff(MemberScope::manageableUserIds($user, 'requests.handle'), [$user->id]) ?: [0]);
         }
 
         return response()->json(['count' => $q->count()]);
@@ -85,7 +86,7 @@ class RequestController extends Controller
     /** Changer le statut d'une demande. */
     public function updateStatus(Request $request, MemberRequest $memberRequest): JsonResponse
     {
-        abort_unless($request->user()->canManageMember($memberRequest->sender), 403, 'Hors de votre portée.');
+        abort_unless($request->user()->canManageMember($memberRequest->sender, 'requests.handle'), 403, 'Hors de votre portée.');
         $data = $request->validate([
             'status' => ['required', 'in:'.implode(',', array_keys(MyRequestController::STATUS))],
         ]);

@@ -16,6 +16,7 @@ use App\Support\DepartmentLeadership;
 use App\Support\GemRules;
 use App\Support\PermissionCatalog;
 use App\Support\PlatformManager;
+use App\Support\RoleGrants;
 use App\Support\SecurityJournal;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -51,7 +52,7 @@ class RoleController extends Controller
                 'rank' => $r->rank,
                 // Ce que l'utilisateur connecte peut faire de ce role (memes regles que le serveur).
                 'can_edit' => $this->canEditRole($actor, $r),
-                'can_assign' => $this->canGrantRole($actor, $r),
+                'can_assign' => RoleGrants::assignRefusal($actor, $r) === null,
             ]);
 
         return response()->json(['roles' => $roles]);
@@ -87,7 +88,7 @@ class RoleController extends Controller
     {
         $data = $this->validateRole($request);
         $keys = array_values($data['permission_keys'] ?? []);
-        $this->ensureGrantable($request->user(), $keys);
+        $this->ensureEditable($request->user(), $keys, [], $keys);
 
         $role = Role::create([
             'key' => $this->uniqueKey($data['name']),
@@ -116,8 +117,8 @@ class RoleController extends Controller
         $wanted = array_values($data['permission_keys'] ?? []);
         $added = array_values(array_diff($wanted, $before));
         $removed = array_values(array_diff($before, $wanted));
-        // Seules les permissions ajoutees ou retirees doivent etre a la portee de l'auteur.
-        $this->ensureGrantable($actor, array_merge($added, $removed));
+        // Seules les permissions ajoutees ou retirees doivent etre a la portee de l'auteur (RoleGrants).
+        $this->ensureEditable($actor, $added, $removed, $wanted);
         $beforeRole = $role->only(['name', 'description', 'scope_kind']);
 
         $payload = ['name' => $data['name'], 'description' => $data['description'] ?? null];
@@ -164,28 +165,35 @@ class RoleController extends Controller
             'name' => ['required', 'string', 'max:60'],
             'description' => ['nullable', 'string', 'max:500'],
             'scope_kind' => ['required', 'in:none,tribe,gem,department,member'],
-            'permission_keys' => ['nullable', 'array'],
+            'permission_keys' => ['nullable', 'array', 'max:200'],
             'permission_keys.*' => ['string', 'distinct', 'exists:permissions,key'],
         ]);
     }
 
     /**
-     * Anti-escalade : le Pasteur Resident et le compte de gestion donnent toute permission ; les autres
-     * seulement celles qu'ils ont eux-memes (sinon un role modifie leur donnerait davantage).
+     * Anti-escalade (voir RoleGrants) : le Pasteur Resident donne toute permission ; le compte de gestion
+     * les seules non confidentielles ; les autres celles qu'ils ont eux-memes.
      */
     private function canGrantPermission(User $actor, string $permission): bool
     {
-        return $actor->isSuperAdmin() || $actor->isPlatformManager() || $actor->hasPermission($permission);
+        if ($actor->isSuperAdmin()) {
+            return true;
+        }
+
+        return $actor->isPlatformManager() ? ! PermissionCatalog::isConfidential($permission) : $actor->hasPermission($permission);
     }
 
-    /** @param array<int, string> $keys */
-    private function ensureGrantable(User $actor, array $keys): void
+    /**
+     * Refuse un changement de permissions qui donnerait plus que ce que l'auteur a lui-meme.
+     *
+     * @param  array<int, string>  $added
+     * @param  array<int, string>  $removed
+     * @param  array<int, string>  $wanted
+     */
+    private function ensureEditable(User $actor, array $added, array $removed, array $wanted): void
     {
-        $denied = array_values(array_filter($keys, fn ($k) => ! $this->canGrantPermission($actor, $k)));
-        if ($denied) {
-            throw ValidationException::withMessages([
-                'permission_keys' => 'Vous ne pouvez pas donner ou retirer une permission que vous n\'avez pas : '.implode(', ', $denied).'.',
-            ]);
+        if ($refusal = RoleGrants::editRefusal($actor, $added, $removed, $wanted)) {
+            throw ValidationException::withMessages(['permission_keys' => $refusal]);
         }
     }
 
@@ -197,19 +205,6 @@ class RoleController extends Controller
         }
 
         return $actor->isSuperAdmin() || $actor->isPlatformManager() || $role->rank < $actor->highestRank();
-    }
-
-    /** Attribuer (ou retirer) un role : Pasteur Resident par un Pasteur Resident seulement ; sinon rang inferieur. */
-    private function canGrantRole(User $actor, Role $role): bool
-    {
-        if ($actor->isSuperAdmin()) {
-            return true;
-        }
-        if ($role->key === User::SUPER_ADMIN) {
-            return false;
-        }
-
-        return $actor->isPlatformManager() || $role->rank < $actor->highestRank();
     }
 
     private function permissionIds(array $keys): array
@@ -254,12 +249,10 @@ class RoleController extends Controller
         $actor = $request->user();
         $this->ensureOrdinaryAccount($user, $actor, 'assign');
 
-        // Anti-escalade de privileges : on ne peut pas attribuer un role aussi eleve (ou plus) que le sien.
-        // Le Pasteur Resident fait tout ; le compte de gestion attribue tout role sauf celui de Pasteur Resident.
-        if (! $this->canGrantRole($actor, $role)) {
-            abort(403, $role->key === User::SUPER_ADMIN
-                ? 'Seul un super administrateur peut attribuer ce rôle.'
-                : 'Vous ne pouvez pas attribuer un rôle de niveau supérieur ou égal au vôtre.');
+        // Anti-escalade (RoleGrants) : rang inferieur au sien, jamais a soi-meme, aucun acces confidentiel
+        // qu'on n'a pas. Le Pasteur Resident fait tout ; le compte de gestion tout sauf le role de PR.
+        if ($refusal = RoleGrants::assignRefusal($actor, $role, $user)) {
+            abort(403, $refusal);
         }
 
         $scopeKind = null;
@@ -341,10 +334,8 @@ class RoleController extends Controller
         }
 
         $revoked = Role::find($row->role_id);
-        if ($revoked && ! $this->canGrantRole($request->user(), $revoked)) {
-            abort(403, $revoked->key === User::SUPER_ADMIN
-                ? 'Seul un super administrateur peut retirer ce rôle.'
-                : 'Vous ne pouvez pas retirer un rôle de niveau supérieur ou égal au vôtre.');
+        if ($revoked && ($refusal = RoleGrants::assignRefusal($request->user(), $revoked, $user))) {
+            abort(403, $refusal);
         }
 
         // Empeche de retirer son propre role de super admin (eviter de se verrouiller dehors).

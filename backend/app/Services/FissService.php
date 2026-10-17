@@ -194,7 +194,7 @@ class FissService
     public static function canReview(User $reviewer, User $member): bool
     {
         return $reviewer->id !== $member->id && $reviewer->hasPermission('fiss.review')
-            && $reviewer->canManageMember($member) && $reviewer->canViewFissOf($member);
+            && $reviewer->canManageMember($member, 'fiss.review') && $reviewer->canViewFissOf($member);
     }
 
     /** @return array<string, mixed> */

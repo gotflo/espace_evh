@@ -90,8 +90,7 @@ class Recipients
 
         return self::staff()
             ->filter(fn (User $u) => $u->id !== $member->id
-                && $u->hasPermission($permission)
-                && $u->canManageMember($member))
+                && $u->canManageMember($member, $permission))
             ->pluck('id')->values()->all();
     }
 

@@ -60,6 +60,9 @@ DirectoryIndex index.html index.php
     # En-tetes de securite aussi sur les fichiers statiques (Laravel les pose sur l'API).
     Header always set X-Content-Type-Options "nosniff"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    # HTTPS impose aussi pour les pages et fichiers statiques (Laravel ne le pose que sur l'API).
+    # Sans condition : derriere le CDN, l'origine peut voir HTTP ; un navigateur l'ignore hors HTTPS.
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
     Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
     Header always unset X-Powered-By
     Header unset X-Powered-By

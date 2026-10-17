@@ -298,10 +298,13 @@ class User extends Authenticatable
      * members.view_all (pasteurs) => tout le monde ; sinon uniquement sa portee :
      * ses tribus (un AP ne voit que les tribus qui lui sont assignees), GEMs, departements, fideles confies.
      */
-    public function canViewMember(self $target): bool
+    public function canViewMember(self $target, ?string $permission = null): bool
     {
         // Le compte de gestion principal n'est pas un membre : il n'a pas de fiche a consulter.
         if ($target->isPlatformManager()) {
+            return false;
+        }
+        if ($permission && ! $this->hasPermission($permission)) {
             return false;
         }
         if ($this->hasPermission('members.view_all')) {
@@ -311,16 +314,20 @@ class User extends Authenticatable
             return false;
         }
 
-        return $target->id === $this->id || $this->hasInScope($target);
+        return $target->id === $this->id || $this->hasInScope($target, $permission);
     }
 
     /**
      * Peut-il AGIR sur ce membre (noter, suivi spirituel, statut, demandes, accueil) ?
      * Meme portee que la consultation, mais jamais sur soi-meme (sauf autorite pastorale).
+     * Avec une permission : seulement dans la portee des roles qui la donnent (voir scopesFor).
      */
-    public function canManageMember(self $target): bool
+    public function canManageMember(self $target, ?string $permission = null): bool
     {
         if ($target->isPlatformManager()) {
+            return false;
+        }
+        if ($permission && ! $this->hasPermission($permission)) {
             return false;
         }
         if ($this->hasPermission('members.view_all')) {
@@ -330,7 +337,38 @@ class User extends Authenticatable
             return false;
         }
 
-        return $this->hasInScope($target);
+        return $this->hasInScope($target, $permission);
+    }
+
+    /**
+     * Portees ou une permission s'applique : celles des roles qui la donnent, plus les departements
+     * diriges pour les droits de responsable de departement. Une permission de Garde ne vaut donc que
+     * sur son GEM, jamais sur les membres d'un departement qu'il dirige par ailleurs. Sans permission :
+     * toutes ses portees (consultation de la fiche).
+     *
+     * @return array{tribe: array<int>, gem: array<int>, department: array<int>, member: array<int>}
+     */
+    public function scopesFor(?string $permission = null): array
+    {
+        if (! $permission) {
+            return ['tribe' => $this->scopeTribeIds(), 'gem' => $this->scopeGemIds(),
+                'department' => $this->scopeDepartmentIds(), 'member' => $this->scopeMemberIds()];
+        }
+        $scopes = ['tribe' => [], 'gem' => [], 'department' => [], 'member' => []];
+        if ($this->isPlatformManager()) {
+            return $scopes;
+        }
+        foreach ($this->roles as $role) {
+            $kind = $role->pivot->scope_kind;
+            if ($kind && isset($scopes[$kind]) && $role->pivot->scope_id && $role->permissions->contains('key', $permission)) {
+                $scopes[$kind][] = (int) $role->pivot->scope_id;
+            }
+        }
+        if (in_array($permission, self::DEPARTMENT_LEADER_PERMISSIONS, true)) {
+            $scopes['department'] = array_merge($scopes['department'], $this->ledDepartmentIds());
+        }
+
+        return array_map(fn (array $ids) => array_values(array_unique($ids)), $scopes);
     }
 
     /**
@@ -365,10 +403,11 @@ class User extends Authenticatable
         return $tribeId && in_array((int) $tribeId, $tribeIds, true);
     }
 
-    /** Le membre fait-il partie de la portee de l'utilisateur ? */
-    private function hasInScope(self $target): bool
+    /** Le membre fait-il partie de la portee de l'utilisateur (pour cette permission, si elle est donnee) ? */
+    private function hasInScope(self $target, ?string $permission = null): bool
     {
-        if (in_array($target->id, $this->scopeMemberIds(), true)) {
+        $scopes = $this->scopesFor($permission);
+        if (in_array($target->id, $scopes['member'], true)) {
             return true;
         }
 
@@ -378,14 +417,14 @@ class User extends Authenticatable
         if (! $profile) {
             return false;
         }
-        if ($profile->gem_id && in_array((int) $profile->gem_id, $this->scopeGemIds(), true)) {
+        if ($profile->gem_id && in_array((int) $profile->gem_id, $scopes['gem'], true)) {
             return true;
         }
-        if ($profile->tribe_id && in_array((int) $profile->tribe_id, $this->scopeTribeIds(), true)) {
+        if ($profile->tribe_id && in_array((int) $profile->tribe_id, $scopes['tribe'], true)) {
             return true;
         }
 
         return $profile->departments->pluck('id')->map(fn ($id) => (int) $id)
-            ->intersect($this->scopeDepartmentIds())->isNotEmpty();
+            ->intersect($scopes['department'])->isNotEmpty();
     }
 }
