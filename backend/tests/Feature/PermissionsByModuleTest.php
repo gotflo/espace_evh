@@ -117,9 +117,11 @@ class PermissionsByModuleTest extends TestCase
 
     public function test_the_migration_converts_old_roles_and_rolls_back_cleanly(): void
     {
-        // Motif des blocages de rendez-vous, role de responsable de departement, reglages, lectures des ressources,
-        // services, appareils de confiance, puis permissions.
-        Artisan::call('migrate:rollback', ['--step' => 8]);
+        // Fiches de meditation, motif des blocages de rendez-vous, role de responsable de departement, reglages,
+        // lectures des ressources, services, appareils de confiance, puis permissions.
+        Artisan::call('migrate:rollback', ['--step' => 9]);
+        $this->assertFalse(Schema::hasTable('meditation_sheets'));
+        $this->assertNull(Permission::where('key', 'meditations.view')->first());
         $this->assertNotNull(Permission::where('key', 'content.manage')->first());
         $this->assertNull(Permission::where('key', 'verses.view')->first());
         $this->assertNull(Permission::where('key', 'settings.manage')->first());
@@ -143,6 +145,13 @@ class PermissionsByModuleTest extends TestCase
         $this->assertContains('settings.manage', $this->keysOf('super_admin'));
         foreach (['pasteur_assistant', 'administrateur', 'patriarche', 'assistant_pasteur'] as $key) {
             $this->assertNotContains('settings.manage', $this->keysOf($key), $key);
+        }
+        // Fiches de meditation : Pasteur Resident, Pasteurs Assistants et patriarches seulement (pas l'AP).
+        foreach (['super_admin', 'pasteur_assistant', 'patriarche'] as $key) {
+            $this->assertContains('meditations.view', $this->keysOf($key), $key);
+        }
+        foreach (['assistant_pasteur', 'garde', 'accompagnateur', 'administrateur', 'fidele', 'redaction'] as $key) {
+            $this->assertNotContains('meditations.view', $this->keysOf($key), $key);
         }
 
         $this->actAs($holder);

@@ -28,6 +28,7 @@ class UserAdmin
         ['evaluations', 'user_id', 'Notes reçues'],
         ['spiritual_entries', 'member_user_id', 'Entrées du journal spirituel'],
         ['milestones', 'member_user_id', 'Étapes spirituelles'],
+        ['meditation_sheets', 'user_id', 'Fiches de méditation'],
         ['exercise_responses', 'user_id', 'Réponses aux exercices'],
         ['exercise_video_views', 'user_id', 'Suivi des vidéos'],
         ['monthly_resolutions', 'user_id', 'Résolutions du mois (RM)'],

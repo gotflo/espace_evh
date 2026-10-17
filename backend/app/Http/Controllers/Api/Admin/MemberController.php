@@ -121,6 +121,7 @@ class MemberController extends Controller
             'family' => FamilyService::overview($user),
             'can_manage' => $viewer->canManageMember($user),
             'can_view_fiss' => $viewer->canViewFissOf($user),
+            'can_view_meditations' => $viewer->canViewMeditationsOf($user),
             // Deja affiche par le role « Responsable de departement » sur ce departement : pas de doublon.
             'led_departments' => $user->ledDepartments->reject(fn ($d) => $user->roles->contains(fn ($r) => DepartmentLeadership::isLeaderRole($r, $r->pivot->scope_kind)
                 && (int) $r->pivot->scope_id === (int) $d->id))->map(fn ($d) => ['id' => $d->id, 'name' => $d->name])->values(),

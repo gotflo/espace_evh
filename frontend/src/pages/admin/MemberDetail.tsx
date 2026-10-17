@@ -8,6 +8,7 @@ import { DepartmentPicker } from '../../components/DepartmentPicker'
 import { SpiritualPanel } from '../../components/SpiritualPanel'
 import { EvaluationsPanel } from '../../components/EvaluationsPanel'
 import { MemberFissPanel } from '../../components/MemberFissPanel'
+import { MemberMeditationPanel } from '../../components/MemberMeditationPanel'
 import { MemberGrowth } from '../../components/MemberGrowth'
 import { MemberCompletion, MemberExercises, MemberFamily, MemberFissHistory } from '../../components/MemberExtras'
 import type { Department, Gem, MemberDetailData, MemberListItem, RoleOption, Tribe } from '../../types'
@@ -322,6 +323,8 @@ export default function MemberDetail() {
       {canViewSpiritual && data.can_view_fiss && id && <MemberFissPanel userId={id} />}
       {canFissHistory && data.can_view_fiss && id && <MemberFissHistory userId={id} />}
       {canViewSpiritual && data.can_view_fiss && id && <MemberGrowth userId={id} />}
+      {/* Fiches de meditation : patriarche de la tribu et pasteurs seulement (le serveur decide). */}
+      {data.can_view_meditations && id && <MemberMeditationPanel userId={id} />}
       {canExercises && id && <MemberExercises userId={id} />}
       {canViewSpiritual && id && <SpiritualPanel userId={id} canRecord={canRecordSpiritual && manage} />}
       {canManageEval && id && <EvaluationsPanel userId={id} canManage={manage} />}

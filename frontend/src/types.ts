@@ -537,6 +537,8 @@ export interface MemberDetailData {
   family: FamilyOverview
   can_manage: boolean
   can_view_fiss: boolean
+  /** Fiches de meditation lisibles (patriarche de sa tribu, pasteurs). */
+  can_view_meditations: boolean
   led_departments: { id: number; name: string }[]
   roles: RoleAssignment[]
 }
@@ -1222,3 +1224,8 @@ export interface AdminAppointmentsData {
   availability: { slot_minutes: number; accepting: boolean; weekly: AppointmentWindowItem[]; extra: AppointmentWindowItem[]; blocks: AppointmentBlockItem[] } | null
   urgencies: Record<AppointmentUrgency, string>
 }
+
+/** Fiche de meditation : ligne de l'historique (date d'envoi seulement, le contenu se lit en l'ouvrant). */
+export interface MeditationSummary { id: number; submitted_at: string }
+export type MeditationField = 'verse' | 'observation' | 'rhema' | 'action' | 'prayer'
+export type MeditationSheet = MeditationSummary & Record<MeditationField, string>

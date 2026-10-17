@@ -11,6 +11,7 @@ export function dashboardData(exercises = true): string[] {
 
 const ROUTE_DATA: Record<string, string[]> = {
   '/ma-fiche': ['/me/fiss'],
+  '/meditation': ['/me/meditations'],
   '/mes-resolutions': ['/me/resolutions'],
   '/vertumetre': ['/me/vertumetre'],
   '/mon-devoir': ['/me/assignments'],

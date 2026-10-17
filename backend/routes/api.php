@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\Admin\GemController;
 use App\Http\Controllers\Api\Admin\GemReportController;
 use App\Http\Controllers\Api\Admin\LeaderDirectoryController;
 use App\Http\Controllers\Api\Admin\LeaderReportController;
+use App\Http\Controllers\Api\Admin\MeditationController;
 use App\Http\Controllers\Api\Admin\MemberController;
 use App\Http\Controllers\Api\Admin\MemberDeletionController;
 use App\Http\Controllers\Api\Admin\NewMemberController;
@@ -49,6 +50,7 @@ use App\Http\Controllers\Api\MyExerciseController;
 use App\Http\Controllers\Api\MyFamilyController;
 use App\Http\Controllers\Api\MyFissController;
 use App\Http\Controllers\Api\MyHomeController;
+use App\Http\Controllers\Api\MyMeditationController;
 use App\Http\Controllers\Api\MyMonthController;
 use App\Http\Controllers\Api\MyNotificationController;
 use App\Http\Controllers\Api\MyNotificationPrefsController;
@@ -252,6 +254,11 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
     Route::delete('/me/spiritual/entries/{entry}', [MySpiritualController::class, 'destroyEntry'])->middleware('module:spiritual');
     Route::post('/me/spiritual/milestones', [MySpiritualController::class, 'toggleMilestone'])->middleware('module:spiritual');
 
+    // --- Espace fidele : mes fiches de meditation (personnelles) ---
+    Route::get('/me/meditations', [MyMeditationController::class, 'index']);
+    Route::post('/me/meditations', [MyMeditationController::class, 'store'])->middleware('throttle:member-writes');
+    Route::get('/me/meditations/{sheet}', [MyMeditationController::class, 'show'])->whereNumber('sheet');
+
     // --- Espace fidele : mes exercices ---
     Route::get('/me/exercises', [MyExerciseController::class, 'index'])->middleware('module:exercises');
     Route::get('/me/exercises/{exercise}', [MyExerciseController::class, 'show'])->middleware('module:exercises');
@@ -377,6 +384,11 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
             ->middleware('permission:spiritual.view');
         Route::get('/members/{user}/fiss', [FissController::class, 'index'])
             ->middleware('permission:spiritual.view');
+        // Fiches de meditation : patriarche de la tribu et pasteurs (PR, PA), en lecture seule.
+        Route::get('/members/{user}/meditations', [MeditationController::class, 'index'])
+            ->middleware('permission:meditations.view');
+        Route::get('/members/{user}/meditations/{sheet}', [MeditationController::class, 'show'])
+            ->whereNumber('sheet')->middleware('permission:meditations.view');
         Route::middleware('permission:spiritual.record')->group(function () {
             Route::post('/members/{user}/spiritual/entries', [SpiritualController::class, 'storeEntry']);
             Route::delete('/members/{user}/spiritual/entries/{entry}', [SpiritualController::class, 'destroyEntry']);

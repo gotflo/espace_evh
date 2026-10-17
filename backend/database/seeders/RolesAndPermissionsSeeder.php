@@ -50,6 +50,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'members.view_all', 'members.edit', 'members.export', 'broadcast.all',
                     'tribes.manage', 'departments.manage', 'gems.manage', 'roles.assign', 'roles.manage',
                     'exercises.create', 'reports.view', 'audit.view', 'fiss.review', 'tribes.transfer', 'content.manage',
+                    'meditations.view',
                 ]),
             ],
             // Assistant Pasteur (AP) : une ou plusieurs tribus (une attribution par tribu).
@@ -64,7 +65,8 @@ class RolesAndPermissionsSeeder extends Seeder
                 'name' => 'Patriarche',
                 'description' => "Responsable d'une tribu et de ses GEMs ; valide les demandes de ses membres.",
                 'scope_kind' => 'tribe', 'rank' => 60, 'is_system' => true,
-                'permissions' => array_merge($suivi, ['gems.manage', 'reports.view', 'fiss.review', 'tribes.transfer']),
+                // Fiches de meditation : le patriarche les lit (sa tribu), pas l'AP.
+                'permissions' => array_merge($suivi, ['gems.manage', 'reports.view', 'fiss.review', 'tribes.transfer', 'meditations.view']),
             ],
             // Garde : mene un GEM (3 a 5 membres) dans sa tribu.
             'garde' => [

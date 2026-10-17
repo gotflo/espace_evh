@@ -542,3 +542,33 @@
 
 /* ---------- Validations : sections ---------- */
 .mb-section { margin-bottom: 1.4rem; }
+
+/* ---------- Méditation : fiches personnelles du membre ---------- */
+.medit-tabs button { min-height: 44px; }
+.medit-private { display: flex; align-items: flex-start; gap: 0.35rem; margin: -0.4rem 0 0.6rem; }
+.medit-private svg { flex-shrink: 0; margin-top: 0.15rem; }
+.medit-form .rm-field-head label { overflow-wrap: anywhere; }
+.medit-form textarea { resize: vertical; min-height: 5.5rem; }
+.medit-list { list-style: none; display: flex; flex-direction: column; gap: 0.45rem; margin: 0; padding: 0; }
+.medit-row {
+  width: 100%; display: flex; align-items: center; gap: 0.75rem; min-height: 54px; padding: 0.6rem 0.75rem;
+  border-radius: 14px; background: #f6f8f8; border: 1px solid transparent; color: var(--text);
+  font: inherit; text-align: left; cursor: pointer; transition: background 0.15s, border-color 0.15s;
+}
+.medit-row:hover { border-color: var(--border); }
+.medit-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.medit-row-icon { width: 34px; height: 34px; border-radius: 11px; flex-shrink: 0; display: grid; place-items: center; background: #e2efed; color: #0d5f57; }
+.medit-row-text { flex: 1 1 auto; min-width: 0; font-weight: 600; font-size: 0.95rem; overflow-wrap: anywhere; }
+.medit-row-chevron { flex-shrink: 0; color: var(--text-soft); }
+.medit-detail .panel-head { align-items: flex-start; }
+.medit-detail-head { min-width: 0; flex: 1 1 14rem; }
+.medit-detail-head .helper { margin-top: 0.2rem; }
+.medit-sheet { margin-bottom: 0; padding: 0; }
+.medit-sheet .rm-item-label { display: block; line-height: 1.35; text-transform: none; letter-spacing: 0; font-size: 0.82rem; overflow-wrap: anywhere; }
+.medit-sheet .rm-item p { white-space: pre-wrap; }
+.medit-summary { font-weight: 600; }
+.medit-loading { display: flex; justify-content: center; padding: 0.8rem 0; color: var(--text-muted); }
+.medit-back { display: flex; justify-content: center; }
+@media (max-width: 640px) {
+  .panel.medit-form { padding-bottom: 1.2rem; }
+}

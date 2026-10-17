@@ -45,6 +45,7 @@ const Contact = page(() => import('./pages/Contact'), false, '/contact')
 const MySpiritual = page(() => import('./pages/MySpiritual'), false, '/ma-vie-spirituelle')
 const MyProfile = page(() => import('./pages/MyProfile'), false, '/mon-profil')
 const MyFiss = page(() => import('./pages/MyFiss'), false, '/ma-fiche')
+const MyMeditation = page(() => import('./pages/MyMeditation'), false, '/meditation')
 const Calendar = page(() => import('./pages/Calendar'), false, '/calendrier')
 const Services = page(() => import('./pages/Services'), false, '/servir')
 const Notifications = page(() => import('./pages/Notifications'), false, '/notifications')
@@ -244,6 +245,7 @@ export default function App() {
         <Route path="/mon-profil" element={<RequireAuth requireComplete memberSpace><MyProfile /></RequireAuth>} />
         <Route path="/ma-vie-spirituelle" element={<RequireAuth module="spiritual" requireComplete memberSpace><MySpiritual /></RequireAuth>} />
         <Route path="/ma-fiche" element={<RequireAuth requireComplete memberSpace><MyFiss /></RequireAuth>} />
+        <Route path="/meditation" element={<RequireAuth requireComplete memberSpace><MyMeditation /></RequireAuth>} />
         <Route path="/mes-resolutions" element={<RequireAuth module="resolutions" requireComplete memberSpace><MyResolutions /></RequireAuth>} />
         <Route path="/mes-resolutions/ressource/:id" element={<RequireAuth module="resolutions" requireComplete memberSpace><ResourceVideo /></RequireAuth>} />
         <Route path="/mon-devoir" element={<RequireAuth module="assignments" requireComplete memberSpace><MyAssignments /></RequireAuth>} />

@@ -403,6 +403,37 @@ class User extends Authenticatable
         return $tribeId && in_array((int) $tribeId, $tribeIds, true);
     }
 
+    /**
+     * Tribus dont l'utilisateur lit les fiches de meditation : null = toutes (autorite pastorale : PR, PA),
+     * sinon seulement les tribus des roles qui donnent meditations.view (patriarche). L'AP, le Garde, un
+     * responsable de departement ou un accompagnateur ne les lisent pas (leur role n'a pas cette permission).
+     *
+     * @return array<int>|null
+     */
+    public function meditationTribeIds(): ?array
+    {
+        if (! $this->hasPermission('meditations.view')) {
+            return [];
+        }
+
+        return $this->hasPermission('members.view_all') ? null : $this->scopesFor('meditations.view')['tribe'];
+    }
+
+    /** Peut-il lire les fiches de meditation de ce membre ? */
+    public function canViewMeditationsOf(self $target): bool
+    {
+        if ($target->isPlatformManager()) {
+            return false;
+        }
+        $tribeIds = $this->meditationTribeIds();
+        if ($tribeIds === null) {
+            return true;
+        }
+        $tribeId = $target->relationLoaded('profile') ? $target->profile?->tribe_id : $target->profile()->value('tribe_id');
+
+        return $tribeId && in_array((int) $tribeId, $tribeIds, true);
+    }
+
     /** Le membre fait-il partie de la portee de l'utilisateur (pour cette permission, si elle est donnee) ? */
     private function hasInScope(self $target, ?string $permission = null): bool
     {

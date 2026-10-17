@@ -173,6 +173,7 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
               <NavLink to="/servir" className="nav-item"><Icon path={ICONS.serve} /><span>Service</span></NavLink>
               {moduleOn('spiritual') && <NavLink to="/ma-vie-spirituelle" className="nav-item"><Icon path={ICONS.spiritual} /><span>Ma vie spirituelle</span></NavLink>}
               <NavLink to="/ma-fiche" className="nav-item"><Icon path={ICONS.fiss} /><span>Ma fiche (FISS)</span></NavLink>
+              <NavLink to="/meditation" className="nav-item"><Icon path={ICONS.book} /><span>Méditation</span></NavLink>
               {moduleOn('vertumetre') && <NavLink to="/vertumetre" className="nav-item"><Icon path={ICONS.reports} /><span>Mon Vertumètre</span></NavLink>}
               {moduleOn('resolutions') && <NavLink to="/mes-resolutions" className="nav-item"><Icon path={ICONS.target} /><span>Mes RM</span></NavLink>}
               {moduleOn('assignments') && <NavLink to="/mon-devoir" className="nav-item"><Icon path={ICONS.devoir} /><span>Mon devoir (DS)</span></NavLink>}

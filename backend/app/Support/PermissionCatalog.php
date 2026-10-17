@@ -42,6 +42,7 @@ class PermissionCatalog
         'suivi' => ['Suivi spirituel, FISS et Vertumètre', [
             'spiritual.view' => ['Consulter le suivi spirituel, les FISS, le Vertumètre, les RM et devoirs des membres', 'view_others', true],
             'spiritual.record' => ['Écrire dans le suivi spirituel d’un membre', 'create', true],
+            'meditations.view' => ['Lire les fiches de méditation des membres de sa tribu (de toute l’église pour les pasteurs)', 'view_others', true],
             'evaluations.manage' => ['Consulter et attribuer les notes des fidèles', 'manage', true],
             'fiss.review' => ['Valider ou refuser les demandes de modification (FISS, Vertumètre)', 'validate', true],
         ]],

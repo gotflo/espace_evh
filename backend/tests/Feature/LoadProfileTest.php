@@ -147,7 +147,7 @@ class LoadProfileTest extends TestCase
         $member = User::whereHas('profile', fn ($q) => $q->where('first_name', 'Membre7'))->firstOrFail();
         $mine = ['/api/me', '/api/me/overview', '/api/me/exercises', '/api/me/notifications', '/api/me/notifications/unread-count',
             '/api/me/fiss', '/api/me/announcements', '/api/me/events', '/api/calendar?from=2026-10-01&to=2026-10-31', '/api/me/services',
-            '/api/me/month', '/api/me/resolutions', '/api/me/assignments', '/api/me/welcome-back?since=2026-10-01', '/api/me/vertumetre'];
+            '/api/me/month', '/api/me/resolutions', '/api/me/assignments', '/api/me/welcome-back?since=2026-10-01', '/api/me/vertumetre', '/api/me/meditations'];
         $smallMine = $this->measure($member, $mine);
 
         $this->populate(340);
