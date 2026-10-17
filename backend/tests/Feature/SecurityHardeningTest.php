@@ -367,6 +367,54 @@ class SecurityHardeningTest extends TestCase
             ->assertOk()->assertJsonMissingPath('dev_code');
     }
 
+    // ---------------------------------------------------------------- AP de plusieurs tribus
+
+    public function test_an_assistant_pastor_of_several_tribes_sees_and_acts_only_on_his_tribes(): void
+    {
+        $dan = Tribe::create(['name' => 'Dan', 'slug' => 'dan']);
+        $ap = $this->member('+14185562000', null, 'AP');
+        $this->give($ap, 'assistant_pasteur', 'tribe', $this->juda->id);
+        $ap = $this->give($ap, 'assistant_pasteur', 'tribe', $this->levi->id);
+        $inJuda = $this->member('+14185562001', $this->juda, 'Juda');
+        $inLevi = $this->member('+14185562002', $this->levi, 'Levi');
+        $inDan = $this->member('+14185562003', $dan, 'Dan');
+        $gemDan = Gem::create(['name' => 'GEM Dan', 'tribe_id' => $dan->id]);
+        Gem::create(['name' => 'GEM Juda', 'tribe_id' => $this->juda->id]);
+        foreach ([$inJuda, $inLevi, $inDan] as $m) {
+            MemberRequest::create(['user_id' => $m->id, 'category' => 'priere', 'message' => 'Priez pour moi']);
+            \App\Models\SpiritualHealthForm::create(['user_id' => $m->id, 'period' => '2026-10', 'meditation' => 10, 'submitted_at' => now(), 'locked_at' => now()]);
+        }
+        $this->as($ap);
+
+        // Listes : ses deux tribus, jamais Dan.
+        $listed = collect($this->getJson('/api/admin/members')->assertOk()->json('members'))->pluck('user_id')->all();
+        $this->assertEqualsCanonicalizing([$inJuda->id, $inLevi->id], array_values(array_intersect($listed, [$inJuda->id, $inLevi->id, $inDan->id])));
+        $requests = collect($this->getJson('/api/admin/requests')->assertOk()->json('requests'))->pluck('user_id')->all();
+        $this->assertNotContains($inDan->id, $requests);
+        $this->assertCount(2, $requests);
+        $roster = collect($this->getJson('/api/admin/attendance')->assertOk()->json('members'))->pluck('user_id')->all();
+        $this->assertNotContains($inDan->id, $roster);
+        $gems = collect($this->getJson('/api/admin/gems')->assertOk()->json('gems'))->pluck('name')->all();
+        $this->assertNotContains('GEM Dan', $gems);
+
+        // Rapports : « Mes tribus » = Juda + Lévi ; Dan refusee.
+        $options = collect($this->getJson('/api/admin/reports/options')->assertOk()->json('tribes'))->pluck('name')->sort()->values()->all();
+        $this->assertSame(['Juda', 'Lévi'], $options);
+        $rows = collect($this->getJson('/api/admin/reports/members?scope=mine&filter=all')->assertOk()->json('members'))->pluck('user_id')->all();
+        $this->assertEqualsCanonicalizing([$inJuda->id, $inLevi->id], $rows);
+        $this->getJson('/api/admin/reports?scope=tribe:'.$dan->id)->assertForbidden();
+
+        // Fiches, FISS, actions : Juda et Lévi oui, Dan non.
+        $this->getJson("/api/admin/members/{$inLevi->id}/fiss")->assertOk();
+        $this->getJson("/api/admin/members/{$inDan->id}")->assertForbidden();
+        $this->getJson("/api/admin/members/{$inDan->id}/fiss")->assertForbidden();
+        $this->postJson("/api/admin/members/{$inDan->id}/evaluations", ['type' => 'autre', 'title' => 'Note', 'score' => 12, 'evaluated_on' => '2026-10-15'])->assertForbidden();
+        $this->postJson("/api/admin/members/{$inJuda->id}/evaluations", ['type' => 'autre', 'title' => 'Note', 'score' => 12, 'evaluated_on' => '2026-10-15'])->assertCreated();
+        $this->putJson("/api/admin/gems/{$gemDan->id}", ['name' => 'Pris', 'tribe_id' => $dan->id])->assertForbidden();
+        $danRequest = MemberRequest::where('user_id', $inDan->id)->first();
+        $this->postJson("/api/admin/requests/{$danRequest->id}/reply", ['reply' => 'Non'])->assertForbidden();
+    }
+
     // ---------------------------------------------------------------- Sessions
 
     public function test_a_session_still_in_use_is_extended_and_expired_ones_are_cleaned(): void
