@@ -155,8 +155,13 @@ Facultatif, un vrai SMS de test vers votre téléphone : `php artisan app:sms-ch
 
 - **« L'envoi du code par SMS est momentanément indisponible »** : `php artisan app:sms-check` indique la cause ;
   détail dans `espace/storage/logs/laravel-AAAA-MM-JJ.log` (lignes « OTP : envoi Twilio Verify impossible »).
-  **Dépannage immédiat** (personne ne peut se connecter) : remettre `SMS_DRIVER=log` et `EXPOSE_OTP=true` dans le
-  `.env`, puis `php artisan config:cache` — le code s'affiche alors à l'écran, le temps de corriger.
+  **Ne jamais** remettre `SMS_DRIVER=log` ni `EXPOSE_OTP=true` en production pour dépanner : n'importe qui
+  pourrait alors se connecter sur n'importe quel compte (et, depuis le 2026-10-17, le code ne s'affiche de
+  toute façon jamais sur le vrai nom de domaine). Corriger la configuration Twilio, puis `php artisan config:cache`.
+- **« Ce numéro ne peut pas recevoir de code de connexion »** : seuls les mobiles du Canada et des États-Unis
+  reçoivent un code (anti-fraude). Pour un autre pays : `SMS_ALLOWED_REGIONS=CA,US,FR` dans le `.env`, puis
+  `php artisan config:cache`. **« Trop de demandes de code en ce moment »** : plafond global atteint
+  (`SMS_MAX_PER_HOUR`, `SMS_MAX_PER_DAY`, 100 et 300 par défaut) — regarder la console de supervision (alerte).
 - **Page blanche ou erreur 500** : `php artisan optimize:clear` puis `php artisan config:cache` ; sinon lire le
   journal du jour.
 - **Ancienne application affichée** : `index.html` n'a pas été remplacé (étape 5), ou fermer et rouvrir l'application.

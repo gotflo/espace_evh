@@ -131,7 +131,7 @@ class OtpService
         }
         $hour = OtpCode::where('created_at', '>=', now()->subHour())->count();
         $day = OtpCode::where('created_at', '>=', now()->subDay())->count();
-        if ($hour >= (int) config('services.sms.max_per_hour', 40) || $day >= (int) config('services.sms.max_per_day', 200)) {
+        if ($hour >= (int) config('services.sms.max_per_hour', 100) || $day >= (int) config('services.sms.max_per_day', 300)) {
             Monitor::event('critical', 'security', 'auth.sms_ceiling', 'Plafond de SMS atteint : envois de codes suspendus', ['hour' => $hour, 'day' => $day], 'denied');
 
             return 'Trop de demandes de code en ce moment : réessayez dans quelques minutes.';
