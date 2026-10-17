@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Relance manuelle demandee par les pasteurs, en plus des rappels automatiques d'app:tick qui, eux,
  * s'arretent (courriel : une invitation puis un seul rappel ; absence : un message entre 7 et 30 jours).
+ * Canaux : membres sans courriel ni notifications push, invites a faire les deux depuis l'application.
  * Sans --envoyer : apercu (nombre de destinataires, canaux, texte exact), rien n'est envoye.
  * Chaque personne est relancee au plus une fois par jour et par cible (journal anti-doublon).
  * Tribu : liste seulement, le texto part a la main (textos de la plateforme non configures, et
@@ -29,12 +30,12 @@ use Illuminate\Support\Facades\DB;
 class Relance extends Command
 {
     protected $signature = 'app:relance
-        {cible : courriel | absents | tribu}
-        {--jours= : absents : aucune visite depuis au moins N jours (par defaut le reglage « absent », 7 jours)}
+        {cible : courriel | absents | canaux | tribu}
+        {--jours= : absents : aucune visite depuis au moins N jours (par defaut le reglage « absent », 7 jours) ; canaux : seulement ces absents}
         {--liste : affiche aussi chaque personne visee (nom, numero, derniere visite)}
         {--envoyer : envoie vraiment (sans cette option : apercu, rien n\'est envoye)}';
 
-    protected $description = 'Relance les membres sans courriel ou absents (apercu par defaut) ; tribu : liste pour un texto envoye a la main.';
+    protected $description = 'Relance les membres sans courriel, absents ou injoignables (apercu par defaut) ; tribu : liste pour un texto envoye a la main.';
 
     public const EMAIL_TITLE = 'Ajoutez votre adresse courriel, c’est important';
 
@@ -43,13 +44,18 @@ class Relance extends Command
     /** Ouvre la saisie de l'adresse sur le tableau de bord, meme si elle avait ete remise a plus tard. */
     public const EMAIL_URL = '/tableau-de-bord?courriel=1';
 
+    public const CHANNELS_TITLE = 'Très important : courriel et notifications';
+
+    public const CHANNELS_BODY = 'Ajoutez votre adresse courriel et activez les notifications sur votre téléphone pour recevoir tous les messages de l’église. Cela ne prend qu’une minute.';
+
     public function handle(): int
     {
         return match ($this->argument('cible')) {
             'courriel' => $this->email(),
             'absents' => $this->absents(),
+            'canaux' => $this->channels(),
             'tribu' => $this->tribe(),
-            default => $this->refuse('Cible inconnue : courriel, absents ou tribu.'),
+            default => $this->refuse('Cible inconnue : courriel, absents, canaux ou tribu.'),
         };
     }
 
@@ -76,13 +82,55 @@ class Relance extends Command
             return $this->previewOnly('courriel');
         }
 
+        return $this->sendEmailInvite($users, 'courriel', self::EMAIL_TITLE, self::EMAIL_BODY);
+    }
+
+    // ---------------------------------------------------------------- Ni courriel ni notifications
+
+    /**
+     * Membres injoignables hors de l'application (ni adresse courriel, ni notifications push sur un
+     * appareil) : un message les attend dans l'application pour faire les deux. --jours : seulement
+     * les absents (memes regles que la cible « absents »).
+     */
+    private function channels(): int
+    {
+        $query = $this->members()
+            ->whereHas('profile', fn ($p) => $p->where(fn ($q) => $q->whereNull('email')->orWhere('email', '')))
+            ->whereDoesntHave('pushSubscriptions');
+        $days = $this->option('jours') ? (int) $this->option('jours') : null;
+        if ($days !== null && $days < 1) {
+            return $this->refuse('--jours doit être un nombre de jours (1 ou plus).');
+        }
+        if ($days !== null) {
+            $this->absentFor($query, $days);
+        }
+        $users = $query->with('profile')->orderBy('id')->get();
+
+        $this->line('Relance « canaux » : membres sans adresse courriel ni notifications sur leur téléphone'
+            .($days !== null ? ", absents depuis au moins {$days} jours (autorités pastorales exclues)." : '.'));
+        $this->line('Destinataires : '.$users->count().' (ils verront le message à leur prochaine ouverture de l’application)');
+        $this->line('Notification (cloche, prioritaire) :');
+        $this->line('  « '.self::CHANNELS_TITLE.' »');
+        $this->line('  '.self::CHANNELS_BODY);
+        $this->line('  Ouvre : '.self::EMAIL_URL.' (saisie de l’adresse ; l’invitation à activer les notifications est en haut de chaque page)');
+        $this->roster($users);
+        if (! $this->option('envoyer')) {
+            return $this->previewOnly('canaux'.($days !== null ? " --jours={$days}" : ''));
+        }
+
+        return $this->sendEmailInvite($users, 'canaux', self::CHANNELS_TITLE, self::CHANNELS_BODY);
+    }
+
+    /** Invitation a ajouter son adresse (et compte comme telle pour l'invitation automatique). */
+    private function sendEmailInvite(Collection $users, string $target, string $title, string $body): int
+    {
         $today = now()->toDateString();
         $sent = 0;
         foreach ($users->chunk(200) as $chunk) {
-            DB::transaction(function () use ($chunk, $today, &$sent) {
+            DB::transaction(function () use ($chunk, $today, $target, $title, $body, &$sent) {
                 $ids = [];
                 foreach ($chunk as $user) {
-                    if (! Notifier::once("relance:courriel:{$user->id}:{$today}")) {
+                    if (! Notifier::once("relance:{$target}:{$user->id}:{$today}")) {
                         continue;
                     }
                     // Meme suivi que l'invitation automatique (app:tick email-invites) : la relance compte.
@@ -91,11 +139,11 @@ class Relance extends Command
                     $user->forceFill(['notification_prefs' => $prefs])->save();
                     $ids[] = $user->id;
                 }
-                $sent += Notifier::send($ids, 'profile', self::EMAIL_TITLE, self::EMAIL_BODY, self::EMAIL_URL, [], 'high');
+                $sent += Notifier::send($ids, 'profile', $title, $body, self::EMAIL_URL, [], 'high');
             });
         }
         if ($sent > 0) {
-            Audit::log('members.relanced', null, null, [], ['target' => 'courriel', 'recipients' => $sent]);
+            Audit::log('members.relanced', null, null, [], ['target' => $target, 'recipients' => $sent]);
         }
         $this->info("Relance envoyée : {$sent} membre(s).".($sent < $users->count() ? ' Les autres avaient déjà été relancés aujourd’hui.' : ''));
 
@@ -110,12 +158,7 @@ class Relance extends Command
         if ($days < 1) {
             return $this->refuse('--jours doit être un nombre de jours (1 ou plus).');
         }
-        // Memes regles que l'absence automatique : autorites pastorales exclues, compte valide depuis
-        // plus d'une semaine.
-        $users = $this->members()
-            ->whereRaw('COALESCE(last_seen_at, last_login_at) < ?', [now()->subDays($days)->toDateTimeString()])
-            ->where(fn ($q) => $q->whereNull('approval_decided_at')->orWhere('approval_decided_at', '<', now()->subDays(7)))
-            ->whereNotIn('id', Recipients::withPermission('members.view_all') ?: [0])
+        $users = $this->absentFor($this->members(), $days)
             ->with('profile')->withCount('pushSubscriptions')->orderBy('id')->get();
 
         $channels = $users->countBy(fn (User $u) => $this->channel($u));
@@ -209,6 +252,17 @@ class Relance extends Command
     {
         return User::exceptPlatformManagers()->where('approval_status', User::APPROVED)->whereNull('blocked_at')
             ->whereHas('profile', fn ($p) => $p->where('is_completed', true));
+    }
+
+    /**
+     * Absents depuis au moins N jours, memes regles que l'absence automatique : autorites pastorales
+     * exclues, compte valide depuis plus d'une semaine.
+     */
+    private function absentFor(Builder $query, int $days): Builder
+    {
+        return $query->whereRaw('COALESCE(last_seen_at, last_login_at) < ?', [now()->subDays($days)->toDateTimeString()])
+            ->where(fn ($q) => $q->whereNull('approval_decided_at')->orWhere('approval_decided_at', '<', now()->subDays(7)))
+            ->whereNotIn('id', Recipients::withPermission('members.view_all') ?: [0]);
     }
 
     private function lastSeen(User $user): ?Carbon

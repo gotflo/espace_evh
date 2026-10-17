@@ -199,6 +199,39 @@ class RelanceCommandTest extends TestCase
         $this->assertSame(2, OutboundMessage::where('kind', 'absence')->count());
     }
 
+    // ---------------------------------------------------------------- Ni courriel ni notifications
+
+    public function test_members_with_neither_email_nor_push_are_asked_to_do_both(): void
+    {
+        $this->seenDaysAgo($this->jean, 9);  // ni courriel ni push, absent
+        $this->seenDaysAgo($this->paul, 9);  // push active : joignable
+        $this->seenDaysAgo($this->marie, 9); // courriel : joignable
+        $recent = $this->member('+14185597012', 'Recent', null); // ni l'un ni l'autre, mais venu aujourd'hui
+
+        $this->artisan('app:relance', ['cible' => 'canaux', '--liste' => true])
+            ->expectsOutputToContain('Destinataires : 2')->assertSuccessful();
+        $this->artisan('app:relance', ['cible' => 'canaux', '--jours' => 5, '--liste' => true])
+            ->expectsOutputToContain('absents depuis au moins 5 jours')
+            ->expectsOutputToContain('Destinataires : 1')
+            ->expectsOutputToContain(Relance::CHANNELS_TITLE)
+            ->expectsOutputToContain('+14185597003')
+            ->doesntExpectOutputToContain('+14185597004')
+            ->doesntExpectOutputToContain('+14185597012')
+            ->assertSuccessful();
+        $this->assertSame(0, UserNotification::count());
+
+        $this->artisan('app:relance', ['cible' => 'canaux', '--jours' => 5, '--envoyer' => true])
+            ->expectsOutputToContain('Relance envoyée : 1 membre(s).')->assertSuccessful();
+        $this->artisan('app:relance', ['cible' => 'canaux', '--jours' => 5, '--envoyer' => true])
+            ->expectsOutputToContain('Relance envoyée : 0 membre(s).')->assertSuccessful();
+        $notice = UserNotification::where('title', Relance::CHANNELS_TITLE)->sole();
+        $this->assertSame([$this->jean->id, Relance::CHANNELS_BODY, '/tableau-de-bord?courriel=1', 'high'],
+            [$notice->user_id, $notice->body, $notice->url, $notice->priority]);
+        $this->assertSame(['2026-10-16'], $this->jean->fresh()->notification_prefs['email_invites']);
+        $this->assertSame('canaux', AuditLog::where('action', 'members.relanced')->sole()->new_values['target']);
+        $this->assertNull($recent->fresh()->notification_prefs);
+    }
+
     // ---------------------------------------------------------------- Tribu
 
     public function test_members_without_a_tribe_are_listed_for_a_text_and_nothing_is_sent(): void
