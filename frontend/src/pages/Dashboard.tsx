@@ -163,7 +163,7 @@ export default function Dashboard() {
               <div className="panel-head"><h3>Mes fonctions</h3></div>
               <div className="badges">
                 {roles.map((r) => (
-                  <span key={r.key} className={`badge ${r.key === 'super_admin' ? 'badge-gold' : ''}`}>
+                  <span key={`${r.key}-${r.scope_kind ?? ''}-${r.scope_id ?? ''}`} className={`badge ${r.key === 'super_admin' ? 'badge-gold' : ''}`}>
                     {r.name}{r.scope_name ? ` · ${r.scope_name}` : ''}
                   </span>
                 ))}

@@ -11,6 +11,7 @@ use App\Models\Tribe;
 use App\Models\User;
 use App\Services\FamilyService;
 use App\Support\Audit;
+use App\Support\DepartmentLeadership;
 use App\Support\GemRules;
 use App\Support\Like;
 use App\Support\MemberScope;
@@ -119,7 +120,9 @@ class MemberController extends Controller
             'family' => FamilyService::overview($user),
             'can_manage' => $viewer->canManageMember($user),
             'can_view_fiss' => $viewer->canViewFissOf($user),
-            'led_departments' => $user->ledDepartments->map(fn ($d) => ['id' => $d->id, 'name' => $d->name])->values(),
+            // Deja affiche par le role « Responsable de departement » sur ce departement : pas de doublon.
+            'led_departments' => $user->ledDepartments->reject(fn ($d) => $user->roles->contains(fn ($r) => DepartmentLeadership::isLeaderRole($r, $r->pivot->scope_kind)
+                && (int) $r->pivot->scope_id === (int) $d->id))->map(fn ($d) => ['id' => $d->id, 'name' => $d->name])->values(),
             'roles' => $user->roles->map(fn ($r) => [
                 'assignment_id' => $r->pivot->id,
                 'key' => $r->key,

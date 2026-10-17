@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, ApiError } from '../../api/client'
+import { getReference } from '../../api/reference'
 import { useAuth } from '../../auth/AuthContext'
 import { AppLayout } from '../../components/AppLayout'
-import type { AttendanceMember, AttendanceStatus, RosterData } from '../../types'
+import type { AttendanceMember, AttendanceStatus, Department, RosterData } from '../../types'
 import { ymd } from '../../utils/events'
 import { useDirty } from '../../utils/dirty'
 
@@ -17,12 +18,22 @@ const REH_STATUS: { key: AttendanceStatus; label: string }[] = [
 ]
 
 export default function Attendance() {
-  const { hasPermission } = useAuth()
+  const { hasPermission, roles } = useAuth()
   const canRecord = hasPermission('attendance.record')
+  const seesAll = hasPermission('members.view_all')
+
+  // Departements : un responsable de plusieurs departements fait l'appel de chacun separement.
+  const myDepartments = useMemo(() => roles.filter((r) => r.scope_kind === 'department' && r.scope_id)
+    .reduce<Department[]>((list, r) => (list.some((d) => d.id === r.scope_id) ? list : [...list, { id: r.scope_id!, name: r.scope_name ?? '' }]), []), [roles])
+  const [allDepartments, setAllDepartments] = useState<Department[]>([])
+  useEffect(() => { if (seesAll) getReference().then((r) => setAllDepartments(r.departments)).catch(() => {}) }, [seesAll])
+  const departments = seesAll ? allDepartments : myDepartments
 
   const [date, setDate] = useState(TODAY)
   const [event, setEvent] = useState('Culte')
   const [kind, setKind] = useState<'culte' | 'repetition'>('culte')
+  const [departmentId, setDepartmentId] = useState('')
+  const scopeQuery = departmentId ? `&department_id=${departmentId}` : ''
   const [members, setMembers] = useState<AttendanceMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -35,7 +46,7 @@ export default function Attendance() {
 
   const load = useCallback(() => {
     setLoading(true)
-    api<RosterData>(`/admin/attendance?date=${date}&event=${encodeURIComponent(event)}&kind=${kind}`)
+    api<RosterData>(`/admin/attendance?date=${date}&event=${encodeURIComponent(event)}&kind=${kind}${scopeQuery}`)
       .then((r) => {
         setMembers(r.members.map((m) => ({ ...m, status: m.status ?? (kind === 'repetition' ? 'absent' : null) })))
         setHidden(r.inactive_hidden ?? 0)
@@ -43,7 +54,7 @@ export default function Attendance() {
       })
       .catch(() => setMembers([]))
       .finally(() => setLoading(false))
-  }, [date, event, kind, resetSheet])
+  }, [date, event, kind, scopeQuery, resetSheet])
   useEffect(() => { load() }, [load])
 
   // Recherche : filtre la feuille ET retrouve un fidele inactif qui revient (masque par defaut).
@@ -51,12 +62,12 @@ export default function Attendance() {
     const q = query.trim()
     if (q.length < 2 || hidden === 0) { setComebacks([]); return }
     const timer = window.setTimeout(() => {
-      api<{ matches: AttendanceMember[] }>(`/admin/attendance?date=${date}&event=${encodeURIComponent(event)}&kind=${kind}&q=${encodeURIComponent(q)}`)
+      api<{ matches: AttendanceMember[] }>(`/admin/attendance?date=${date}&event=${encodeURIComponent(event)}&kind=${kind}${scopeQuery}&q=${encodeURIComponent(q)}`)
         .then((r) => setComebacks(r.matches.filter((m) => !members.some((x) => x.user_id === m.user_id))))
         .catch(() => setComebacks([]))
     }, 300)
     return () => window.clearTimeout(timer)
-  }, [query, hidden, date, event, kind, members])
+  }, [query, hidden, date, event, kind, scopeQuery, members])
 
   function addBack(m: AttendanceMember) {
     setMembers((ms) => [{ ...m, present: true, status: 'present' }, ...ms])
@@ -77,9 +88,10 @@ export default function Attendance() {
   async function save() {
     setError(''); setSaving(true)
     try {
+      const department_id = departmentId ? Number(departmentId) : null
       const body = kind === 'repetition'
-        ? { attended_on: date, event, kind, statuses: Object.fromEntries(members.map((m) => [m.user_id, m.status ?? 'absent'])) }
-        : { attended_on: date, event, kind, present_user_ids: members.filter((m) => m.present).map((m) => m.user_id) }
+        ? { attended_on: date, event, kind, department_id, statuses: Object.fromEntries(members.map((m) => [m.user_id, m.status ?? 'absent'])) }
+        : { attended_on: date, event, kind, department_id, present_user_ids: members.filter((m) => m.present).map((m) => m.user_id) }
       await api<{ message: string }>('/admin/attendance', { method: 'POST', body })
       resetSheet()
     } catch (err) {
@@ -107,9 +119,24 @@ export default function Attendance() {
           <label>Type de session</label>
           <div className="pill-choices">
             <button type="button" className={`pill-choice ${kind === 'culte' ? 'on' : ''}`} onClick={() => setKind('culte')}>Culte / activité</button>
-            <button type="button" className={`pill-choice ${kind === 'repetition' ? 'on' : ''}`} onClick={() => setKind('repetition')}>Répétition (retards)</button>
+            <button type="button" className={`pill-choice ${kind === 'repetition' ? 'on' : ''}`} onClick={() => {
+              setKind('repetition')
+              if (event === 'Culte') setEvent('Répétition')
+              // Une repetition est celle d'un departement : le premier de ses departements par defaut.
+              if (!departmentId && !seesAll && myDepartments.length > 0) setDepartmentId(String(myDepartments[0].id))
+            }}>Répétition (retards)</button>
           </div>
         </div>
+
+        {departments.length > 0 && (
+          <div className="field mt" style={{ marginBottom: 0 }}>
+            <label htmlFor="attendance-department">Département</label>
+            <select id="attendance-department" className="select" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
+              <option value="">{seesAll ? 'Toute l’église' : 'Tout mon périmètre'}</option>
+              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+        )}
 
         <div className="toolbar" style={{ marginTop: '1rem' }}>
           <p className="helper" style={{ margin: 0 }}>

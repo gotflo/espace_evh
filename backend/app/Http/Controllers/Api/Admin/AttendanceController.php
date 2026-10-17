@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
+use App\Models\Department;
 use App\Models\Profile;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -22,10 +23,11 @@ class AttendanceController extends Controller
     public function roster(Request $request): JsonResponse
     {
         $date = $request->query('date') ?: now()->toDateString();
-        $event = $request->query('event') ?: 'Culte';
+        $department = $this->department($request);
+        $event = $this->eventName($request->query('event') ?: 'Culte', $department);
         $kind = $request->query('kind') === 'repetition' ? 'repetition' : 'culte';
 
-        $profiles = $this->scopedProfiles($request->user());
+        $profiles = $this->scopedProfiles($request->user(), $department);
         $records = Attendance::where('attended_on', $date)->where('event', $event)->where('kind', $kind)
             ->whereIn('member_user_id', $profiles->pluck('user_id'))
             ->get()->keyBy('member_user_id');
@@ -79,10 +81,13 @@ class AttendanceController extends Controller
             'present_user_ids' => ['array'],
             'present_user_ids.*' => ['integer'],
             'statuses' => ['array'], // repetition : { user_id: status }
+            'department_id' => ['nullable', 'integer'],
         ]);
 
         $kind = $data['kind'] ?? 'culte';
-        $rosterIds = $this->scopedProfiles($request->user())->pluck('user_id');
+        $department = $this->department($request);
+        $data['event'] = $this->eventName($data['event'], $department);
+        $rosterIds = $this->scopedProfiles($request->user(), $department)->pluck('user_id');
         $recordedBy = $request->user()->id;
         $valid = ['present', 'retard', 'absent_justifie', 'absent'];
 
@@ -127,12 +132,39 @@ class AttendanceController extends Controller
         return response()->json(['message' => "Session enregistrée ({$present} présent(s))."]);
     }
 
-    /** Membres dont l'utilisateur fait l'appel : toute l'eglise ou sa portee d'action (GEM, tribu, dept...). */
-    private function scopedProfiles(User $user): Collection
+    /**
+     * Membres dont l'utilisateur fait l'appel : toute l'eglise ou sa portee d'action (GEM, tribu, dept...),
+     * limitee aux membres d'un departement quand il est choisi (appel d'une repetition).
+     */
+    private function scopedProfiles(User $user, ?Department $department = null): Collection
     {
-        $query = Profile::with(['tribe', 'user:id,activity_status,activity_override'])->has('user');
+        $query = Profile::with(['tribe', 'user:id,activity_status,activity_override'])->has('user')
+            ->when($department, fn ($q) => $q->whereHas('departments', fn ($d) => $d->whereKey($department->id)));
 
         return \App\Support\MemberScope::manageableProfiles($query, $user)
             ->orderBy('last_name')->orderBy('first_name')->get();
+    }
+
+    /**
+     * Departement choisi pour l'appel : l'un de ceux du perimetre de l'utilisateur (un responsable
+     * de plusieurs departements fait l'appel de chacun separement), ou n'importe lequel s'il voit toute l'eglise.
+     */
+    private function department(Request $request): ?Department
+    {
+        $id = (int) $request->input('department_id');
+        if (! $id) {
+            return null;
+        }
+        $user = $request->user();
+        abort_unless($user->hasPermission('members.view_all') || in_array($id, $user->scopeDepartmentIds(), true), 403,
+            'Ce département ne fait pas partie de votre périmètre.');
+
+        return Department::findOrFail($id);
+    }
+
+    /** Une feuille par departement (« Répétition · Chorale ») : un membre peut servir dans deux departements le meme jour. */
+    private function eventName(string $event, ?Department $department): string
+    {
+        return $department ? mb_substr("{$event} · {$department->name}", 0, 120) : $event;
     }
 }

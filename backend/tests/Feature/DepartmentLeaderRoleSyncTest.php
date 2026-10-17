@@ -93,6 +93,7 @@ class DepartmentLeaderRoleSyncTest extends TestCase
         $account = collect($this->getJson('/api/admin/accounts')->assertOk()->json('accounts'))->firstWhere('id', $guillaine->id);
         $this->assertSame(['Responsable de département · Intercession'], array_map(fn ($r) => $r['name'].' · '.$r['scope_name'], $account['roles']));
         $this->assertSame([], $account['led_departments']);
+        $this->assertSame([], $this->getJson("/api/admin/members/{$guillaine->id}")->assertOk()->json('led_departments'));
 
         // Son espace : une seule fonction affichee, le rapport mensuel du departement, les droits de responsable.
         Sanctum::actingAs($guillaine->fresh());
@@ -134,6 +135,56 @@ class DepartmentLeaderRoleSyncTest extends TestCase
         $this->assignRole($b, $this->intercession)->assertOk();
         $this->assertSame(1, DB::table('role_user')->where('user_id', $b->id)->count());
         $this->assertSame([$b->id], $this->intercession->leaders()->pluck('users.id')->map(fn ($id) => (int) $id)->all());
+    }
+
+    public function test_a_leader_of_several_departments_follows_each_one_separately(): void
+    {
+        $chorale = Department::create(['name' => 'Chorale test', 'slug' => 'chorale-test', 'is_active' => true, 'tracks_rehearsal' => true]);
+        $other = Department::create(['name' => 'Accueil test', 'slug' => 'accueil-test', 'is_active' => true]);
+        $leader = $this->member('+14185557020', 'Dominique', 'Bayiha');
+        $prayer = $this->member('+14185557021', 'Priante');
+        $singer = $this->member('+14185557022', 'Chanteuse');
+        $both = $this->member('+14185557023', 'Partout');
+        $outsider = $this->member('+14185557024', 'Ailleurs');
+        $join = fn (User $u, Department $d) => Profile::where('user_id', $u->id)->first()->departments()->attach($d->id);
+        $join($prayer, $this->intercession);
+        $join($singer, $chorale);
+        $join($both, $this->intercession);
+        $join($both, $chorale);
+        $join($outsider, $other);
+        $this->assignRole($leader, $this->intercession)->assertOk();
+        $this->assignRole($leader, $chorale)->assertOk();
+
+        Sanctum::actingAs($leader->fresh());
+        // Ses fonctions, ses rapports mensuels : un par departement.
+        $roles = collect($this->getJson('/api/me')->assertOk()->json('roles'))->where('key', 'department_leader')->pluck('scope_name')->sort()->values()->all();
+        $this->assertSame(['Chorale test', 'Intercession'], $roles);
+        $mine = collect($this->getJson('/api/admin/leader-reports')->assertOk()->json('mine'))->pluck('scope_name')->sort()->values()->all();
+        $this->assertSame(['Chorale test', 'Intercession'], $mine);
+
+        // Appel des repetitions : un departement a la fois, jamais un departement qu'il ne dirige pas.
+        $roster = fn (Department $d) => collect($this->getJson("/api/admin/attendance?kind=repetition&event=R%C3%A9p%C3%A9tition&department_id={$d->id}")
+            ->assertOk()->json('members'))->pluck('user_id')->all();
+        $this->assertEqualsCanonicalizing([$prayer->id, $both->id, $leader->id], $roster($this->intercession));
+        $this->assertEqualsCanonicalizing([$singer->id, $both->id, $leader->id], $roster($chorale));
+        $this->getJson("/api/admin/attendance?kind=repetition&department_id={$other->id}")->assertForbidden();
+
+        // Meme jour, meme membre dans les deux departements : deux feuilles distinctes, aucune n'efface l'autre.
+        $save = fn (Department $d, array $statuses) => $this->postJson('/api/admin/attendance', ['attended_on' => '2026-10-15', 'event' => 'Répétition',
+            'kind' => 'repetition', 'department_id' => $d->id, 'statuses' => $statuses])->assertOk();
+        $save($this->intercession, [$prayer->id => 'present', $both->id => 'retard']);
+        $save($chorale, [$singer->id => 'present', $both->id => 'present', $outsider->id => 'present']);
+        $this->assertSame(['Répétition · Chorale test' => 'present', 'Répétition · Intercession' => 'retard'],
+            DB::table('attendances')->where('member_user_id', $both->id)->orderBy('event')->pluck('status', 'event')->all());
+        $this->assertSame(0, DB::table('attendances')->where('member_user_id', $outsider->id)->count());
+        $this->assertSame('present', DB::table('attendances')->where('member_user_id', $prayer->id)->value('status'));
+
+        // Partout ailleurs : son nom sur chacun de ses services, une seule ligne dans l'annuaire.
+        Sanctum::actingAs($this->admin->fresh());
+        $services = collect($this->getJson('/api/me/services')->json('services'))->keyBy('name');
+        $this->assertSame(['Dominique Bayiha', 'Dominique Bayiha'], [$services['Intercession']['leader'], $services['Chorale test']['leader']]);
+        $directory = $this->getJson('/api/admin/leaders')->json('department_leaders');
+        $this->assertSame([['Dominique Bayiha', ['Chorale test', 'Intercession']]], array_map(fn ($p) => [$p['name'], $p['departments']], $directory));
     }
 
     public function test_the_role_follows_the_same_rules_as_organisation(): void
