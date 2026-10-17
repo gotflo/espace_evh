@@ -83,7 +83,18 @@ if (auth.get()) {
 }
 
 function Loading() {
-  return <div className="loading-screen"><span className="spinner" /></div>
+  const { unreachable, retryNow } = useAuth()
+  if (!unreachable) return <div className="loading-screen"><span className="spinner" /></div>
+  // Session gardee : le serveur ne repond pas encore (mise a jour en cours, reseau coupe).
+  return (
+    <div className="loading-screen">
+      <div className="loading-unreachable" role="status">
+        <span className="spinner" />
+        <p><strong>Le serveur ne répond pas pour le moment.</strong> Vous restez connecté : nouvel essai automatique dans quelques secondes.</p>
+        <button type="button" className="btn btn-ghost small" onClick={retryNow}>Réessayer</button>
+      </div>
+    </div>
+  )
 }
 
 /** Redirection expliquee : l'utilisateur sait pourquoi il n'est pas sur la page demandee. */

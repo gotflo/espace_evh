@@ -150,6 +150,12 @@ Facultatif, un vrai SMS de test vers votre téléphone : `php artisan app:sms-ch
 - **Twilio** : surveiller le solde (recharge automatique activée) et les journaux d'envoi (console Twilio →
   Monitor → Logs). Si l'église est enregistrée (NEQ), le profil Twilio individuel peut être converti en profil
   d'organisation.
+- **Sessions des membres** : une mise en ligne ne ferme **jamais** les sessions ouvertes (aucune suppression dans
+  `personal_access_tokens`, même « par sécurité ») : tous les membres devraient se reconnecter avec un code SMS.
+  Le 2026-10-17, la fermeture des sessions ouvertes avant le 10 octobre a déconnecté les membres. Pour un compte
+  précis (téléphone perdu, compte compromis) : console de supervision → fermer les sessions de ce seul compte.
+  Pendant la maintenance (`artisan down`), l'application garde la session et affiche « Le serveur ne répond pas
+  pour le moment » jusqu'au retour du serveur : seul un refus du serveur (401) déconnecte.
 
 ## En cas de problème
 

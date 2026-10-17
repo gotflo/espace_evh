@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { api, ApiError, auth as tokenStore, onSessionExpired } from '../api/client'
 import { forgetPushOnThisDevice } from '../push'
 import { setUnread } from '../notifications'
@@ -14,6 +14,10 @@ interface AuthState {
   /** Compte de gestion principal (numero reserve) : gestion seulement, pas d'espace membre. */
   isPlatformManager: boolean
   loading: boolean
+  /** Ouverture avec une session, mais serveur injoignable (mise a jour en cours, reseau coupe) : nouvel essai automatique. */
+  unreachable: boolean
+  /** Relance tout de suite l'essai de connexion au serveur (bouton « Réessayer »). */
+  retryNow: () => void
   isAuthenticated: boolean
   profileCompleted: boolean
   /** Tribu obligatoire pour terminer l'inscription ; membre deja inscrit a qui il manque une information. */
@@ -44,9 +48,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [registration, setRegistration] = useState({ tribe_required: true, reopened: false })
   const [membership, setMembership] = useState<Membership>({ status: 'approved', submitted: true })
   const [loading, setLoading] = useState(true)
+  const [unreachable, setUnreachable] = useState(false)
+  // Compte deja charge : une relecture qui echoue (coupure) garde l'etat actuel.
+  const signedIn = useRef(false)
+  // Attentes en cours entre deux essais : reveillees par « Réessayer », le retour du reseau ou de l'application.
+  const wakers = useRef(new Set<() => void>())
   const [settings, setSettings] = useState<AppSettings>({ modules: {}, push_prompt_snooze_days: 3 })
 
   const apply = useCallback((p: AuthPayload) => {
+    signedIn.current = !!p.user
     rememberPreviousVisit(p.user?.last_seen_at)
     setUser(p.user)
     setProfileState(p.profile)
@@ -60,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const reset = useCallback(() => {
+    signedIn.current = false
     setUser(null); setProfileState(null); setRoles([]); setPermissions([]); setIsSuperAdmin(false); setIsPlatformManager(false)
     setMembership({ status: 'approved', submitted: true })
   }, [])
@@ -71,10 +82,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => onSessionExpired(null)
   }, [reset])
 
+  const pause = useCallback((ms: number) => new Promise<void>((resolve) => {
+    const done = () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('online', done)
+      document.removeEventListener('visibilitychange', onVisible)
+      wakers.current.delete(done)
+      resolve()
+    }
+    const onVisible = () => { if (document.visibilityState === 'visible') done() }
+    const timer = window.setTimeout(done, ms)
+    window.addEventListener('online', done)
+    document.addEventListener('visibilitychange', onVisible)
+    wakers.current.add(done)
+  }), [])
+  const retryNow = useCallback(() => { [...wakers.current].forEach((wake) => wake()) }, [])
+
   const refresh = useCallback(async () => {
     if (!tokenStore.get()) { setLoading(false); return }
-    // Seule une session refusee (401) deconnecte. Une coupure reseau ou une limite de
-    // requetes (429) est reessayee : le jeton est conserve.
+    // Seule une session refusee par le serveur (401) deconnecte. Une coupure reseau, une mise a jour
+    // en cours (503) ou une limite de requetes (429) ne deconnectent jamais : le jeton est garde et,
+    // a l'ouverture, l'essai est repete jusqu'a ce que le serveur reponde (jamais la page de connexion).
     for (let attempt = 0; ; attempt++) {
       try {
         const me = await api<AuthPayload>('/me')
@@ -83,12 +111,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         break
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) { tokenStore.clear(); reset(); break }
-        if (attempt >= 2) { reset(); break }
-        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)))
+        if (!tokenStore.get()) { reset(); break }
+        // Compte deja affiche (relecture des droits, attente de validation) : on garde l'etat actuel.
+        if (signedIn.current) break
+        setUnreachable(true)
+        await pause(Math.min(30000, 2000 * (attempt + 1)))
       }
     }
+    setUnreachable(false)
     setLoading(false)
-  }, [apply, reset])
+  }, [apply, reset, pause])
 
   useEffect(() => { refresh() }, [refresh])
 
@@ -111,6 +143,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthState = {
     user, profile, roles, permissions, isSuperAdmin, isPlatformManager,
     loading,
+    unreachable,
+    retryNow,
     isAuthenticated: !!user,
     // Meme regle que le serveur : inscription terminee ET tribu choisie (si elle est requise).
     // Un compte en attente du pasteur n'a pas terminé son inscription (l'écran d'attente remplace le reste).
