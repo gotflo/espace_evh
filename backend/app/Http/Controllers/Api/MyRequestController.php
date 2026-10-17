@@ -24,7 +24,7 @@ class MyRequestController extends Controller
     public const STATUS = [
         'nouvelle' => 'Nouvelle',
         'en_cours' => 'En cours',
-        'traitee' => 'Traitee',
+        'traitee' => 'Traitée',
     ];
 
     /** Demandes envoyees par le fidele connecte. */

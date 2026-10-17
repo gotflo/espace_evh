@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\Event;
+use App\Models\Gem;
 use App\Models\MemberRequest;
+use App\Models\Permission;
 use App\Models\Profile;
 use App\Models\Role;
 use App\Models\Tribe;
@@ -99,8 +101,8 @@ class RolesAgendaAutomationTest extends TestCase
         $this->postJson('/api/admin/announcements', ['title' => 'Dan', 'category' => 'info', 'scopes' => [['type' => 'tribe', 'id' => $dan->id]]])->assertForbidden();
         $this->postJson('/api/admin/announcements', ['title' => 'Deux tribus', 'category' => 'info',
             'scopes' => [['type' => 'tribe', 'id' => $this->juda->id], ['type' => 'tribe', 'id' => $this->levi->id]]])->assertOk();
-        $this->assertSame(1, UserNotification::where("user_id", $juda->id)->count());
-        $this->assertSame(1, UserNotification::where("user_id", $levi->id)->where("type", "announcement")->count());
+        $this->assertSame(1, UserNotification::where('user_id', $juda->id)->count());
+        $this->assertSame(1, UserNotification::where('user_id', $levi->id)->where('type', 'announcement')->count());
         $this->assertSame(0, UserNotification::where('user_id', $outside->id)->count());
     }
 
@@ -128,7 +130,7 @@ class RolesAgendaAutomationTest extends TestCase
     public function test_gem_leader_cannot_write_in_the_journal_of_someone_outside_his_scope(): void
     {
         $garde = $this->member('+14185550320', $this->juda, 'Gad');
-        $gem = \App\Models\Gem::create(['name' => 'GEM 1', 'tribe_id' => $this->juda->id]);
+        $gem = Gem::create(['name' => 'GEM 1', 'tribe_id' => $this->juda->id]);
         $this->give($garde, 'garde', 'gem', $gem->id);
         $stranger = $this->member('+14185550321', $this->levi);
         Sanctum::actingAs($garde);
@@ -170,7 +172,7 @@ class RolesAgendaAutomationTest extends TestCase
     {
         $user = $this->member('+14185550340');
         $role = Role::create(['key' => 'test_pub', 'name' => 'Publieur', 'scope_kind' => 'none']);
-        $role->permissions()->sync(\App\Models\Permission::where('key', 'announcements.publish')->pluck('id'));
+        $role->permissions()->sync(Permission::where('key', 'announcements.publish')->pluck('id'));
         $user->roles()->attach($role);
         Sanctum::actingAs($user);
 
@@ -206,8 +208,9 @@ class RolesAgendaAutomationTest extends TestCase
         Sanctum::actingAs($admin);
         $this->assertNotContains($id, collect($this->getJson('/api/admin/events')->json('events'))->pluck('id'));
 
-        // Rappel automatique au proprietaire uniquement.
+        // Rappel automatique au proprietaire uniquement (la veille au soir, jamais en pleine journee ni la nuit).
         Event::whereKey($id)->update(['created_at' => now()->subDay()]);
+        Carbon::setTestNow(Carbon::parse('2026-09-25 18:30:00'));
         $this->artisan('app:tick', ['--only' => 'event-reminders'])->assertSuccessful();
         $this->assertSame(1, UserNotification::where('user_id', $owner->id)->where('title', 'Demain : Rendez-vous avec mon Garde')->count());
         $this->assertSame(0, UserNotification::where('title', 'like', '%Rendez-vous avec mon Garde%')->where('user_id', '!=', $owner->id)->count());
@@ -271,9 +274,9 @@ class RolesAgendaAutomationTest extends TestCase
     {
         // Etat d'avant la mise a jour : un role « voit tout + publie », sans broadcast.all.
         $legacy = Role::create(['key' => 'ancien_pasteur', 'name' => 'Ancien', 'scope_kind' => 'none']);
-        $legacy->permissions()->sync(\App\Models\Permission::whereIn('key', ['members.view_all', 'announcements.publish'])->pluck('id'));
+        $legacy->permissions()->sync(Permission::whereIn('key', ['members.view_all', 'announcements.publish'])->pluck('id'));
         $viewer = Role::create(['key' => 'lecteur', 'name' => 'Lecteur', 'scope_kind' => 'none']);
-        $viewer->permissions()->sync(\App\Models\Permission::whereIn('key', ['members.view_all'])->pluck('id'));
+        $viewer->permissions()->sync(Permission::whereIn('key', ['members.view_all'])->pluck('id'));
 
         $migration = require database_path('migrations/2026_09_26_100001_add_broadcast_and_member_scoped_roles.php');
         $migration->up();

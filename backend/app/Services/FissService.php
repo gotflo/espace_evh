@@ -115,13 +115,18 @@ class FissService
         abort_unless($req->status === 'pending', 409, 'Cette demande a déjà été traitée.');
 
         return DB::transaction(function () use ($reviewer, $req, $approve, $comment, $member) {
-            $req->forceFill([
+            // Reservation atomique : double clic ou deux valideurs en meme temps = une seule decision
+            // (et une seule notification), le second recoit « deja traitee ».
+            $claimed = FissEditRequest::whereKey($req->id)->where('status', 'pending')->update([
                 'status' => $approve ? 'approved' : 'rejected',
                 'decided_by' => $reviewer->id,
                 'decided_at' => now(),
                 'decision_comment' => $comment,
                 'unlock_expires_at' => $approve ? now()->addDays(FissEditRequest::UNLOCK_DAYS) : null,
-            ])->save();
+                'updated_at' => now(),
+            ]);
+            abort_unless($claimed === 1, 409, 'Cette demande a déjà été traitée.');
+            $req->refresh();
             Audit::log($approve ? 'fiss.edit_approved' : 'fiss.edit_rejected', $req, $member->id,
                 ['status' => 'pending'], ['status' => $req->status, 'comment' => $comment], ['form_id' => $req->form_id]);
 

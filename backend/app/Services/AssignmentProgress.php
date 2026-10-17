@@ -66,13 +66,8 @@ class AssignmentProgress
     /** Signal de lecture envoye par le lecteur (video ou audio). */
     public static function record(Assignment $a, User $user, array $data): AssignmentView
     {
-        // Duree : fixee par le premier lecteur qui la connait (bornee a 12 h).
-        $reported = (int) round((float) ($data['duration'] ?? 0));
-        if (! $a->media_duration && $reported >= 1 && $reported <= 43200) {
-            Assignment::whereKey($a->id)->whereNull('media_duration')->update(['media_duration' => $reported]);
-            $a->media_duration = $reported;
-        }
-        $duration = (int) ($a->media_duration ?: $reported);
+        // Duree donnee par le lecteur de ce membre (la duree commune reste indicative).
+        $duration = ExerciseProgress::memberDuration($a, 'media_duration', $data);
 
         return DB::transaction(fn () => ExerciseProgress::apply(self::lockedView($a, $user), $duration, $data));
     }

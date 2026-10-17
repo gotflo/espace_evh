@@ -9,6 +9,8 @@ use App\Models\Exercise;
 use App\Models\ExerciseResponse;
 use App\Models\ExerciseVideoView;
 use App\Models\User;
+use App\Support\PlatformSettings;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Carbon;
 
 /**
@@ -30,14 +32,19 @@ class WelcomeBackService
             now(), now()->addDays(60),
         )->unique(fn ($o) => $o['event']->id)->values();
 
-        $exercises = CalendarService::exercisesFor($user)->where('created_at', '>=', $since)
-            ->where(fn ($q) => $q->whereNull('closes_at')->orWhere('closes_at', '>', now()))->get();
+        // Module desactive dans les reglages : rien a proposer (ses pages sont fermees).
+        $exercises = PlatformSettings::module('exercises')
+            ? CalendarService::exercisesFor($user)->where('created_at', '>=', $since)
+                ->where(fn ($q) => $q->whereNull('closes_at')->orWhere('closes_at', '>', now()))->get()
+            : new EloquentCollection;
         $views = ExerciseVideoView::where('user_id', $user->id)->whereIn('exercise_id', $exercises->pluck('id'))->get()->keyBy('exercise_id');
         $responses = ExerciseResponse::where('user_id', $user->id)->whereIn('exercise_id', $exercises->pluck('id'))->get()->keyBy('exercise_id');
         $todo = $exercises->reject(fn (Exercise $e) => ExerciseProgress::isDone($e, $views->get($e->id), $responses->get($e->id)))->values();
 
         // Devoirs (DS) publies depuis la derniere visite et pas encore faits.
-        $assignments = Assignment::published()->where('published_at', '>=', $since)->orderByDesc('published_at')->limit(20)->get();
+        $assignments = PlatformSettings::module('assignments')
+            ? Assignment::published()->where('published_at', '>=', $since)->orderByDesc('published_at')->limit(20)->get()
+            : new EloquentCollection;
         $dsViews = AssignmentView::where('user_id', $user->id)->whereIn('assignment_id', $assignments->pluck('id'))->get()->keyBy('assignment_id');
         $dsResponses = AssignmentResponse::where('user_id', $user->id)->whereIn('assignment_id', $assignments->pluck('id'))->get()->keyBy('assignment_id');
         $dsTodo = $assignments->reject(fn (Assignment $a) => AssignmentProgress::isDone($a, $dsViews->get($a->id), $dsResponses->get($a->id)))->values();

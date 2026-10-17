@@ -408,6 +408,11 @@ class CalendarNotificationsServicesTest extends TestCase
 
         $this->artisan('app:tick')->assertSuccessful();
         $this->artisan('app:tick')->assertSuccessful(); // idempotent
+        // Le rappel « veille » part le soir (heure du programme du lendemain), pas a 10 h.
+        $this->assertSame(0, UserNotification::where('user_id', $member->id)->where('title', 'Demain : Prière du soir')->count());
+        Carbon::setTestNow(Carbon::parse('2026-09-25 18:30:00'));
+        $this->artisan('app:tick')->assertSuccessful();
+        $this->artisan('app:tick')->assertSuccessful(); // idempotent
 
         $titles = UserNotification::where('user_id', $member->id)->pluck('title')->all();
         $this->assertContains('Demain : Prière du soir', $titles);

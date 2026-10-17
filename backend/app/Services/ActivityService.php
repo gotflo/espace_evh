@@ -7,6 +7,7 @@ use App\Models\SpiritualHealthForm;
 use App\Models\User;
 use App\Support\Audit;
 use App\Support\PlatformSettings;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -19,6 +20,21 @@ use Illuminate\Support\Facades\DB;
  */
 class ActivityService
 {
+    /**
+     * Statut d'activite EFFECTIF dans une requete sur les comptes (ou dans un whereHas('user', ...)) :
+     * le statut force par un pasteur (activity_override) l'emporte sur le statut calcule chaque jour,
+     * comme dans les listes et les rapports (User::activityStatus). A utiliser partout ou les rappels
+     * et automatismes choisissent les membres actifs.
+     */
+    public static function whereEffective(Builder $query, string $status = 'active'): Builder
+    {
+        $override = $query->qualifyColumn('activity_override');
+        $stored = $query->qualifyColumn('activity_status');
+
+        return $query->where(fn (Builder $w) => $w->where($override, $status)
+            ->orWhere(fn (Builder $x) => $x->whereNull($override)->where($stored, $status)));
+    }
+
     /** Signe d'activite d'un membre (requete authentifiee, FISS, presence) : met a jour et reactive. */
     public static function touch(User $user, bool $seen = true, string $reason = 'usage'): void
     {
@@ -50,7 +66,7 @@ class ActivityService
 
         $changes = ['inactivated' => [], 'reactivated' => []];
         User::whereHas('profile', fn ($p) => $p->where('is_completed', true))
-            ->select(['id', 'last_login_at', 'last_seen_at', 'activity_status', 'created_at'])
+            ->select(['id', 'last_login_at', 'last_seen_at', 'activity_status', 'activity_override', 'created_at'])
             // Une transaction par lot : une seule ecriture disque par lot de changements.
             ->chunkById(300, function ($users) use ($lastAttendance, $lastFiss, &$changes) {
                 DB::transaction(function () use ($users, $lastAttendance, $lastFiss, &$changes) {
@@ -69,6 +85,11 @@ class ActivityService
                         }
                         $previous = $user->activity_status;
                         $user->forceFill(['activity_status' => $status, 'activity_changed_at' => now()])->saveQuietly();
+                        // Statut force par un pasteur : le statut calcule est garde a jour (pour le jour ou le
+                        // forcage est retire), mais le statut effectif ne change pas : ni trace ni changement annonce.
+                        if (in_array($user->activity_override, ['active', 'inactive'], true)) {
+                            continue;
+                        }
                         Audit::log($status === 'inactive' ? 'member.inactivated' : 'member.reactivated', $user, $user->id,
                             ['activity_status' => $previous], ['activity_status' => $status],
                             ['last_activity' => $last?->toDateString(), 'rule' => PlatformSettings::int('members.inactive_after_months').' mois sans connexion, FISS ni présence'], null);

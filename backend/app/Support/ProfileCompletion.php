@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\FamilyLink;
 use App\Models\Profile;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 
 /**
  * Completion du profil : liste des informations necessaires (questionnaire dynamique :
@@ -30,6 +31,11 @@ class ProfileCompletion
             'marital_status' => ['Situation matrimoniale', filled($p->marital_status)],
             'has_children' => ['Avez-vous des enfants ?', $p->has_children !== null],
         ];
+        // Tribu non demandee aux roles qui en sont dispenses a l'inscription (PR, PA, AP, administrateur) :
+        // sinon « Il manque : Tribu » pour toujours.
+        if (! $p->tribe_id && $p->user && ! Registration::requiresTribe($p->user)) {
+            unset($checks['tribe']);
+        }
 
         if ($p->marital_status === 'marie') {
             $hasSpouse = filled($p->spouse_name) || ($family !== null ? $family['spouse'] : FamilyLink::where('user_id', $p->user_id)->where('relation', 'spouse')
@@ -80,6 +86,8 @@ class ProfileCompletion
             ->whereIn('status', ['pending', 'confirmed'])->pluck('user_id')->flip();
         $children = FamilyLink::whereIn('user_id', $ids)->where('relation', 'child')
             ->selectRaw('user_id, count(*) as n, count(birth_date) as d')->groupBy('user_id')->get()->keyBy('user_id');
+        // Profils sans tribu : roles lus en une fois (dispense de tribu), et non un par un.
+        EloquentCollection::make($list->filter(fn ($p) => ! $p->tribe_id)->values()->all())->loadMissing('user.roles');
         $changed = 0;
         foreach ($list as $p) {
             $kids = $children[$p->user_id] ?? null;

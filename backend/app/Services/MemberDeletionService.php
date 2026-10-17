@@ -50,18 +50,33 @@ class MemberDeletionService
         $impact = UserAdmin::impact($member);
         $name = $member->profile?->full_name ?: $member->phone;
         $id = $member->id;
+        // Demandes encore en attente pour ce membre (autres que celle approuvee) : leurs auteurs sont
+        // prevenus comme pour une decision, au lieu de voir leur demande disparaitre sans nouvelle.
+        $others = MemberDeletionRequest::where('user_id', $id)->where('status', 'pending')
+            ->when($from, fn ($q) => $q->whereKeyNot($from->id))->get();
 
         DB::transaction(function () use ($pr, $member, $reason, $from, $impact, $name, $id) {
+            if ($from) {
+                // Reservation atomique : un double clic (ou l'ecran et le courriel en meme temps) ne decide qu'une fois.
+                $claimed = MemberDeletionRequest::whereKey($from->id)->where('status', 'pending')
+                    ->update(['status' => 'approved', 'decided_by' => $pr->id, 'decided_at' => now(), 'updated_at' => now()]);
+                abort_unless($claimed === 1, 409, 'Cette demande a déjà été traitée.');
+                $from->refresh();
+            }
             // Trace avant la suppression (le membre n'existera plus ensuite).
             Audit::log('member.deleted', null, null, ['name' => $name], [], [
                 'user_id' => $id, 'reason' => $reason, 'via' => $from ? 'demande approuvée' : 'Pasteur Résident',
                 'deletion_request_id' => $from?->id, 'deleted' => $impact['deleted'] ?? [],
             ], $pr);
-            if ($from) {
-                $from->forceFill(['status' => 'approved', 'decided_by' => $pr->id, 'decided_at' => now()])->save();
-            }
             UserAdmin::delete($member, $reason, $pr->id);
         });
+
+        foreach ($others as $other) {
+            if ($other->requested_by) {
+                Notifier::send([$other->requested_by], 'member', 'Suppression effectuée : '.$other->member_name,
+                    'Le Pasteur Résident a supprimé ce membre.', '/admin/membres');
+            }
+        }
     }
 
     public static function request(User $leader, User $member, string $reason): MemberDeletionRequest
@@ -126,7 +141,12 @@ class MemberDeletionService
             abort_unless($member, 404, 'Ce membre a déjà été supprimé.');
             self::delete($pr, $member, $req->reason, $req);
         } else {
-            $req->forceFill(['status' => 'rejected', 'decided_by' => $pr->id, 'decided_at' => now(), 'decision_comment' => $comment])->save();
+            // Reservation atomique : un seul refus (et une seule notification) meme en cas de double clic.
+            $claimed = MemberDeletionRequest::whereKey($req->id)->where('status', 'pending')->update([
+                'status' => 'rejected', 'decided_by' => $pr->id, 'decided_at' => now(), 'decision_comment' => $comment, 'updated_at' => now(),
+            ]);
+            abort_unless($claimed === 1, 409, 'Cette demande a déjà été traitée.');
+            $req->refresh();
             Audit::log('member.deletion_rejected', $req, $member?->id, ['status' => 'pending'], ['status' => 'rejected', 'comment' => $comment], [], $pr);
         }
         if ($req->requested_by) {

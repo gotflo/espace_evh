@@ -203,7 +203,7 @@ class AutomationTick extends Command
             $renewed = [];
             MonthlyResolution::where('period', $previous)
                 ->whereNotIn('user_id', MonthlyResolution::where('period', $period)->select('user_id'))
-                ->whereHas('user', fn ($u) => $u->where('activity_status', 'active')->where('approval_status', User::APPROVED)->whereNull('blocked_at'))
+                ->whereHas('user', fn ($u) => ActivityService::whereEffective($u)->where('approval_status', User::APPROVED)->whereNull('blocked_at'))
                 ->chunkById(200, function ($rows) use ($period, &$renewed) {
                     foreach ($rows as $row) {
                         $filled = $row->filled();
@@ -288,6 +288,12 @@ class AutomationTick extends Command
             if ($kind === 'day' && ! $event->is_personal && $event->created_at && $event->created_at->gt($now->copy()->subHours(3))) {
                 Notifier::once("event:{$event->id}:{$date}:{$kind}");
 
+                continue;
+            }
+            // Rappel « veille » : seulement en soiree, a partir de l'heure du programme du lendemain,
+            // jamais la nuit (un evenement d'une journee le declenchait a minuit). Le rappel
+            // « peu avant » n'est pas concerne.
+            if ($kind === 'day' && ($now->hour < PlatformSettings::int('reminders.digest_hour') || $now->hour >= 22)) {
                 continue;
             }
 
@@ -614,7 +620,7 @@ class AutomationTick extends Command
         return $this->sendOnce("resolutions:{$period}:{$slot}", function () use ($period, $slot, $now) {
             $taken = MonthlyResolution::where('period', $period)->pluck('user_id');
             $missing = User::whereHas('profile', fn ($p) => $p->where('is_completed', true))
-                ->where('activity_status', 'active')->whereNotIn('id', $taken)->pluck('id');
+                ->where(fn ($q) => ActivityService::whereEffective($q))->whereNotIn('id', $taken)->pluck('id');
             $month = $now->locale('fr')->isoFormat('MMMM');
 
             return Notifier::send($missing, 'resolution',
@@ -642,7 +648,7 @@ class AutomationTick extends Command
                 // Pas encore fait : resume manquant ou lecture non terminee (memes regles que l'ecran du membre).
                 $done = AssignmentProgress::doneUserIds($assignment);
                 $missing = User::whereHas('profile', fn ($p) => $p->where('is_completed', true))
-                    ->where('activity_status', 'active')->whereNotIn('id', $done)
+                    ->where(fn ($q) => ActivityService::whereEffective($q))->whereNotIn('id', $done)
                     ->when($assignment->created_by, fn ($q) => $q->where('id', '!=', $assignment->created_by))->pluck('id');
 
                 return Notifier::send($missing, 'assignment', 'Votre devoir : '.$assignment->title,
@@ -757,7 +763,7 @@ class AutomationTick extends Command
             $sent += $this->sendOnce("fiss:{$period}:{$type}", function () use ($period, $type, $now, $daysLeft) {
                 $filled = SpiritualHealthForm::where('period', $period)->pluck('user_id');
                 $missing = User::whereHas('profile', fn ($p) => $p->where('is_completed', true))
-                    ->where('activity_status', 'active')->whereNotIn('id', $filled)->pluck('id');
+                    ->where(fn ($q) => ActivityService::whereEffective($q))->whereNotIn('id', $filled)->pluck('id');
                 $month = French::de($now->locale('fr')->isoFormat('MMMM'));
 
                 $count = Notifier::send($missing, 'fiss', $type === 'last' ? 'Rappel : votre fiche '.$month.' à remplir' : 'Votre fiche '.$month.' vous attend',
@@ -778,7 +784,7 @@ class AutomationTick extends Command
             $filled = SpiritualHealthForm::where('period', $prevPeriod)->pluck('user_id')->all();
             $missing = Profile::where('is_completed', true)->where('created_at', '<=', $previous->copy()->endOfMonth())
                 ->whereNotIn('user_id', $filled ?: [0])
-                ->whereHas('user', fn ($u) => $u->where('activity_status', 'active'))
+                ->whereHas('user', fn ($u) => ActivityService::whereEffective($u))
                 ->get(['user_id', 'first_name', 'last_name', 'tribe_id']);
             $month = $previous->locale('fr')->isoFormat('MMMM YYYY');
             foreach ($missing->groupBy(fn ($p) => (int) $p->tribe_id) as $tribeId => $list) {
@@ -820,7 +826,7 @@ class AutomationTick extends Command
         return $sent + $this->sendOnce("vertumetre:{$period}:{$type}", function () use ($period, $type, $now) {
             $filled = VertumetreForm::where('period', $period)->pluck('user_id');
             $missing = User::whereHas('profile', fn ($p) => $p->where('is_completed', true))
-                ->where('activity_status', 'active')->whereNotIn('id', $filled)->pluck('id');
+                ->where(fn ($q) => ActivityService::whereEffective($q))->whereNotIn('id', $filled)->pluck('id');
             $month = $now->locale('fr')->isoFormat('MMMM YYYY');
 
             return Notifier::send($missing, 'fiss', 'Rappel : votre Vertumètre '.French::de($month),
@@ -844,7 +850,7 @@ class AutomationTick extends Command
             return 0;
         }
         $sent = 0;
-        User::where('activity_status', 'active')
+        User::where(fn ($q) => ActivityService::whereEffective($q))
             ->whereHas('profile', fn ($p) => $p->where('is_completed', true)->where(fn ($q) => $q->whereNull('email')->orWhere('email', '')))
             ->select(['id', 'notification_prefs'])->chunkById(200, function ($users) use ($now, &$sent) {
                 foreach ($users as $user) {
@@ -882,7 +888,7 @@ class AutomationTick extends Command
         $slot = $now->format('o').'-'.intdiv((int) $now->format('W'), 2);
         $sent = 0;
         Profile::where('is_completed', true)->where('completion', '<', 100)
-            ->whereHas('user', fn ($u) => $u->where('activity_status', 'active'))
+            ->whereHas('user', fn ($u) => ActivityService::whereEffective($u))
             ->where('created_at', '<=', $now->copy()->subDays(2))
             // Une transaction par lot : une seule ecriture disque pour 200 rappels au lieu de 400
             // (mesure MySQL, 5 000 membres : 191 s -> quelques secondes). Anti-doublon inchange.
@@ -946,7 +952,7 @@ class AutomationTick extends Command
             if ($r->sender) {
                 $name = $r->sender->profile?->full_name ?: $r->sender->phone;
                 $sent += $this->sendOnce("request-reminder:{$r->id}", fn () => Notifier::send(Recipients::followersOf($r->sender, 'requests.handle'), 'request',
-                    "Demande en attente : {$name}", 'Sans réponse depuis plus de 48 h.', '/admin/demandes', ['request_id' => $r->id], 'high'));
+                    "Demande en attente : {$name}", 'Sans réponse depuis plus de '.PlatformSettings::int('followups.request_after_hours').' h.', '/admin/demandes', ['request_id' => $r->id], 'high'));
             }
         }
 
@@ -1018,11 +1024,14 @@ class AutomationTick extends Command
                         }
                     }
                 });
+            // Delai reel des reglages (et non « une semaine » ecrit en dur).
+            $after = PlatformSettings::int('absences.after_days');
+            $since = $after === 7 ? 'une semaine' : "{$after} jours";
             foreach ($byLeader as $leaderId => $names) {
                 $sent += Notifier::send([$leaderId], 'activity',
-                    count($names) > 1 ? count($names).' membres sans connexion depuis une semaine' : $names[0].' : aucune connexion depuis une semaine',
+                    count($names) > 1 ? count($names)." membres sans connexion depuis {$since}" : $names[0]." : aucune connexion depuis {$since}",
                     (count($names) > 1 ? CalendarService::joinNames(array_slice($names, 0, 6)).(count($names) > 6 ? '…' : '').' · ' : '')
-                    .'Pas de connexion depuis plus de 7 jours. Un message ou un appel peut les encourager.',
+                    ."Pas de connexion depuis plus de {$after} jours. Un message ou un appel peut les encourager.",
                     '/admin/membres?statut=absents');
             }
 

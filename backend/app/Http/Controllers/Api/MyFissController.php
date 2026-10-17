@@ -7,6 +7,7 @@ use App\Models\FissEditRequest;
 use App\Models\SpiritualHealthForm;
 use App\Services\FissService;
 use App\Support\FissCatalog;
+use App\Support\PlatformSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -113,7 +114,8 @@ class MyFissController extends Controller
         }
         $daysLeft = (int) now()->diffInDays(now()->endOfMonth());
         $day = now()->day;
-        $level = $daysLeft <= 3 ? 'urgent' : ($day >= 20 ? 'advance' : 'info');
+        // Meme jour que le premier rappel envoye (reglage), et non le 20 ecrit en dur.
+        $level = $daysLeft <= 3 ? 'urgent' : ($day >= PlatformSettings::int('fiss.reminder_from_day') ? 'advance' : 'info');
 
         return ['level' => $level, 'days_left' => $daysLeft];
     }

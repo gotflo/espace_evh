@@ -5,10 +5,10 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\SpiritualHealthForm;
 use App\Models\User;
+use App\Services\FissService;
 use App\Support\FissCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 
 class FissController extends Controller
 {
@@ -24,7 +24,8 @@ class FissController extends Controller
             ->map(fn (SpiritualHealthForm $f) => [
                 'id' => $f->id,
                 'period' => $f->period,
-                'period_label' => Carbon::createFromFormat('Y-m', $f->period)->locale('fr')->isoFormat('MMMM YYYY'),
+                // Jamais createFromFormat('Y-m') : le 29, 30 ou 31, le jour courant debordait sur le mois suivant.
+                'period_label' => FissService::periodLabel($f->period),
                 'meditation' => $f->meditation,
                 'priere' => $f->priere,
                 'jeune' => $f->jeune,

@@ -77,7 +77,7 @@ class ReportService
     {
         return Profile::where('is_completed', true)
             ->when($tribeIds !== null, fn ($q) => $q->whereIn('tribe_id', $tribeIds ?: [0]))
-            ->with(['user:id,phone,last_login_at,last_seen_at,activity_status,activity_override', 'tribe:id,name', 'gem:id,name'])
+            ->with(['user:id,phone,last_login_at,last_seen_at,activity_status,activity_override,activity_changed_at', 'tribe:id,name', 'gem:id,name'])
             ->get();
     }
 
@@ -88,7 +88,15 @@ class ReportService
         $months = max(1, min(12, $months));
         $slot = now()->format('YmdH').intdiv((int) now()->format('i'), 10);
 
-        $key = "report:{$resolved['key']}:{$months}:{$slot}";
+        // « Mes tribus » depend du demandeur : les tribus resolues font partie de la cle, sinon un AP
+        // recevrait le rapport (en cache) des tribus d'un autre AP.
+        $tribeKey = '';
+        if ($resolved['tribe_ids'] !== null && $resolved['key'] === 'mine') {
+            $ids = array_map('intval', $resolved['tribe_ids']);
+            sort($ids);
+            $tribeKey = ':'.md5(implode(',', $ids));
+        }
+        $key = "report:{$resolved['key']}{$tribeKey}:{$months}:{$slot}";
         $cached = Cache::get($key);
         if ($cached !== null) {
             return $cached;
@@ -273,10 +281,11 @@ class ReportService
         $query = Profile::where('is_completed', true)
             ->when($resolved['tribe_ids'] !== null, fn ($q) => $q->whereIn('tribe_id', $resolved['tribe_ids'] ?: [0]));
         match ($filter) {
-            'active', 'inactive' => $query->whereHas('user', fn ($u) => $u->where(fn ($w) => $w->where('activity_override', $filter)
-                ->orWhere(fn ($x) => $x->whereNull('activity_override')->where('activity_status', $filter)))),
+            'active', 'inactive' => $query->whereHas('user', fn ($u) => ActivityService::whereEffective($u, $filter)),
             'incomplete' => $query->where('completion', '<', 100),
-            'fiss_missing' => $query->whereNotIn('user_id', SpiritualHealthForm::where('period', $period)->select('user_id')),
+            // Meme population que le compteur et la liste du rapport : membres ACTIFS sans fiche du mois.
+            'fiss_missing' => $query->whereNotIn('user_id', SpiritualHealthForm::where('period', $period)->select('user_id'))
+                ->whereHas('user', fn ($u) => ActivityService::whereEffective($u, 'active')),
             default => null,
         };
         $search = trim($search);

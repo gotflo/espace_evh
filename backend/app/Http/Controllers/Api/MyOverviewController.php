@@ -7,9 +7,11 @@ use App\Models\Attendance;
 use App\Models\Evaluation;
 use App\Models\Milestone;
 use App\Models\SpiritualHealthForm;
+use App\Services\AttendanceStats;
 use App\Services\FissService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class MyOverviewController extends Controller
 {
@@ -46,10 +48,11 @@ class MyOverviewController extends Controller
             ];
         }
 
-        // Assiduite detaillee : sessions pointees pour ce fidele sur 3 mois.
+        // Assiduite detaillee : ses 30 dernieres lignes pointees sur 3 mois ; le taux se calcule sur les
+        // sessions reellement appelees pour son groupe (et non sur ses propres lignes : plus de 100 %).
         $recent = Attendance::where('member_user_id', $user->id)->where('attended_on', '>=', $since)
             ->orderByDesc('attended_on')->limit(30)->get(['attended_on', 'event', 'kind', 'status']);
-        $sessions = $recent->where('kind', 'culte')->count();
+        $culte = AttendanceStats::culte($user, $since);
 
         // FISS du mois et evolution.
         $forms = SpiritualHealthForm::where('user_id', $user->id)->orderByDesc('period')->limit(6)->get();
@@ -59,8 +62,8 @@ class MyOverviewController extends Controller
             'assiduite' => $cultePresences,
             'attendance' => [
                 'present' => $cultePresences,
-                'sessions' => $sessions,
-                'rate' => $sessions ? round($cultePresences / $sessions * 100) : null,
+                'sessions' => $culte['sessions'],
+                'rate' => $culte['rate'],
                 'recent' => $recent->map(fn ($a) => [
                     'date' => substr((string) $a->attended_on, 0, 10),
                     'event' => $a->event,
@@ -74,7 +77,7 @@ class MyOverviewController extends Controller
                 'score' => $current?->spiritualScore(),
                 'trend' => $forms->reverse()->values()->map(fn ($f) => [
                     'period' => $f->period,
-                    'label' => ucfirst(\Illuminate\Support\Carbon::createFromFormat('Y-m-d', $f->period.'-01')->locale('fr')->isoFormat('MMM')),
+                    'label' => ucfirst(Carbon::createFromFormat('Y-m-d', $f->period.'-01')->locale('fr')->isoFormat('MMM')),
                     'score' => $f->spiritualScore(),
                 ]),
             ],

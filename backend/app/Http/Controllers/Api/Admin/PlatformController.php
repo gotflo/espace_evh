@@ -15,6 +15,7 @@ use App\Models\ResolutionResource;
 use App\Models\Role;
 use App\Models\Tribe;
 use App\Models\User;
+use App\Services\ActivityService;
 use App\Support\PlatformManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,7 +38,7 @@ class PlatformController extends Controller
             'accounts' => [
                 'members' => (clone $members)->count(),
                 'new_this_month' => (clone $members)->where('created_at', '>=', $now->copy()->startOfMonth())->count(),
-                'active' => User::exceptPlatformManagers()->where('activity_status', 'active')
+                'active' => User::exceptPlatformManagers()->where(fn ($q) => ActivityService::whereEffective($q))
                     ->whereHas('profile', fn ($p) => $p->where('is_completed', true))->count(),
                 'pending' => User::exceptPlatformManagers()->where('approval_status', User::PENDING)->whereNotNull('approval_requested_at')->count(),
                 'blocked' => User::exceptPlatformManagers()->whereNotNull('blocked_at')->count(),

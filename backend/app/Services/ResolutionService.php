@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Attendance;
 use App\Models\MonthlyResolution;
 use App\Models\ResolutionResource;
 use App\Models\ResourceView;
@@ -39,8 +38,10 @@ class ResolutionService
             'outcomes' => ResolutionCatalog::OUTCOMES,
             'current' => $current ? self::present($current) : null,
             'previous' => $previous ? self::present($previous) : null,
-            // Bilan a faire : resolutions du mois precedent pas encore evaluees.
-            'review_needed' => $previous !== null && $previous->outcome === null && $previous->filled() !== [],
+            // Bilan a faire : resolutions du mois dernier (exactement, comme review() et « Mon mois »)
+            // pas encore evaluees ; une fiche plus ancienne ne demande plus de bilan.
+            'review_needed' => $previous !== null && $previous->period === now()->subMonthNoOverflow()->format('Y-m')
+                && $previous->outcome === null && $previous->filled() !== [],
             'hints' => self::hints($user),
             'resources' => self::resources(false, $user),
             'history' => $rows->where('period', '!=', $period)->take(12)->map(fn ($r) => self::present($r))->values(),
@@ -144,13 +145,12 @@ class ResolutionService
                 ];
             }
         }
-        $since = now()->subMonths(3);
-        $cultes = Attendance::where('member_user_id', $user->id)->where('kind', 'culte')->where('attended_on', '>=', $since);
-        $sessions = (clone $cultes)->count();
-        if ($sessions > 0) {
-            $present = (clone $cultes)->where('status', 'present')->count();
-            $rate = (int) round($present / $sessions * 100);
-            $out['items']['assiduite'] = ['value' => "{$present}/{$sessions} cultes", 'level' => $rate >= 80 ? 'bon' : ($rate >= 50 ? 'moyen' : 'faible')];
+        // Sessions reellement appelees pour son groupe (ses seules lignes donnaient toujours 100 %).
+        $culte = AttendanceStats::culte($user, now()->subMonths(3));
+        if ($culte['rate'] !== null) {
+            $rate = $culte['rate'];
+            $present = min($culte['present'], $culte['sessions']);
+            $out['items']['assiduite'] = ['value' => "{$present}/{$culte['sessions']} cultes", 'level' => $rate >= 80 ? 'bon' : ($rate >= 50 ? 'moyen' : 'faible')];
         }
 
         return $out;

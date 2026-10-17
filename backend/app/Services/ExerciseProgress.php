@@ -28,6 +28,38 @@ class ExerciseProgress
     /** Credit de lecture accorde a un premier signal sans « depart » prealable (secondes). */
     private const FIRST_CREDIT = 20;
 
+    /** Duree plausible d'une video ou d'un audio (secondes) : de 10 s a 6 h. */
+    public const MIN_DURATION = 10;
+
+    public const MAX_DURATION = 21600;
+
+    /** Duree envoyee par un lecteur, retenue seulement si elle est plausible (sinon null). */
+    public static function plausibleDuration(mixed $reported): ?int
+    {
+        $seconds = is_numeric($reported) ? (int) round((float) $reported) : 0;
+
+        return $seconds >= self::MIN_DURATION && $seconds <= self::MAX_DURATION ? $seconds : null;
+    }
+
+    /**
+     * Duree a utiliser pour CE membre : celle que donne son propre lecteur. La duree commune (colonne $column
+     * du media) n'est enregistree (ou corrigee) que si elle est plausible ; elle reste indicative pour les
+     * ecrans de suivi. Un membre ne fixe donc plus la duree des autres (duree 1 = tout le monde « termine »,
+     * 43200 = personne ne peut terminer).
+     */
+    public static function memberDuration(Model $media, string $column, array $data): int
+    {
+        $reported = self::plausibleDuration($data['duration'] ?? null);
+        if ($reported !== null && self::plausibleDuration($media->{$column}) === null) {
+            $media->newQuery()->whereKey($media->getKey())
+                ->where(fn ($q) => $q->whereNull($column)->orWhere($column, '<', self::MIN_DURATION)->orWhere($column, '>', self::MAX_DURATION))
+                ->update([$column => $reported]);
+            $media->{$column} = $reported;
+        }
+
+        return $reported ?? 0;
+    }
+
     public static function isDone(Exercise $exercise, ?ExerciseVideoView $view, ?ExerciseResponse $response): bool
     {
         $videoOk = ! $exercise->isVideo() || ($view && $view->completed_at);
@@ -88,13 +120,8 @@ class ExerciseProgress
      */
     public static function record(Exercise $exercise, User $user, array $data): ExerciseVideoView
     {
-        // Duree : fixee par le premier lecteur qui la connait (bornee a 12 h).
-        $reported = (int) round((float) ($data['duration'] ?? 0));
-        if (! $exercise->video_duration && $reported >= 1 && $reported <= 43200) {
-            Exercise::whereKey($exercise->id)->whereNull('video_duration')->update(['video_duration' => $reported]);
-            $exercise->video_duration = $reported;
-        }
-        $duration = (int) ($exercise->video_duration ?: $reported);
+        // Duree donnee par le lecteur de ce membre (la duree commune reste indicative).
+        $duration = self::memberDuration($exercise, 'video_duration', $data);
 
         return DB::transaction(function () use ($exercise, $user, $data, $duration) {
             return self::apply(self::lockedView($exercise, $user), $duration, $data);

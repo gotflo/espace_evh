@@ -43,7 +43,8 @@ class ProfileController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
             'photo' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp,gif', 'max:5120'], // 5 Mo
             // Champs personnels enrichis
-            'email' => ['nullable', 'string', 'max:150', 'email:rfc'],
+            // Adresse « simple » : ni guillemets, ni espace ou retour a la ligne, ni adresse IP entre crochets.
+            'email' => ['nullable', 'string', 'max:150', 'email:strict', 'not_regex:/[\s"\[\]]/'],
             'facebook' => ['nullable', 'string', 'max:150'],
             'marital_status' => ['nullable', 'in:celibataire,marie,veuf,divorce,fiance,concubinage'],
             'wedding_day' => ['nullable', 'integer', 'min:1', 'max:31'],
@@ -53,7 +54,9 @@ class ProfileController extends Controller
             'year_verse' => ['nullable', 'string', 'max:255'],
         ], [
             'email.email' => 'Cette adresse courriel n\'est pas valide (exemple : marie@gmail.com).',
+            'email.not_regex' => 'Cette adresse courriel n\'est pas valide (exemple : marie@gmail.com).',
         ]);
+        // Un champ envoye vide (null ou "") efface la valeur ; un champ absent la garde.
         // Meme forme que l'adresse ajoutee depuis le bandeau : minuscules, sans espaces.
         if (array_key_exists('email', $data)) {
             $data['email'] = filled($data['email']) ? mb_strtolower(trim($data['email'])) : null;
@@ -68,8 +71,9 @@ class ProfileController extends Controller
                 throw ValidationException::withMessages([$d => $msg]);
             }
         }
-        // La date de mariage ne concerne que les personnes mariees.
-        if (($data['marital_status'] ?? $profile->marital_status) !== 'marie') {
+        // La date de mariage ne concerne que les personnes mariees (situation envoyee vide = effacee).
+        $marital = array_key_exists('marital_status', $data) ? $data['marital_status'] : $profile->marital_status;
+        if ($marital !== 'marie') {
             $data['wedding_day'] = null;
             $data['wedding_month'] = null;
         }
@@ -105,8 +109,9 @@ class ProfileController extends Controller
 
         // Matricule : VHC + 1re lettre Nom + 1re lettre Prenom + jour + mois de naissance (JJMM).
         // Ex. Jean Fidele ne un 15/05 -> VHCFJ1505.
-        $day = $data['birth_day'] ?? $profile->birth_day;
-        $month = $data['birth_month'] ?? $profile->birth_month;
+        // Jour ou mois envoye vide : efface aussi dans le matricule (et non l'ancienne valeur).
+        $day = array_key_exists('birth_day', $data) ? $data['birth_day'] : $profile->birth_day;
+        $month = array_key_exists('birth_month', $data) ? $data['birth_month'] : $profile->birth_month;
         $base = $this->matriculeBase($data['last_name'], $data['first_name'], $day, $month);
         $storedBase = preg_replace('/-\d+$/', '', (string) $profile->matricule);
         if ($storedBase !== $base) {

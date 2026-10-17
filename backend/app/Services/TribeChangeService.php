@@ -164,7 +164,8 @@ class TribeChangeService
             'Votre changement de tribu a été validé.', '/mon-profil');
         $name = $profile->full_name;
         Notifier::send(array_diff(Recipients::tribeLeadersFor($req->to_tribe_id, 'members.view_scope'), [$req->user_id]),
-            'member', "Nouveau membre dans la tribu : {$name}", "Arrive de la tribu {$req->fromTribe?->name}.", '/admin/membres/'.$req->user_id);
+            'member', "Nouveau membre dans la tribu : {$name}",
+            $req->fromTribe?->name ? "Arrivé(e) de la tribu {$req->fromTribe->name}." : 'Changement de tribu validé.', '/admin/membres/'.$req->user_id);
     }
 
     /** Personnes a prevenir : responsables de l'ancienne et de la nouvelle tribu (ou autorites). */

@@ -117,8 +117,9 @@ class PermissionsByModuleTest extends TestCase
 
     public function test_the_migration_converts_old_roles_and_rolls_back_cleanly(): void
     {
-        // Role de responsable de departement, reglages, lectures des ressources, services, appareils de confiance, puis permissions.
-        Artisan::call('migrate:rollback', ['--step' => 7]);
+        // Motif des blocages de rendez-vous, role de responsable de departement, reglages, lectures des ressources,
+        // services, appareils de confiance, puis permissions.
+        Artisan::call('migrate:rollback', ['--step' => 8]);
         $this->assertNotNull(Permission::where('key', 'content.manage')->first());
         $this->assertNull(Permission::where('key', 'verses.view')->first());
         $this->assertNull(Permission::where('key', 'settings.manage')->first());

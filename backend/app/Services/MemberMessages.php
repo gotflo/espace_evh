@@ -27,7 +27,7 @@ class MemberMessages
     {
         $count = 0;
         foreach (collect($userIds)->unique()->chunk(200) as $chunk) {
-            $users = User::with('profile')->whereIn('id', $chunk->all())->where('activity_status', 'active')
+            $users = ActivityService::whereEffective(User::with('profile')->whereIn('id', $chunk->all()))
                 ->whereHas('profile', fn ($p) => $p->where('is_completed', true))->get();
             // Un lot = une seule ecriture validee (et non 200) : publier pour toute l'eglise reste rapide.
             DB::transaction(function () use ($users, $fn, &$count) {

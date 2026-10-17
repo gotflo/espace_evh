@@ -7,10 +7,14 @@ use App\Models\EventParticipation;
 use App\Models\Exercise;
 use App\Models\ExerciseResponse;
 use App\Models\ExerciseVideoView;
+use App\Models\FamilyLink;
 use App\Models\Profile;
 use App\Models\SpiritualHealthForm;
 use App\Models\User;
+use App\Support\Audience;
+use App\Support\French;
 use App\Support\Holidays;
+use App\Support\PlatformSettings;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -142,7 +146,7 @@ class CalendarService
         if ($user->canBroadcastAll()) {
             return true;
         }
-        $options = \App\Support\Audience::options($user);
+        $options = Audience::options($user);
         $allowed = [
             'tribe' => array_column($options['tribes'], 'id'),
             'gem' => array_column($options['gems'], 'id'),
@@ -164,7 +168,7 @@ class CalendarService
         $profiles = Profile::where('is_completed', true)->where('marital_status', 'marie')
             ->whereNotNull('wedding_day')->whereIn('wedding_month', self::monthsBetween($from, $to))
             ->get(['user_id', 'first_name', 'last_name', 'wedding_day', 'wedding_month', 'spouse_name']);
-        $spouses = \App\Models\FamilyLink::where('relation', 'spouse')->where('status', 'confirmed')
+        $spouses = FamilyLink::where('relation', 'spouse')->where('status', 'confirmed')
             ->whereIn('user_id', $profiles->pluck('user_id'))->pluck('relative_user_id', 'user_id');
         $partners = Profile::whereIn('user_id', $spouses->values()->filter())->get(['user_id', 'first_name', 'last_name'])->keyBy('user_id');
 
@@ -275,10 +279,11 @@ class CalendarService
     public static function tasks(User $user, Carbon $from, Carbon $to): array
     {
         $out = [];
-        $exercises = self::exercisesFor($user)
+        // Module Exercices desactive dans les reglages : aucune echeance proposee (ses pages sont fermees).
+        $exercises = PlatformSettings::module('exercises') ? self::exercisesFor($user)
             ->whereNotNull('closes_at')
             ->whereBetween('closes_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()])
-            ->get();
+            ->get() : collect();
         $responses = ExerciseResponse::where('user_id', $user->id)->whereIn('exercise_id', $exercises->pluck('id'))->get()->keyBy('exercise_id');
         $views = ExerciseVideoView::where('user_id', $user->id)->whereIn('exercise_id', $exercises->pluck('id'))->get()->keyBy('exercise_id');
         foreach ($exercises as $ex) {
@@ -303,7 +308,7 @@ class CalendarService
                 $out[] = [
                     'key' => 'fiss-'.$month->format('Y-m'),
                     'kind' => 'task',
-                    'title' => 'Fiche FISS de '.$month->locale('fr')->isoFormat('MMMM'),
+                    'title' => 'Fiche FISS '.French::de($month->locale('fr')->isoFormat('MMMM')),
                     'date' => $deadline->toDateString(),
                     'all_day' => true,
                     'done' => $filled,

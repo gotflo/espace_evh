@@ -95,25 +95,36 @@ class EventController extends Controller
     public function update(Request $request, Event $event): JsonResponse
     {
         $this->authorizeManage($request, $event);
-        $data = $this->validated($request);
+        $data = $this->validated($request, $event);
         $scopes = $request->has('scopes') ? Audience::resolve($request->user(), Audience::fromRequest($request)) : null;
+        // Nouvelle image enregistree d'abord : l'ancienne n'est supprimee qu'une fois la fiche a jour
+        // (une image refusee ou une erreur ne laisse jamais l'evenement sans image).
+        $oldImage = null;
         if ($request->hasFile('image')) {
-            if ($event->image_path) {
-                Storage::disk('public')->delete($event->image_path);
-            }
             $data['image_path'] = ImageOptimizer::store($request->file('image'), 'events', ImageOptimizer::CONTENT);
+            $oldImage = $event->image_path;
         }
 
         $before = [$event->starts_at?->toIso8601String(), $event->location, $event->recurrence, $event->all_day];
-        DB::transaction(function () use ($event, $data, $scopes) {
-            $old = $event->only(['title', 'starts_at', 'ends_at', 'location', 'recurrence']);
-            $event->update($data);
-            if ($scopes !== null) {
-                $event->syncScopes($scopes);
+        try {
+            DB::transaction(function () use ($event, $data, $scopes) {
+                $old = $event->only(['title', 'starts_at', 'ends_at', 'location', 'recurrence']);
+                $event->update($data);
+                if ($scopes !== null) {
+                    $event->syncScopes($scopes);
+                }
+                [$o, $n] = Audit::diff(array_map('strval', $old), array_map('strval', $event->only(['title', 'starts_at', 'ends_at', 'location', 'recurrence'])));
+                Audit::log('event.updated', $event, null, $o, $n + ($scopes !== null ? ['scopes' => $scopes] : []));
+            });
+        } catch (\Throwable $e) {
+            if (isset($data['image_path'])) {
+                Storage::disk('public')->delete($data['image_path']);
             }
-            [$o, $n] = Audit::diff(array_map('strval', $old), array_map('strval', $event->only(['title', 'starts_at', 'ends_at', 'location', 'recurrence'])));
-            Audit::log('event.updated', $event, null, $o, $n + ($scopes !== null ? ['scopes' => $scopes] : []));
-        });
+            throw $e;
+        }
+        if ($oldImage && $oldImage !== ($data['image_path'] ?? null)) {
+            Storage::disk('public')->delete($oldImage);
+        }
         $event->refresh()->load('scopes');
         $after = [$event->starts_at?->toIso8601String(), $event->location, $event->recurrence, $event->all_day];
 
@@ -148,16 +159,24 @@ class EventController extends Controller
         return response()->json(['message' => 'Événement supprimé.']);
     }
 
-    /** @return array<string, mixed> */
-    private function validated(Request $request): array
+    /**
+     * Champs valides. En modification ($event), seuls les champs envoyes changent : un champ absent
+     * garde sa valeur, un champ envoye vide (null ou "") l'efface (description, fin, lieu, fin de repetition).
+     *
+     * @return array<string, mixed>
+     */
+    private function validated(Request $request, ?Event $event = null): array
     {
+        $required = $event ? ['sometimes', 'required'] : ['required'];
+        // Fin comparee au debut envoye, sinon au debut actuel de l'evenement.
+        $startRef = $event && ! $request->has('starts_at') ? $event->starts_at->toDateTimeString() : 'starts_at';
         $data = $request->validate([
-            'title' => ['required', 'string', 'max:150'],
+            'title' => [...$required, 'string', 'max:150'],
             'description' => ['nullable', 'string', 'max:5000'],
             'image' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp,gif', 'max:8192'], // 8 Mo
-            'category' => ['required', 'in:'.implode(',', array_keys(self::CATEGORIES))],
-            'starts_at' => ['required', 'date'],
-            'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
+            'category' => [...$required, 'in:'.implode(',', array_keys(self::CATEGORIES))],
+            'starts_at' => [...$required, 'date'],
+            'ends_at' => ['nullable', 'date', 'after_or_equal:'.$startRef],
             'all_day' => ['nullable', 'boolean'],
             'recurrence' => ['nullable', 'in:'.implode(',', array_keys(Event::RECURRENCES))],
             'recurrence_until' => ['nullable', 'date'],
@@ -165,21 +184,38 @@ class EventController extends Controller
             'remind_all' => ['nullable', 'boolean'],
         ]);
         unset($data['image']); // le fichier est traite a part (store/update)
+        $sent = fn (string $key) => $event === null || array_key_exists($key, $data);
 
-        $data['all_day'] = (bool) ($data['all_day'] ?? false);
+        if ($sent('all_day')) {
+            $data['all_day'] = (bool) ($data['all_day'] ?? false);
+        }
+        if ($sent('recurrence')) {
+            $data['recurrence'] = $data['recurrence'] ?? 'none';
+        }
+        $recurrence = $data['recurrence'] ?? $event?->recurrence ?? 'none';
         // Rappel a tous avant chaque occurrence : reserve aux rendez-vous recurrents (cultes...).
-        $data['remind_all'] = (bool) ($data['remind_all'] ?? false) && ($data['recurrence'] ?? 'none') !== 'none';
-        $data['recurrence'] = $data['recurrence'] ?? 'none';
-        if ($data['recurrence'] === 'none') {
+        // Modifie seulement s'il est envoye : le formulaire d'administration ne l'envoie pas, et un
+        // culte du dimanche ne doit pas perdre ses rappels (ni disparaitre des horaires) a chaque modification.
+        if ($sent('remind_all')) {
+            $data['remind_all'] = (bool) ($data['remind_all'] ?? false) && $recurrence !== 'none';
+        } elseif ($recurrence === 'none') {
+            $data['remind_all'] = false;
+        }
+        if ($recurrence === 'none') {
             $data['recurrence_until'] = null;
         }
         // Fin de repetition : au plus tot le jour du debut (comparaison sur la date seule).
-        if (! empty($data['recurrence_until']) && Carbon::parse($data['recurrence_until'])->toDateString() < Carbon::parse($data['starts_at'])->toDateString()) {
+        $startsAt = $data['starts_at'] ?? $event?->starts_at;
+        if (! empty($data['recurrence_until']) && Carbon::parse($data['recurrence_until'])->toDateString() < Carbon::parse($startsAt)->toDateString()) {
             throw ValidationException::withMessages(['recurrence_until' => 'La fin de la répétition doit être après le début.']);
         }
-        if ($data['all_day']) {
-            $data['starts_at'] = Carbon::parse($data['starts_at'])->startOfDay();
-            $data['ends_at'] = ! empty($data['ends_at']) ? Carbon::parse($data['ends_at'])->startOfDay() : null;
+        if ($data['all_day'] ?? $event?->all_day ?? false) {
+            if (isset($data['starts_at'])) {
+                $data['starts_at'] = Carbon::parse($data['starts_at'])->startOfDay();
+            }
+            if ($sent('ends_at')) {
+                $data['ends_at'] = ! empty($data['ends_at']) ? Carbon::parse($data['ends_at'])->startOfDay() : null;
+            }
         }
 
         return $data;

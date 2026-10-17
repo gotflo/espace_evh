@@ -41,12 +41,8 @@ class ResourceProgress
     /** Signal du lecteur. */
     public static function record(ResolutionResource $r, User $user, array $data): ResourceView
     {
-        $reported = (int) round((float) ($data['duration'] ?? 0));
-        if (! $r->media_duration && $reported >= 1 && $reported <= 43200) {
-            ResolutionResource::whereKey($r->id)->whereNull('media_duration')->update(['media_duration' => $reported]);
-            $r->media_duration = $reported;
-        }
-        $duration = (int) ($r->media_duration ?: $reported);
+        // Duree donnee par le lecteur de ce membre (la duree commune reste indicative).
+        $duration = ExerciseProgress::memberDuration($r, 'media_duration', $data);
 
         return DB::transaction(fn () => ExerciseProgress::apply(self::lockedView($r, $user), $duration, $data));
     }

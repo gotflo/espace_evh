@@ -89,6 +89,8 @@ class LeaderReportController extends Controller
             'closes_on' => LeaderReportService::closesOn($data['period'])->toDateString(),
             'status' => $report?->status ?? 'missing',
             'report_id' => $report?->id,
+            // Derniere sauvegarde sur le serveur : un brouillon local plus ancien ne doit pas l'ecraser.
+            'updated_at' => $report?->updated_at?->toIso8601String(),
             'answers' => (object) ($report?->answers ?? []),
             'steps' => LeaderReportCatalog::steps($scope['kind']),
             'context' => LeaderReportService::context($scope['kind'], $scope['scope_id'], $data['period']),

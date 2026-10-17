@@ -4,16 +4,21 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Department;
+use App\Models\Gem;
 use App\Models\Profile;
 use App\Models\Role;
 use App\Models\Tribe;
+use App\Models\User;
 use App\Services\Notifier;
 use App\Support\Audit;
 use App\Support\DepartmentLeadership;
+use App\Support\Like;
+use App\Support\PlatformManager;
 use App\Support\RoleGrants;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class OrgController extends Controller
@@ -27,9 +32,11 @@ class OrgController extends Controller
         }
 
         return response()->json([
-            'tribes' => Tribe::withCount('members')->orderBy('name')->get()
+            // Membres comptes : profils completes seulement (comme partout ailleurs).
+            'tribes' => Tribe::withCount(['members' => fn ($q) => $q->where('is_completed', true)])->orderBy('name')->get()
                 ->map(fn (Tribe $t) => ['id' => $t->id, 'name' => $t->name, 'members_count' => $t->members_count]),
-            'departments' => Department::withCount('members')->with('leaders.profile:id,user_id,first_name,last_name')->orderBy('name')->get()
+            'departments' => Department::withCount(['members' => fn ($q) => $q->where('profiles.is_completed', true)])
+                ->with('leaders.profile:id,user_id,first_name,last_name')->orderBy('name')->get()
                 ->map(fn (Department $d) => [
                     'id' => $d->id, 'name' => $d->name, 'members_count' => $d->members_count, 'tracks_rehearsal' => $d->tracks_rehearsal,
                     'description' => $d->description, 'is_active' => $d->is_active,
@@ -53,9 +60,29 @@ class OrgController extends Controller
         return response()->json(['message' => 'Tribu renommée.']);
     }
 
+    /**
+     * Suppression d'une tribu (ses GEMs disparaissent avec elle) : les roles qui y etaient rattaches
+     * (patriarche, AP, gardes de ses GEMs) et les portees de publication qui la visaient sont retires,
+     * pour qu'aucun droit ni aucune audience ne pointe vers une tribu disparue. Trace dans le journal.
+     */
     public function destroyTribe(Tribe $tribe): JsonResponse
     {
-        $tribe->delete();
+        $gemIds = Gem::where('tribe_id', $tribe->id)->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $scoped = fn (string $kindColumn) => fn ($q) => $q
+            ->where(fn ($t) => $t->where($kindColumn, 'tribe')->where('scope_id', $tribe->id))
+            ->orWhere(fn ($g) => $g->where($kindColumn, 'gem')->whereIn('scope_id', $gemIds ?: [0]));
+
+        DB::transaction(function () use ($tribe, $gemIds, $scoped) {
+            $roles = DB::table('role_user')->where($scoped('scope_kind'));
+            Audit::log('tribe.deleted', $tribe, null, ['name' => $tribe->name], [], [
+                'member_profile_ids' => $tribe->members()->pluck('id'),
+                'gem_ids' => $gemIds,
+                'role_holders' => (clone $roles)->pluck('user_id')->unique()->values(),
+            ]);
+            $roles->delete();
+            DB::table('publication_scopes')->where($scoped('scope_type'))->delete();
+            $tribe->delete();
+        });
 
         return response()->json(['message' => 'Tribu supprimée.']);
     }
@@ -117,6 +144,32 @@ class OrgController extends Controller
         }
 
         return response()->json(['message' => 'Responsables du département mis à jour.']);
+    }
+
+    /**
+     * Recherche d'un responsable a nommer (y compris par le compte de gestion, qui ne voit pas les fiches
+     * des membres) : au plus 8 noms de membres au profil complet, compte valide et non bloque. Rien d'autre
+     * (ni telephone ni autre donnee).
+     */
+    public function departmentCandidates(Request $request, Department $department): JsonResponse
+    {
+        $q = $request->validate(['q' => ['required', 'string', 'min:2', 'max:60']])['q'];
+        $words = array_slice(preg_split('/\s+/u', trim($q), -1, PREG_SPLIT_NO_EMPTY) ?: [], 0, 4);
+
+        $query = Profile::where('is_completed', true)
+            ->whereHas('user', fn ($u) => $u->exceptPlatformManagers()->where('approval_status', User::APPROVED)->whereNull('blocked_at'))
+            ->whereNotIn('user_id', PlatformManager::userIds() ?: [0]);
+        // Chaque mot dans le prenom ou le nom (« Marie Tremb » trouve Marie Tremblay).
+        foreach ($words as $word) {
+            $query->where(function ($w) use ($word) {
+                Like::contains($w, 'first_name', $word);
+                Like::contains($w, 'last_name', $word, 'or');
+            });
+        }
+
+        return response()->json(['candidates' => $query->orderBy('first_name')->orderBy('last_name')->orderBy('id')->limit(8)
+            ->get(['user_id', 'first_name', 'last_name'])
+            ->map(fn (Profile $p) => ['user_id' => $p->user_id, 'name' => trim($p->first_name.' '.$p->last_name)])->values()]);
     }
 
     /** Membres d'un departement (pour choisir ses responsables). */

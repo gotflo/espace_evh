@@ -16,9 +16,12 @@ class MyEmailController extends Controller
 {
     public function update(Request $request): JsonResponse
     {
-        $data = $request->validate(['email' => ['required', 'string', 'max:150', 'email:rfc']], [
+        // Adresse « simple » seulement : ni partie entre guillemets, ni espace ou retour a la ligne, ni
+        // adresse IP entre crochets (acceptees par la RFC, refusees par les messageries et dangereuses en en-tete).
+        $data = $request->validate(['email' => ['required', 'string', 'max:150', 'email:strict', 'not_regex:/[\s"\[\]]/']], [
             'email.required' => 'Indiquez votre adresse courriel.',
             'email.email' => 'Cette adresse courriel n\'est pas valide (exemple : marie@gmail.com).',
+            'email.not_regex' => 'Cette adresse courriel n\'est pas valide (exemple : marie@gmail.com).',
         ]);
         $profile = $request->user()->profile;
         abort_unless($profile, 409, 'Terminez d\'abord votre inscription.');

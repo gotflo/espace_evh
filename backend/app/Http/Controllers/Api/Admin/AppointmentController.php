@@ -12,6 +12,7 @@ use App\Support\Audit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Rendez-vous avec le pasteur, cote pasteur et protocole : file des demandes par priorite, seances a
@@ -105,7 +106,7 @@ class AppointmentController extends Controller
     /** « Faire entrer » : la personne recoit « C'est votre tour » (au plus une fois par minute). */
     public function call(Request $request, Appointment $appointment): JsonResponse
     {
-        abort_unless(AppointmentService::canOrganize($request->user()), 403, 'Réservé au pasteur et au protocole.');
+        abort_unless(AppointmentService::canOrganizeAppointment($request->user(), $appointment), 403, 'Réservé au pasteur concerné et au protocole.');
         $sent = AppointmentService::call($appointment->load('member.profile'), true);
 
         return response()->json(['message' => $sent ? ($appointment->member?->profile?->full_name ?: 'La personne').' est appelé(e).' : 'Déjà appelé(e) à l\'instant.']);
@@ -162,9 +163,13 @@ class AppointmentController extends Controller
     {
         $data = $request->validate([
             'host_id' => ['required', 'integer'], 'date' => ['required', 'date_format:Y-m-d'],
-            'starts_at' => ['nullable', 'date_format:H:i', 'required_with:ends_at'], 'ends_at' => ['nullable', 'date_format:H:i', 'required_with:starts_at', 'after:starts_at'],
-            'reason' => ['nullable', 'string', 'max:255'],
+            'starts_at' => ['nullable', 'date_format:H:i', 'required_with:ends_at'], 'ends_at' => ['nullable', 'date_format:H:i', 'required_with:starts_at'],
+            'reason' => ['nullable', 'string', 'max:500'],
         ]);
+        // Fin apres le debut ; « 00:00 » = minuit, fin du dernier creneau d'une plage prolongee jusqu'a minuit.
+        if (! empty($data['starts_at']) && ! empty($data['ends_at']) && $data['ends_at'] !== '00:00' && $data['ends_at'] <= $data['starts_at']) {
+            throw ValidationException::withMessages(['ends_at' => 'L\'heure de fin doit être après l\'heure de début.']);
+        }
         $host = $this->managed($request, (int) $data['host_id']);
         $requeued = AppointmentService::block($request->user(), $host->id, $data['date'], $data['starts_at'] ?? null, $data['ends_at'] ?? null, $data['reason'] ?? null);
 

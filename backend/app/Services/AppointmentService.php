@@ -80,6 +80,21 @@ class AppointmentService
         return $user->hasPermission('appointments.organize') || self::isHost($user);
     }
 
+    /**
+     * Agir sur UN rendez-vous (deplacer, annuler, suite donnee, priorite, appel) : le protocole, le pasteur
+     * qui le recoit ou le Pasteur Resident ; jamais un autre pasteur sur les rendez-vous d'un collegue.
+     */
+    public static function canOrganizeAppointment(User $user, Appointment $appointment): bool
+    {
+        return $user->hasPermission('appointments.organize') || (int) $appointment->host_id === (int) $user->id || $user->isSuperAdmin();
+    }
+
+    /** Fin d'un blocage : « 00:00 » est la fin de la journee (minuit), et non son debut. */
+    private static function blockEnd(string $date, string $hhmm): Carbon
+    {
+        return substr($hhmm, 0, 5) === '00:00' ? Carbon::parse($date)->addDay()->startOfDay() : Carbon::parse("{$date} {$hhmm}");
+    }
+
     /** Disponibilites d'un pasteur : lui-meme, ou le Pasteur Resident. */
     public static function canManage(User $viewer, User $host): bool
     {
@@ -190,8 +205,9 @@ class AppointmentService
                 continue;
             }
             $first = $spans ? $spans[0][0]->format('H:i') : $dayBooked->first()->starts_at->format('H:i');
-            $last = $spans ? collect($spans)->max(fn ($p) => $p[1])->format('H:i') : $dayBooked->last()->ends_at->format('H:i');
-            $lastSlotEnd = Carbon::parse($date.' '.$last);
+            // Fin reelle (et non « date + 00:00 ») : une plage prolongee jusqu'a minuit ne passe pas pour terminee.
+            $lastSlotEnd = ($spans ? collect($spans)->max(fn ($p) => $p[1]) : $dayBooked->last()->ends_at)->copy();
+            $last = $lastSlotEnd->toDateString() !== $date ? 'minuit' : self::time($lastSlotEnd->format('H:i'));
             if (! $forStaff && $lastSlotEnd->lte($now)) {
                 continue;
             }
@@ -199,7 +215,7 @@ class AppointmentService
             $out[] = [
                 'date' => $date,
                 'label' => self::dayLabel($day),
-                'range' => self::time($first).' – '.self::time($last),
+                'range' => self::time($first).' – '.$last,
                 'starts_at' => Carbon::parse($date.' '.$first)->toIso8601String(),
                 'blocked' => (bool) $fullBlock,
                 'block_id' => $fullBlock?->id,
@@ -221,7 +237,7 @@ class AppointmentService
         $out = ['start' => $start->format('H:i'), 'end' => $end->format('H:i'), 'at' => $start->toIso8601String()];
         $appointment = $booked->first(fn ($a) => $a->starts_at->lt($end) && $a->ends_at->gt($start));
         $block = $fullBlock ?? $blocks->first(fn ($b) => $b->starts_at !== null
-            && Carbon::parse($start->toDateString().' '.$b->starts_at)->lt($end) && Carbon::parse($start->toDateString().' '.$b->ends_at)->gt($start));
+            && Carbon::parse($start->toDateString().' '.$b->starts_at)->lt($end) && self::blockEnd($start->toDateString(), (string) $b->ends_at)->gt($start));
 
         if ($appointment) {
             if (! $forStaff) {
@@ -265,7 +281,9 @@ class AppointmentService
                     return null;
                 }
 
-                return Carbon::parse($s['date'].' '.$slot['end']);
+                // Debut + duree d'un creneau (et non la date + « 00:00 » : fin avant le debut pour le dernier
+                // creneau d'une plage prolongee jusqu'a minuit).
+                return $start->copy()->addMinutes(max(5, self::settings($hostId)->slot_minutes));
             }
         }
 
@@ -370,7 +388,7 @@ class AppointmentService
     public static function cancel(User $by, Appointment $appointment, ?string $reason): void
     {
         $isMember = $by->id === $appointment->user_id;
-        abort_unless($isMember || self::canOrganize($by), 403, 'Vous ne pouvez pas annuler ce rendez-vous.');
+        abort_unless($isMember || self::canOrganizeAppointment($by, $appointment), 403, 'Vous ne pouvez pas annuler ce rendez-vous.');
         abort_unless($appointment->isActive(), 409, 'Ce rendez-vous n\'est plus actif.');
         abort_if($appointment->starts_at && $appointment->starts_at->lte(now()) && $isMember, 409, 'Ce rendez-vous a déjà commencé.');
 
@@ -395,7 +413,7 @@ class AppointmentService
     /** Deplace un rendez-vous sur un creneau libre (le membre est prevenu). */
     public static function assign(User $by, Appointment $appointment, Carbon $start, bool $notify = true): void
     {
-        abort_unless(self::canOrganize($by), 403, 'Réservé au pasteur et au protocole.');
+        abort_unless(self::canOrganizeAppointment($by, $appointment), 403, 'Réservé au pasteur concerné et au protocole.');
         abort_unless($appointment->isActive(), 409, 'Ce rendez-vous n\'est plus actif.');
         abort_if($start->lt(now()->subMinutes(5)), 422, 'Ce créneau est déjà passé.');
         $end = self::isFree($appointment->host_id, $start, true, $appointment->id);
@@ -428,7 +446,7 @@ class AppointmentService
      */
     public static function outcome(User $by, Appointment $appointment, string $status): ?Appointment
     {
-        abort_unless(self::canOrganize($by), 403, 'Réservé au pasteur et au protocole.');
+        abort_unless(self::canOrganizeAppointment($by, $appointment), 403, 'Réservé au pasteur concerné et au protocole.');
         abort_unless(in_array($appointment->status, ['confirmed', 'done', 'no_show'], true) && $appointment->starts_at, 409, 'Ce rendez-vous n\'a pas eu lieu.');
         abort_if($appointment->starts_at->gt(now()) && ! $appointment->starts_at->isSameDay(now()), 409, 'Ce rendez-vous n\'est pas aujourd\'hui.');
         $wasWaiting = $appointment->status === 'confirmed';
@@ -474,7 +492,7 @@ class AppointmentService
 
     public static function setUrgency(User $by, Appointment $appointment, string $urgency): void
     {
-        abort_unless(self::canOrganize($by), 403, 'Réservé au pasteur et au protocole.');
+        abort_unless(self::canOrganizeAppointment($by, $appointment), 403, 'Réservé au pasteur concerné et au protocole.');
         abort_unless($appointment->isActive(), 409, 'Ce rendez-vous n\'est plus actif.');
         $appointment->forceFill(['urgency' => $urgency])->save();
     }
@@ -535,7 +553,7 @@ class AppointmentService
         abort_if(Carbon::parse($date)->lt(today()), 422, 'Choisissez une date à venir.');
         AppointmentBlock::create([
             'host_id' => $hostId, 'date' => $date, 'starts_at' => $start, 'ends_at' => $end,
-            'reason' => $reason ? mb_substr(trim($reason), 0, 255) : null, 'created_by' => $by->id,
+            'reason' => $reason ? mb_substr(trim($reason), 0, 500) : null, 'created_by' => $by->id,
         ]);
         Audit::log('appointment.blocked', null, null, [], ['date' => $date, 'from' => $start, 'to' => $end, 'reason' => $reason]);
 
@@ -602,7 +620,7 @@ class AppointmentService
         }
 
         return ! AppointmentBlock::where('host_id', $hostId)->where('date', $date)->get()->contains(fn ($b) => $b->starts_at === null
-            || (Carbon::parse("{$date} {$b->starts_at}")->lt($a->ends_at) && Carbon::parse("{$date} {$b->ends_at}")->gt($a->starts_at)));
+            || (Carbon::parse("{$date} {$b->starts_at}")->lt($a->ends_at) && self::blockEnd($date, (string) $b->ends_at)->gt($a->starts_at)));
     }
 
     /**

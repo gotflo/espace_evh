@@ -142,7 +142,7 @@ class ExerciseController extends Controller
      *
      * @param  array<int, int>|null  $visible
      * @param  array<string, array<int>>  $audiences  audiences deja calculees pendant cette requete
-     * @return array{audience_count: int, done_count: int, percent: int}
+     * @return array{audience_count: int, done_count: int, percent: int, remindable: int}
      */
     private static function progressOf(Exercise $e, User $user, ?array $visible, array &$audiences): array
     {
@@ -153,9 +153,14 @@ class ExerciseController extends Controller
         if ($visible !== null && ! self::seesEveryone($user, $e)) {
             $audience = array_filter($audience, fn ($id) => isset($visible[$id]));
         }
-        $done = count(array_intersect($audience, ExerciseProgress::doneUserIds($e)));
+        $doneIds = ExerciseProgress::doneUserIds($e);
+        $done = count(array_intersect($audience, $doneIds));
 
-        return ['audience_count' => count($audience), 'done_count' => $done, 'percent' => $audience ? (int) round($done / count($audience) * 100) : 0];
+        return [
+            'audience_count' => count($audience), 'done_count' => $done, 'percent' => $audience ? (int) round($done / count($audience) * 100) : 0,
+            // Meme calcul que la relance (audience suivie, sans l'auteur, pas encore terminee) ; 0 si ferme.
+            'remindable' => $e->isClosed() ? 0 : count(array_diff($audience, $doneIds)),
+        ];
     }
 
     /** @return array{name: string, role: string|null}|null */
@@ -179,10 +184,7 @@ class ExerciseController extends Controller
         $user = $request->user();
         abort_unless(self::canFollow($user, $exercise), 403, 'Cet exercice est hors de votre périmètre.');
         abort_if($exercise->isClosed(), 409, 'Cet exercice est fermé.');
-        $ids = array_diff(Audience::userIds($exercise->audienceList()), ExerciseProgress::doneUserIds($exercise), [(int) $exercise->created_by]);
-        if (! self::seesEveryone($user, $exercise)) {
-            $ids = array_intersect($ids, MemberScope::visibleUserIds($user));
-        }
+        $ids = self::remindableIds($user, $exercise);
         abort_if($ids === [], 422, 'Tout le monde a déjà terminé.');
         abort_unless(Notifier::once("exercise-nudge:{$exercise->id}:{$user->id}:".now()->toDateString()), 429, 'Relance déjà envoyée aujourd\'hui.');
         Notifier::send($ids, 'task_reminder', 'Rappel : '.$exercise->title, self::announceBody($exercise),
@@ -190,6 +192,23 @@ class ExerciseController extends Controller
         Audit::log('exercise.reminded', $exercise, null, [], ['count' => count($ids)]);
 
         return response()->json(['message' => count($ids) > 1 ? count($ids).' personnes relancées.' : '1 personne relancée.', 'count' => count($ids)]);
+    }
+
+    /**
+     * Personnes que « Relancer » toucherait : l'audience actuelle (sans l'auteur) qui n'a pas termine, limitee
+     * aux membres suivis par l'utilisateur. Meme calcul pour le bouton et pour l'envoi (plus de bouton affiche
+     * qui repond ensuite « Tout le monde a déjà terminé »).
+     *
+     * @return array<int, int>
+     */
+    private static function remindableIds(User $user, Exercise $exercise): array
+    {
+        $ids = array_diff(Audience::userIds($exercise->audienceList()), ExerciseProgress::doneUserIds($exercise), [(int) $exercise->created_by]);
+        if (! self::seesEveryone($user, $exercise)) {
+            $ids = array_intersect($ids, MemberScope::visibleUserIds($user));
+        }
+
+        return array_values($ids);
     }
 
     /** Exercices adresses a un membre, avec son avancement (pasteurs et responsables qui le suivent). */
@@ -420,6 +439,8 @@ class ExerciseController extends Controller
                 'in_progress' => $count('in_progress'),
                 'todo' => $count('todo'),
                 'skipped' => $rows->where('seek_count', '>', 0)->count(),
+                // Personnes que « Relancer » toucherait (exactement comme l'envoi) : 0 = pas de bouton.
+                'remindable' => $exercise->isClosed() ? 0 : count(self::remindableIds($user, $exercise)),
             ],
             'members' => $rows,
         ]);

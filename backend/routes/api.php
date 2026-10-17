@@ -480,6 +480,7 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
             Route::put('/departments/{department}', [OrgController::class, 'updateDepartment']);
             Route::delete('/departments/{department}', [OrgController::class, 'destroyDepartment']);
             Route::get('/departments/{department}/members', [OrgController::class, 'departmentMembers']);
+            Route::get('/departments/{department}/candidates', [OrgController::class, 'departmentCandidates']);
             Route::put('/departments/{department}/leaders', [OrgController::class, 'setDepartmentLeaders']);
         });
 

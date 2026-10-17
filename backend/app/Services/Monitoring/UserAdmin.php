@@ -152,7 +152,8 @@ class UserAdmin
     public static function block(User $user, string $reason): void
     {
         DB::transaction(function () use ($user, $reason) {
-            $user->forceFill(['blocked_at' => now(), 'blocked_reason' => mb_substr($reason, 0, 255)])->save();
+            // Lien d'abonnement a l'agenda annule : il faudra en regenerer un apres le deblocage.
+            $user->forceFill(['blocked_at' => now(), 'blocked_reason' => mb_substr($reason, 0, 255), 'calendar_token' => null])->save();
             self::revokeSessions($user);
             // Plus aucune notification sur ses appareils tant que le compte est bloque.
             DB::table('push_subscriptions')->where('user_id', $user->id)->delete();

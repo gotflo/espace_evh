@@ -15,6 +15,9 @@ use Illuminate\Support\Str;
 
 class CalendarController extends Controller
 {
+    /** Fuseau des heures ecrites dans le flux iCal (celui de l'eglise, avec son bloc VTIMEZONE). */
+    private const TZID = 'America/Toronto';
+
     /**
      * Tout ce qui est programme entre deux dates (vue mois / semaine / liste).
      * only=events : seulement les evenements (encart « Nos rendez-vous » du tableau de bord),
@@ -70,7 +73,8 @@ class CalendarController extends Controller
     public function ics(string $token): Response
     {
         $user = strlen($token) >= 32 ? User::where('calendar_token', $token)->first() : null;
-        abort_unless($user, 404);
+        // Compte bloque, non valide ou compte de gestion : meme reponse qu'un jeton inconnu.
+        abort_unless($user && ! $user->blocked_at && $user->isApproved() && ! $user->isPlatformManager(), 404);
 
         $from = now()->subMonths(2)->startOfDay();
         $events = CalendarService::eventsQuery($user)
@@ -88,9 +92,29 @@ class CalendarController extends Controller
             'CALSCALE:GREGORIAN',
             'METHOD:PUBLISH',
             'X-WR-CALNAME:'.$this->escape("Vases d'Honneur Chicoutimi"),
-            'X-WR-TIMEZONE:'.config('app.timezone'),
+            'X-WR-TIMEZONE:'.self::TZID,
             'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
             'X-PUBLISHED-TTL:PT1H',
+            // Fuseau de l'eglise (heure de l'Est, changements d'heure en mars et novembre) : les
+            // evenements recurrents gardent leur heure locale apres le changement d'heure.
+            'BEGIN:VTIMEZONE',
+            'TZID:'.self::TZID,
+            'X-LIC-LOCATION:'.self::TZID,
+            'BEGIN:DAYLIGHT',
+            'TZOFFSETFROM:-0500',
+            'TZOFFSETTO:-0400',
+            'TZNAME:EDT',
+            'DTSTART:19700308T020000',
+            'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU',
+            'END:DAYLIGHT',
+            'BEGIN:STANDARD',
+            'TZOFFSETFROM:-0400',
+            'TZOFFSETTO:-0500',
+            'TZNAME:EST',
+            'DTSTART:19701101T020000',
+            'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU',
+            'END:STANDARD',
+            'END:VTIMEZONE',
         ];
 
         foreach ($events as $e) {
@@ -128,6 +152,8 @@ class CalendarController extends Controller
     private function vevent(Event $e, string $host): array
     {
         $fmt = fn (Carbon $d) => $d->copy()->utc()->format('Ymd\THis\Z');
+        // Heure locale de l'eglise (et non UTC) : une repetition garde la meme heure apres le changement d'heure.
+        $local = fn (Carbon $d) => ';TZID='.self::TZID.':'.$d->copy()->setTimezone(self::TZID)->format('Ymd\THis');
         $out = [
             'BEGIN:VEVENT',
             'UID:event-'.$e->id.'@'.$host,
@@ -138,19 +164,20 @@ class CalendarController extends Controller
             $out[] = 'DTSTART;VALUE=DATE:'.$e->starts_at->format('Ymd');
             $out[] = 'DTEND;VALUE=DATE:'.($e->ends_at ?? $e->starts_at)->copy()->addDay()->format('Ymd');
         } else {
-            $out[] = 'DTSTART:'.$fmt($e->starts_at);
-            $out[] = 'DTEND:'.$fmt($e->ends_at ?? $e->starts_at->copy()->addHour());
+            $out[] = 'DTSTART'.$local($e->starts_at);
+            $out[] = 'DTEND'.$local($e->ends_at ?? $e->starts_at->copy()->addHour());
         }
         $rrule = match ($e->recurrence) {
             'daily' => 'FREQ=DAILY',
             'weekly' => 'FREQ=WEEKLY',
             'biweekly' => 'FREQ=WEEKLY;INTERVAL=2',
-            'monthly' => 'FREQ=MONTHLY',
+            'monthly' => 'FREQ=MONTHLY'.$this->monthlyDay((int) $e->starts_at->day),
             default => null,
         };
         if ($rrule) {
             if ($e->recurrence_until) {
-                $rrule .= ';UNTIL='.$fmt($e->recurrence_until->copy()->endOfDay());
+                // Debut en date seule : fin en date seule ; sinon fin en UTC (RFC 5545).
+                $rrule .= ';UNTIL='.($e->all_day ? $e->recurrence_until->format('Ymd') : $fmt($e->recurrence_until->copy()->endOfDay()));
             }
             $out[] = 'RRULE:'.$rrule;
         }
@@ -168,6 +195,20 @@ class CalendarController extends Controller
         $out[] = 'END:VEVENT';
 
         return $out;
+    }
+
+    /**
+     * Repetition mensuelle du 29, 30 ou 31 : l'application la ramene au dernier jour des mois plus
+     * courts (le 31 janvier donne le 28 fevrier puis le 31 mars). Sans precision, les agendas sautent
+     * ces mois : on prend le plus grand jour existant parmi 28..jour.
+     */
+    private function monthlyDay(int $day): string
+    {
+        if ($day === 31) {
+            return ';BYMONTHDAY=-1';
+        }
+
+        return $day >= 29 ? ';BYMONTHDAY='.implode(',', range(28, $day)).';BYSETPOS=-1' : '';
     }
 
     private function feedUrl(User $user): string
