@@ -18,7 +18,8 @@ use Illuminate\Support\Facades\URL;
  * Un nouveau compte remplit son profil, puis attend : il voit un accueil (verset du jour) et peut laisser son
  * adresse courriel. Le pasteur (PR, ou un role avec members.approve) recoit le profil complet par courriel avec
  * « Valider » et « Rejeter » (un appui suffit), et dans Validations. La decision s'applique aussitot au compte et
- * la personne est prevenue (courriel, notification). Tant qu'il n'est pas valide, le profil reste « non termine »
+ * la personne est prevenue (courriel, notification) ; le patriarche de sa tribu recoit une notification et un courriel
+ * avec son profil complet. Tant qu'il n'est pas valide, le profil reste « non termine »
  * (is_completed = false) : le compte n'apparait dans aucune liste, statistique, audience ni relance.
  */
 class MembershipService
@@ -135,16 +136,66 @@ class MembershipService
                 ProfileCompletion::refresh($profile->fresh());
             }
             Audit::log('member.approved', $profile, $member->id, ['approval_status' => 'pending'], ['approval_status' => 'approved'], [], $by);
-            Notifier::send(array_diff(Recipients::watchersOf($member), [$by->id]), 'member', 'Nouveau membre : '.$name,
+            // Le patriarche de sa tribu est toujours prevenu (notification et courriel avec le profil complet),
+            // en plus des responsables qui suivent deja ce membre.
+            $patriarchs = array_values(array_diff(self::patriarchIds($member), [$by->id]));
+            Notifier::send(array_diff(array_unique(array_merge(Recipients::watchersOf($member), $patriarchs)), [$by->id]), 'member', 'Nouveau membre : '.$name,
                 ($profile?->tribe ? 'Tribu '.$profile->tribe->name.' · ' : '').'Pensez à lui souhaiter la bienvenue.',
                 '/admin/membres/'.$member->id, ['user_id' => $member->id]);
             Notifier::send([$member->id], 'system', 'Votre compte est validé',
                 'Bienvenue sur My vasesdhonneur ! Votre espace est ouvert.', '/tableau-de-bord', [], 'high');
+            self::mailPatriarchs($member, $by, $patriarchs);
         } else {
             Audit::log('member.rejected', $profile, $member->id, ['approval_status' => 'pending'], ['approval_status' => 'rejected'], [], $by);
         }
         // Les autres pasteurs ne voient plus la demande ; la personne recoit un courriel du resultat.
         self::mailDecision($member, $approve);
+    }
+
+    /** @return array<int> Patriarche(s) de la tribu du membre (titulaires du role sur cette tribu). */
+    public static function patriarchIds(User $member): array
+    {
+        $tribeId = $member->profile?->tribe_id;
+
+        return $tribeId ? Recipients::tribeRoleHolders((int) $tribeId, ['patriarche']) : [];
+    }
+
+    /**
+     * Courriel au(x) patriarche(s) de la tribu une fois le compte valide : le nouveau membre et son profil complet,
+     * avec un lien vers sa fiche. Une seule fois par membre et par patriarche ; preferences de courriel respectees.
+     *
+     * @param  array<int>  $patriarchIds
+     */
+    public static function mailPatriarchs(User $member, User $by, array $patriarchIds): int
+    {
+        if (! $patriarchIds) {
+            return 0;
+        }
+        $member->loadMissing('profile.tribe');
+        $profile = $member->profile;
+        $name = $profile?->full_name ?: (string) $member->phone;
+        $details = self::details($member);
+        $queued = 0;
+        foreach (User::with('profile')->whereIn('id', $patriarchIds)->get() as $patriarch) {
+            $email = Messenger::emailOf($patriarch);
+            if (! $email || ! Messenger::wants($patriarch, 'email', 'followup')) {
+                continue;
+            }
+            $queued += Messenger::queueEmail($email, $patriarch->id, 'membership_patriarch', 'Nouveau membre dans votre tribu : '.$name,
+                'membership-patriarch', [
+                    'patriarchName' => $patriarch->profile?->full_name ?: '',
+                    'memberName' => $name,
+                    'tribe' => $profile?->tribe?->name,
+                    'validatedBy' => $by->profile?->full_name,
+                    'validatedOn' => $member->approval_decided_at ? self::when($member->approval_decided_at) : null,
+                    'details' => $details,
+                    'photoUrl' => $profile?->photo_path ? rtrim((string) config('app.url'), '/').$profile->photo_url : null,
+                    'initials' => mb_strtoupper(mb_substr((string) $profile?->first_name, 0, 1).mb_substr((string) $profile?->last_name, 0, 1)),
+                    'url' => rtrim((string) config('app.url'), '/').'/admin/membres/'.$member->id,
+                ], "membership-patriarch:{$member->id}:{$patriarch->id}") ? 1 : 0;
+        }
+
+        return $queued;
     }
 
     private static function mailDecision(User $member, bool $approve): void
@@ -173,6 +224,7 @@ class MembershipService
         $months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
         $date = fn (?int $d, ?int $m) => $d && $m ? $d.($d === 1 ? 'er' : '').' '.$months[$m - 1] : null;
         $rows = [
+            'Civilité' => ['dr' => 'Dr', 'reverend' => 'Révérend', 'pasteur' => 'Pasteur', 'm' => 'M.', 'mme' => 'Mme', 'mlle' => 'Mlle'][$p?->civility] ?? null,
             'Prénoms' => $p?->first_name,
             'Nom' => $p?->last_name,
             'Genre' => ['homme' => 'Homme', 'femme' => 'Femme'][$p?->gender] ?? null,
@@ -184,8 +236,11 @@ class MembershipService
             'Départements' => $p && $p->departments->isNotEmpty() ? $p->departments->pluck('name')->implode(', ') : null,
             'État civil' => ['celibataire' => 'Célibataire', 'marie' => 'Marié(e)', 'veuf' => 'Veuf / veuve', 'divorce' => 'Divorcé(e)',
                 'fiance' => 'Fiancé(e)', 'concubinage' => 'En concubinage'][$p?->marital_status] ?? null,
+            'Conjoint(e)' => $p?->spouse_name,
             'Mariage' => $date($p?->wedding_day, $p?->wedding_month),
+            'Enfants' => $p?->has_children === null ? null : ($p->has_children ? 'Oui'.($p->children_count ? ' ('.$p->children_count.')' : '') : 'Non'),
             'Verset de l\'année' => $p?->year_verse,
+            'Taille de t-shirt' => $p?->tshirt_size,
             'Facebook' => $p?->facebook,
             'Matricule' => $p?->matricule,
             'Demande envoyée' => $member->approval_requested_at ? self::when($member->approval_requested_at) : null,

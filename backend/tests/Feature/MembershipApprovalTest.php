@@ -13,6 +13,7 @@ use App\Support\Audience;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\URL;
 use Laravel\Sanctum\Sanctum;
@@ -161,6 +162,56 @@ class MembershipApprovalTest extends TestCase
         $this->getJson("/api/admin/membership-requests/{$user->id}")->assertOk()
             ->assertJsonPath('status', 'approved')->assertJsonPath('decided_by', 'Abraham Andebi')->assertJsonPath('name', 'Degaulle Kaswende');
         $this->assertContains($user->id, array_column($this->getJson('/api/admin/members')->json('members'), 'user_id'));
+    }
+
+    public function test_the_patriarch_of_the_tribe_receives_the_notification_and_the_full_profile_by_email(): void
+    {
+        $this->patriarch->profile->update(['email' => 'patriarche@exemple.test']);
+        // Ni le patriarche d'une autre tribu ni l'AP de la tribu ne recoivent ce courriel.
+        $levi = Tribe::create(['name' => 'Lévi', 'slug' => 'levi']);
+        $other = $this->member('+14185593012', 'Pierre', 'Autre', 'autre@exemple.test');
+        $other->roles()->attach(Role::where('key', 'patriarche')->value('id'), ['scope_kind' => 'tribe', 'scope_id' => $levi->id]);
+        $ap = $this->member('+14185593013', 'Aaron', 'Assistant', 'ap@exemple.test');
+        $ap->roles()->attach(Role::where('key', 'assistant_pasteur')->value('id'), ['scope_kind' => 'tribe', 'scope_id' => $this->juda->id]);
+
+        $user = $this->signUp('degaulle@exemple.test');
+        $this->assertSame(0, OutboundMessage::where('kind', 'membership_patriarch')->count());
+        Sanctum::actingAs($this->pr->fresh());
+        $this->postJson("/api/admin/validations/memberships/{$user->id}", ['decision' => 'approved'])->assertOk();
+
+        $this->assertSame(1, UserNotification::where('user_id', $this->patriarch->id)->where('title', 'Nouveau membre : Degaulle Kaswende')->count());
+        $mail = OutboundMessage::where('kind', 'membership_patriarch')->sole();
+        $this->assertSame('patriarche@exemple.test', $mail->recipient);
+        $this->assertSame($this->patriarch->id, (int) $mail->user_id);
+        $this->assertSame('Nouveau membre dans votre tribu : Degaulle Kaswende', $mail->subject);
+        $html = (new NotificationMail($mail->subject, $mail->view, $mail->payload))->render();
+        $this->assertStringContainsString('Un nouveau membre a rejoint votre tribu', $html);
+        $this->assertStringContainsString("Bonjour Paul Patriarche, le compte de <strong>Degaulle Kaswende</strong> vient d'être validé par Abraham Andebi le lundi 12 octobre à 10h00.", $html);
+        foreach (['Prénoms', 'Degaulle', 'Kaswende', 'Homme', '15 mai', self::PHONE, 'degaulle@exemple.test', 'Juda', 'Matricule', 'Voir sa fiche',
+            'https://espace.vasesdhonneurchicoutimi.org/admin/membres/'.$user->id, 'Pensez à lui souhaiter la bienvenue.'] as $text) {
+            $this->assertStringContainsString($text, $html);
+        }
+
+        // Une seule fois : un second envoi de la decision ne renvoie rien.
+        $this->postJson("/api/admin/validations/memberships/{$user->id}", ['decision' => 'approved'])->assertStatus(409);
+        $this->assertSame(1, OutboundMessage::where('kind', 'membership_patriarch')->count());
+    }
+
+    public function test_the_patriarch_is_told_even_without_follow_up_rights_and_his_email_preferences_are_respected(): void
+    {
+        // Patriarche sans email accepte (canal courriel coupe dans ses preferences) : notification seulement.
+        $this->patriarch->profile->update(['email' => 'patriarche@exemple.test']);
+        $this->patriarch->forceFill(['notification_prefs' => ['channel_email' => false]])->save();
+        // Meme si son role ne lui donnait plus le suivi des membres (reglage de l'ecran Roles), il est prevenu de l'arrivee.
+        DB::table('permission_role')->where('role_id', Role::where('key', 'patriarche')->value('id'))
+            ->whereIn('permission_id', DB::table('permissions')->whereIn('key', ['members.view_scope', 'members.view_all'])->pluck('id'))->delete();
+
+        $user = $this->signUp('degaulle@exemple.test');
+        Sanctum::actingAs($this->pr->fresh());
+        $this->postJson("/api/admin/validations/memberships/{$user->id}", ['decision' => 'approved'])->assertOk();
+
+        $this->assertSame(1, UserNotification::where('user_id', $this->patriarch->id)->where('title', 'Nouveau membre : Degaulle Kaswende')->count());
+        $this->assertSame(0, OutboundMessage::where('kind', 'membership_patriarch')->count());
     }
 
     public function test_a_rejection_closes_access_and_can_still_be_corrected_in_the_app(): void

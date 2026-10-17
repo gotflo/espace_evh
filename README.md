@@ -291,6 +291,9 @@ Service unique `App\Services\Notifier` :
 - Événements notifiés : annonces, événements (création, modification, annulation, rappels veille et 1 h avant),
   exercices, FISS (rappels, demandes, décisions), changements de tribu, liens familiaux, profil incomplet,
   anniversaires et anniversaires de mariage (aux responsables, avec un verset), inactivité, nouveaux inscrits, rôles.
+- **Compte validé par le pasteur** : le patriarche de la tribu du fidèle reçoit la notification « Nouveau membre » et un
+  **courriel avec le profil complet** (identité, téléphone, courriel, tribu, GEM, famille…) et un lien vers sa fiche
+  (une fois par membre ; préférences de courriel respectées).
 
 ## Calendrier et rappels
 
