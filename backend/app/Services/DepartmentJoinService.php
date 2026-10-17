@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Support\Audit;
 use App\Support\Recipients;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -57,6 +58,11 @@ class DepartmentJoinService
             return null;
         }
 
+        // S'inscrire puis annuler en boucle : trois demandes au plus par service et par jour.
+        $recent = DepartmentJoinRequest::where('user_id', $member->id)->where('department_id', $department->id)
+            ->where('created_at', '>=', now()->subDay())->count();
+        abort_if($recent >= 3, 429, 'Trop de demandes pour ce service aujourd\'hui : réessayez demain.');
+
         $request = DB::transaction(function () use ($member, $department) {
             User::whereKey($member->id)->lockForUpdate()->first();
             $existing = DepartmentJoinRequest::where('user_id', $member->id)->where('department_id', $department->id)
@@ -69,6 +75,10 @@ class DepartmentJoinService
         }
 
         Audit::log('service_join.requested', $request, $member->id, [], ['department' => $department->name]);
+        // Une seule alerte par membre et par service dans la journee (la demande reste visible dans Validations).
+        if (! Cache::add("service-join-notice:{$member->id}:{$department->id}", 1, now()->addDay())) {
+            return $request;
+        }
         $name = $profile->full_name ?: $member->phone;
         $deciders = array_values(array_diff(self::deciderIds($department), [$member->id]));
         Notifier::send($deciders, 'service', "Inscription au service {$department->name} : {$name}",

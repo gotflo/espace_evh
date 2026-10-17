@@ -9,6 +9,7 @@ use App\Models\Profile;
 use App\Models\SpiritualHealthForm;
 use App\Models\Tribe;
 use App\Models\User;
+use App\Services\DepartmentJoinService;
 use App\Services\FamilyService;
 use App\Support\Audit;
 use App\Support\DepartmentLeadership;
@@ -166,9 +167,10 @@ class MemberController extends Controller
         $data = $request->validate([
             'tribe_id' => ['nullable', 'exists:tribes,id'],
             'gem_id' => ['nullable', 'exists:gems,id'],
-            'department_ids' => ['nullable', 'array'],
+            'department_ids' => ['nullable', 'array', 'max:60'],
             'department_ids.*' => ['integer', 'exists:departments,id'],
         ]);
+        $pastoral = $actor->hasPermission('members.view_all');
 
         $profile = $user->profile;
         abort_unless($profile, 404, 'Profil introuvable.');
@@ -181,10 +183,36 @@ class MemberController extends Controller
         }
         GemRules::assertGemInTribe($data['gem_id'] ?? null, $tribeId);
 
-        $before = ['tribe_id' => $profile->tribe_id, 'gem_id' => $profile->gem_id, 'department_ids' => $profile->departments()->pluck('departments.id')->sort()->values()->all()];
+        $currentDepts = $profile->departments()->pluck('departments.id')->map(fn ($id) => (int) $id)->sort()->values()->all();
+        $wantedDepts = array_key_exists('department_ids', $data)
+            ? collect($data['department_ids'] ?? [])->map(fn ($id) => (int) $id)->unique()->sort()->values()->all()
+            : $currentDepts;
+        if (! $pastoral) {
+            // Hors autorite pastorale : seulement les departements de sa portee ; s'inscrire a un autre service
+            // passe par la demande du membre, validee par son responsable.
+            $scopes = $actor->scopesFor('members.edit');
+            $changed = array_merge(array_diff($wantedDepts, $currentDepts), array_diff($currentDepts, $wantedDepts));
+            if (array_diff($changed, $scopes['department'])) {
+                throw ValidationException::withMessages([
+                    'department_ids' => 'Vous ne pouvez changer que les départements dont vous êtes responsable : l\'inscription à un autre service passe par la demande du membre.',
+                ]);
+            }
+            if ((int) ($data['gem_id'] ?? null) !== (int) $profile->gem_id && ! in_array((int) $tribeId, $scopes['tribe'], true)) {
+                throw ValidationException::withMessages(['gem_id' => 'Le GEM se change par un responsable de la tribu.']);
+            }
+        }
+
+        $before = ['tribe_id' => $profile->tribe_id, 'gem_id' => $profile->gem_id, 'department_ids' => $currentDepts];
         $profile->update(['tribe_id' => $tribeId, 'gem_id' => $data['gem_id'] ?? null]);
         if (array_key_exists('department_ids', $data)) {
-            $profile->departments()->sync($data['department_ids'] ?? []);
+            $profile->departments()->sync($wantedDepts);
+            foreach (Department::whereIn('id', array_diff($currentDepts, $wantedDepts))->get() as $left) {
+                DepartmentLeadership::leave($left, $user->id, $actor->id);
+            }
+            // Ajoute directement : sa demande d'inscription en attente n'a plus d'objet.
+            foreach (Department::whereIn('id', array_diff($wantedDepts, $currentDepts))->get() as $joined) {
+                DepartmentJoinService::cancel($user, $joined);
+            }
         }
         GemRules::afterTribeChange($profile->fresh(), $actor->id);
         $after = ['tribe_id' => $profile->tribe_id, 'gem_id' => $profile->fresh()->gem_id, 'department_ids' => $profile->departments()->pluck('departments.id')->sort()->values()->all()];

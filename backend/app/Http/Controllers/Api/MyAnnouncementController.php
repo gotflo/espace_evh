@@ -10,11 +10,14 @@ use Illuminate\Support\Facades\DB;
 
 class MyAnnouncementController extends Controller
 {
+    /** Annonces montrees au plus (les plus recentes) : le fil s'allongerait sans fin au fil des annees. */
+    private const SHOWN = 30;
+
     /** Fil des annonces recues par le fidele (avec etat lu). */
     public function index(Request $request): JsonResponse
     {
         $items = $request->user()->receivedAnnouncements()
-            ->orderByDesc('announcements.created_at')->get()
+            ->orderByDesc('announcements.created_at')->limit(self::SHOWN)->get()
             ->map(fn (Announcement $a) => [
                 'id' => $a->id,
                 'title' => $a->title,
@@ -27,7 +30,7 @@ class MyAnnouncementController extends Controller
 
         return response()->json([
             'announcements' => $items,
-            'unread' => $items->where('read', false)->count(),
+            'unread' => DB::table('announcement_user')->where('user_id', $request->user()->id)->whereNull('read_at')->count(),
         ]);
     }
 

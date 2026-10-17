@@ -17,7 +17,7 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class RefreshPulse
 {
-    private const IGNORED = ['api/me/*/progress', 'api/me/*/*/progress', 'api/me/notifications*', 'api/me/push*', 'api/monitor/*', 'api/auth/*', 'api/me/pulse', 'api/me/announcements/read'];
+    private const IGNORED = ['api/me/*/progress', 'api/me/*/*/progress', 'api/me/notifications*', 'api/me/push*', 'api/push/*', 'api/monitor/*', 'api/auth/*', 'api/me/pulse', 'api/me/announcements/read'];
 
     public function handle(Request $request, Closure $next): Response
     {

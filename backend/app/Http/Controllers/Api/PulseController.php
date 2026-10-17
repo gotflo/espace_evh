@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -44,7 +45,28 @@ class PulseController extends Controller
 
     public function show(Request $request): JsonResponse
     {
-        $versions = Cache::remember('pulse:versions', 10, function () {
+        // Un seul calcul a la fois : apres une modification, des dizaines d'appels simultanes attendent
+        // le meme resultat au lieu de tout recalculer chacun.
+        $versions = Cache::get('pulse:versions');
+        if (! is_array($versions)) {
+            try {
+                $versions = Cache::lock('pulse:compute', 10)->block(3, fn () => Cache::get('pulse:versions')
+                    ?? tap(self::versions(), fn ($v) => Cache::put('pulse:versions', $v, 10)));
+            } catch (LockTimeoutException) {
+                $versions = self::versions();
+            }
+        }
+
+        return response()->json([
+            'unread' => $request->user()->notifications()->whereNull('read_at')->count(),
+            'versions' => $versions,
+        ]);
+    }
+
+    /** @return array<string, string> signature courte de chaque source */
+    private static function versions(): array
+    {
+        return (function () {
             $out = [];
             foreach (self::SOURCES as $key => $tables) {
                 $parts = [];
@@ -62,11 +84,6 @@ class PulseController extends Controller
             }
 
             return $out;
-        });
-
-        return response()->json([
-            'unread' => $request->user()->notifications()->whereNull('read_at')->count(),
-            'versions' => $versions,
-        ]);
+        })();
     }
 }

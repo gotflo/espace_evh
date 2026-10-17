@@ -38,8 +38,9 @@ class AuthController extends Controller
     public function requestOtp(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'phone' => ['required', 'string'],
+            'phone' => ['required', 'string', 'max:40'],
             'country' => ['nullable', 'string', 'size:2'],
+            'device_token' => ['nullable', 'string', 'max:100'],
         ]);
 
         $phone = Phone::normalize($data['phone'], $data['country'] ?? 'CA');
@@ -68,7 +69,9 @@ class AuthController extends Controller
         // Numero de gestion reserve : jamais de code SMS. Sur un appareil de confiance, il entre directement ;
         // sinon l'appareil doit d'abord etre autorise (une seule fois) avec un code genere sur le serveur.
         if (PlatformManager::isReservedPhone($phone)) {
-            $manager = PlatformManager::lockedFor() ? null : PlatformManager::userForDevice($request->input('device_token'));
+            // Le verrouillage (codes d'autorisation faux) ne bloque pas un appareil deja autorise : son jeton
+            // de 64 caracteres aleatoires ne se devine pas, et personne ne peut ainsi enfermer le proprietaire dehors.
+            $manager = PlatformManager::userForDevice($data['device_token'] ?? null);
             if ($manager) {
                 $manager->forceFill(['last_login_at' => Carbon::now()])->save();
                 SecurityJournal::record('manager.login', [], 'info', $manager);
@@ -95,6 +98,11 @@ class AuthController extends Controller
                 'phone' => 'Un code vient déjà d\'être envoyé. Patientez un instant avant de réessayer.',
             ]);
         }
+        // Anti-fraude : pays accepte, numero mobile, plafond global de SMS (codes factures).
+        if ($refusal = $this->otp->smsRefusal($phone)) {
+            Monitor::event('warning', 'security', 'auth.sms_refused', 'Code refusé (pays, type de numéro ou plafond)', ['phone' => '…'.substr($phone, -4)], 'denied');
+            throw ValidationException::withMessages(['phone' => $refusal]);
+        }
 
         try {
             $code = $this->otp->sendCode($phone);
@@ -115,9 +123,9 @@ class AuthController extends Controller
             'phone' => $phone,
         ];
 
-        // Le code de test n'est renvoye qu'en mode local/log, jamais pour Twilio Verify.
-        // Code affiche a l'ecran : essais seulement, jamais en production (meme si EXPOSE_OTP y etait laisse a true).
-        if ($code !== null && (app()->environment('local') || (config('app.expose_otp') && ! app()->environment('production')))) {
+        // Le code de test n'est renvoye qu'en mode log, jamais pour Twilio Verify. Code affiche a l'ecran : essais
+        // seulement, avec EXPOSE_OTP demande expressement, jamais en production ni sur un vrai nom de domaine.
+        if ($code !== null && config('app.expose_otp') && ! app()->environment('production') && LocalTestMode::isLocalHost()) {
             $payload['dev_code'] = $code;
         }
 
@@ -133,6 +141,9 @@ class AuthController extends Controller
         ]);
 
         $phone = Phone::normalize($data['phone']);
+        if ($phone && $this->otp->isLocked($phone)) {
+            throw ValidationException::withMessages(['code' => 'Trop de codes erronés pour ce numéro : réessayez dans une heure.']);
+        }
         if (PlatformManager::isReservedPhone($phone)) {
             SecurityJournal::record('manager.otp_refused', [], 'warning');
             throw ValidationException::withMessages(['code' => 'Ce numéro se connecte avec son code d\'accès, pas avec un code SMS.']);

@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Department;
 use App\Models\Profile;
+use App\Models\Role;
 use App\Models\Tribe;
 use App\Services\Notifier;
 use App\Support\Audit;
 use App\Support\DepartmentLeadership;
+use App\Support\RoleGrants;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -88,6 +90,13 @@ class OrgController extends Controller
             'user_ids.*' => ['integer', 'exists:users,id'],
         ]);
         $ids = array_values(array_unique(array_map('intval', $data['user_ids'])));
+        // Nommer (ou retirer) un responsable lui donne (ou retire) le role de responsable de departement :
+        // memes regles que pour attribuer ce role (rang, acces confidentiels detenus), voir RoleGrants.
+        $current = $department->leaders()->pluck('users.id')->map(fn ($id) => (int) $id)->sort()->values()->all();
+        $role = Role::where('key', DepartmentLeadership::ROLE)->first();
+        if ($role && $current !== collect($ids)->sort()->values()->all() && ($refusal = RoleGrants::assignRefusal($request->user(), $role))) {
+            abort(403, $refusal);
+        }
         // Tout membre de l'eglise (profil complet) peut etre nomme ; s'il ne fait pas encore partie
         // du departement, il y est ajoute (un nouveau departement peut ainsi recevoir ses responsables).
         $profiles = Profile::whereIn('user_id', $ids)->where('is_completed', true)->pluck('id', 'user_id');

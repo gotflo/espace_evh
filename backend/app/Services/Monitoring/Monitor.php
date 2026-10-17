@@ -3,9 +3,11 @@
 namespace App\Services\Monitoring;
 
 use App\Models\User;
+use App\Services\Sms\TwilioVerifyException;
 use App\Support\Monitoring\Redactor;
 use App\Support\Monitoring\ServiceMap;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\Cache;
@@ -77,6 +79,9 @@ class Monitor
     }
 
     /** Route generique (jamais l'URL reelle : ni identifiants ni parametres). */
+    /** Routes techniques tres frequentes comptees par echantillon (voir recordRequest). */
+    private const SAMPLED_ROUTES = ['api/me/pulse', 'api/push/receipt'];
+
     public static function routeOf(Request $request): string
     {
         $route = $request->route();
@@ -98,26 +103,37 @@ class Monitor
             $now = now();
             $bucket = $now->copy()->setTime($now->hour, intdiv($now->minute, 5) * 5)->format('Y-m-d H:i:s');
 
+            // Appels techniques tres frequents (pouls, accuses de reception push) : un sur cinq est compte, avec
+            // un poids de 5 ; sinon des centaines d'ecritures simultanees se disputent la meme ligne.
+            $w = in_array($route, self::SAMPLED_ROUTES, true) ? 5 : 1;
+            $sampled = $w === 1 || random_int(1, $w) === 1;
             // Valeurs entieres calculees ici : integrees telles quelles dans l'expression d'ajout.
-            $slow = $ms >= $slowMs ? 1 : 0;
-            $h = [$ms <= 100 ? 1 : 0, $ms > 100 && $ms <= 300 ? 1 : 0, $ms > 300 && $ms <= 1000 ? 1 : 0, $ms > 1000 && $ms <= 3000 ? 1 : 0];
-            DB::table('monitor_request_stats')->upsert([[
-                'bucket' => $bucket, 'service' => $service, 'route' => $route, 'method' => $method, 'status' => $status,
-                'hits' => 1, 'total_ms' => $ms, 'max_ms' => $ms, 'slow_hits' => $slow,
-                'h_100' => $h[0], 'h_300' => $h[1], 'h_1000' => $h[2], 'h_3000' => $h[3],
-                'queries' => $queries, 'db_ms' => $dbMs,
-            ]], ['bucket', 'route', 'method', 'status'], [
-                'hits' => DB::raw('hits + 1'),
-                'total_ms' => DB::raw('total_ms + '.$ms),
-                'max_ms' => DB::raw('CASE WHEN max_ms < '.$ms.' THEN '.$ms.' ELSE max_ms END'),
-                'slow_hits' => DB::raw('slow_hits + '.$slow),
-                'h_100' => DB::raw('h_100 + '.$h[0]),
-                'h_300' => DB::raw('h_300 + '.$h[1]),
-                'h_1000' => DB::raw('h_1000 + '.$h[2]),
-                'h_3000' => DB::raw('h_3000 + '.$h[3]),
-                'queries' => DB::raw('queries + '.$queries),
-                'db_ms' => DB::raw('db_ms + '.$dbMs),
-            ]);
+            $slow = $ms >= $slowMs ? $w : 0;
+            $h = [$ms <= 100 ? $w : 0, $ms > 100 && $ms <= 300 ? $w : 0, $ms > 300 && $ms <= 1000 ? $w : 0, $ms > 1000 && $ms <= 3000 ? $w : 0];
+            $queries *= $w;
+            $dbMs *= $w;
+            $total = $ms * $w;
+            if ($sampled) {
+                DB::table('monitor_request_stats')->upsert([[
+                    'bucket' => $bucket, 'service' => $service, 'route' => $route, 'method' => $method, 'status' => $status,
+                    'hits' => $w, 'total_ms' => $total, 'max_ms' => $ms, 'slow_hits' => $slow,
+                    'h_100' => $h[0], 'h_300' => $h[1], 'h_1000' => $h[2], 'h_3000' => $h[3],
+                    'queries' => $queries, 'db_ms' => $dbMs,
+                ]], ['bucket', 'route', 'method', 'status'], [
+                    'hits' => DB::raw('hits + '.$w),
+                    'total_ms' => DB::raw('total_ms + '.$total),
+                    'max_ms' => DB::raw('CASE WHEN max_ms < '.$ms.' THEN '.$ms.' ELSE max_ms END'),
+                    'slow_hits' => DB::raw('slow_hits + '.$slow),
+                    'h_100' => DB::raw('h_100 + '.$h[0]),
+                    'h_300' => DB::raw('h_300 + '.$h[1]),
+                    'h_1000' => DB::raw('h_1000 + '.$h[2]),
+                    'h_3000' => DB::raw('h_3000 + '.$h[3]),
+                    'queries' => DB::raw('queries + '.$queries),
+                    'db_ms' => DB::raw('db_ms + '.$dbMs),
+                ]);
+            }
+            $queries = intdiv($queries, $w);
+            $dbMs = intdiv($dbMs, $w);
 
             $actor = $request->user();
             $userId = $actor instanceof User ? $actor->id : null;
@@ -129,6 +145,14 @@ class Monitor
                 $slow === 1 => 'slow',
                 default => null,
             };
+            // Refus et limitations en rafale (robot, compteur) : une ligne par minute, par adresse et par motif,
+            // et 120 lignes par minute au plus pour tout le site ; sinon la table remplirait le disque.
+            if ($reason && $reason !== 'error') {
+                $minute = $now->format('YmdHi');
+                if (! Cache::add("monitor:req:{$reason}:".($request->ip() ?? '-').":{$minute}", 1, 120) || ! self::underCap("monitor:req-cap:{$minute}", 120, 120)) {
+                    $reason = null;
+                }
+            }
             if ($reason) {
                 DB::table('monitor_requests')->insert([
                     'created_at' => $now, 'request_id' => self::requestId() ?? '-', 'reason' => $reason,
@@ -143,6 +167,14 @@ class Monitor
                 DB::table('monitor_user_days')->insertOrIgnore(['day' => $now->toDateString(), 'user_id' => $userId]);
             }
         });
+    }
+
+    /** Compteur en cache (cle, maximum, duree) : vrai tant que le plafond n'est pas atteint. */
+    public static function underCap(string $key, int $max, int $ttl): bool
+    {
+        Cache::add($key, 0, $ttl);
+
+        return (int) Cache::increment($key) <= $max;
     }
 
     /** Ecouteur SQL : compte les requetes et journalise les plus lentes (sans les valeurs). */
@@ -205,8 +237,8 @@ class Monitor
             $class = get_class($e);
             $file = Redactor::path($e->getFile());
             $service = match (true) {
-                $e instanceof \Illuminate\Database\QueryException, $e instanceof \PDOException => 'database',
-                $e instanceof \App\Services\Sms\TwilioVerifyException => 'sms',
+                $e instanceof QueryException, $e instanceof \PDOException => 'database',
+                $e instanceof TwilioVerifyException => 'sms',
                 app()->runningInConsole() => 'automation',
                 default => 'api',
             };

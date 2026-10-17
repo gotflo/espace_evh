@@ -21,7 +21,9 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  * Protection contre les antivirus de messagerie qui « ouvrent » les liens pour les analyser : la decision
  * part tout de suite seulement pour un vrai clic de navigateur (en-tete Sec-Fetch-User) ; sinon une page
  * d'un instant envoie la decision par elle-meme (un robot qui ne fait que lire la page ne decide rien).
- * Une decision deja prise n'est jamais refaite.
+ * Accepter une SUPPRESSION (definitive) demande toujours un appui sur un bouton : un analyseur qui ouvre
+ * le lien dans un vrai navigateur ne peut pas supprimer un membre. Une decision deja prise n'est jamais
+ * refaite ; un pasteur bloque ne decide plus rien.
  */
 class EmailActionController extends Controller
 {
@@ -30,12 +32,19 @@ class EmailActionController extends Controller
         if ($stop = $this->stop($request, $deletionRequest, $pastor)) {
             return $stop;
         }
+        if ($decision === 'approve') {
+            return response()->view('email-action', NotificationMail::common() + [
+                'title' => 'Supprimer '.($deletionRequest->member_name ?: 'ce membre').' ?',
+                'action' => $request->fullUrl(),
+                'confirm' => 'Confirmer la suppression définitive',
+            ])->header('Cache-Control', 'no-store')->header('X-Robots-Tag', 'noindex');
+        }
         if ($request->header('Sec-Fetch-User') === '?1') {
             return $this->decide($deletionRequest, $decision, $pastor);
         }
 
         return response()->view('email-action', NotificationMail::common() + [
-            'title' => $decision === 'approve' ? 'Suppression en cours…' : 'Refus en cours…',
+            'title' => 'Refus en cours…',
             'action' => $request->fullUrl(),
         ])->header('Cache-Control', 'no-store')->header('X-Robots-Tag', 'noindex');
     }
@@ -72,7 +81,7 @@ class EmailActionController extends Controller
         if (! $request->hasValidSignature()) {
             return $this->toValidations('inscription', $member->id, 'expire');
         }
-        if (! MembershipService::canApprove($pastor)) {
+        if ($pastor->blocked_at || ! MembershipService::canApprove($pastor)) {
             return $this->toValidations('inscription', $member->id, 'refuse');
         }
 
@@ -98,7 +107,7 @@ class EmailActionController extends Controller
         if (! $request->hasValidSignature()) {
             return $this->toApp($req, 'expire');
         }
-        if (! $pastor->isSuperAdmin()) {
+        if ($pastor->blocked_at || ! $pastor->isSuperAdmin()) {
             return $this->toApp($req, 'refuse');
         }
 

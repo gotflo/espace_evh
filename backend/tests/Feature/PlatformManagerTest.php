@@ -188,9 +188,11 @@ class PlatformManagerTest extends TestCase
             $this->authorize('ZZZZ-ZZZZ-ZZZ'.$attempt)->assertStatus(422);
         }
         $this->authorize('ZZZZ-ZZZZ-ZZZ5')->assertStatus(422)->assertJsonPath('errors.activation_code.0', 'Code d\'autorisation invalide. Compte verrouillé 15 min.');
-        // Verrouille : meme le bon code est refuse, et le numero n'ouvre plus rien, meme sur l'appareil de confiance.
+        // Verrouille : meme le bon code est refuse ; l'appareil deja autorise entre toujours (sinon n'importe
+        // qui enfermerait le proprietaire dehors en envoyant des codes faux toutes les 15 minutes).
         $this->authorize($code)->assertStatus(429);
-        $this->enterNumber($device)->assertJsonPath('manager_device_required', true)->assertJsonMissingPath('token');
+        $this->enterNumber($device)->assertJsonPath('is_platform_manager', true);
+        $this->enterNumber('pas-un-appareil-connu')->assertJsonPath('manager_device_required', true)->assertJsonMissingPath('token');
         // Apres 15 minutes, tout revient.
         Carbon::setTestNow(now()->addMinutes(16));
         $this->enterNumber($device)->assertJsonPath('is_platform_manager', true);

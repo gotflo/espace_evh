@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Evaluation;
 use App\Models\User;
 use App\Services\Notifier;
+use App\Support\Audit;
 use App\Support\EvaluationCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -47,7 +48,7 @@ class EvaluationController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
-        \App\Support\Audit::log('evaluation.created', $evaluation, $user->id, [], $evaluation->only(['type', 'title', 'score', 'evaluated_on']));
+        Audit::log('evaluation.created', $evaluation, $user->id, [], $evaluation->only(['type', 'title', 'score', 'evaluated_on']));
         Notifier::send([$user->id], 'evaluation',
             'Nouvelle note : '.(EvaluationCatalog::TYPES[$evaluation->type] ?? 'Évaluation'),
             ($evaluation->title ? $evaluation->title.' · ' : '').rtrim(rtrim(number_format((float) $evaluation->score, 1, ',', ''), '0'), ',').' / 20',
@@ -59,8 +60,11 @@ class EvaluationController extends Controller
     public function destroy(Request $request, Evaluation $evaluation): JsonResponse
     {
         abort_unless($request->user()->canManageMember($evaluation->member, 'evaluations.manage'), 403, 'Consultation seule : action non autorisée.');
+        // Une note ne s'efface que par son auteur, ou par une autorite pastorale.
+        abort_unless((int) $evaluation->created_by === $request->user()->id || $request->user()->hasPermission('members.view_all'), 403,
+            'Seul son auteur (ou un pasteur) peut supprimer cette note.');
         $uid = $evaluation->user_id;
-        \App\Support\Audit::log('evaluation.deleted', $evaluation, $evaluation->user_id, $evaluation->only(['type', 'title', 'score', 'evaluated_on']));
+        Audit::log('evaluation.deleted', $evaluation, $evaluation->user_id, $evaluation->only(['type', 'title', 'score', 'evaluated_on']));
         $evaluation->delete();
 
         return response()->json(['message' => 'Note supprimée.', 'average' => $this->average($uid)]);

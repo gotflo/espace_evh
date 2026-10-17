@@ -35,11 +35,14 @@ class ImageOptimizer
     private const QUALITY = 82;
 
     /**
-     * Pixels au plus (50 Mpx : un iPhone 48 Mpx passe). Une image legere mais immense (« bombe de
-     * decompression », ex. PNG 20000 x 20000 de quelques Ko) est refusee AVANT d'etre ouverte : son
-     * decodage demanderait plusieurs Go de memoire au serveur.
+     * Pixels au plus (30 Mpx : une photo de telephone de 24 Mpx passe ; l'application reduit de toute facon
+     * a 2048 px avant l'envoi). Une image legere mais immense (« bombe de decompression », ex. PNG
+     * 7000 x 7000 de 160 Ko) est refusee AVANT d'etre ouverte : son decodage demanderait des centaines de Mo.
      */
-    public const MAX_PIXELS = 50_000_000;
+    public const MAX_PIXELS = 30_000_000;
+
+    /** GIF garde tel quel (annonces animees) : decode par le navigateur de chaque membre, donc borne aussi. */
+    private const GIF_MAX_SIDE = 4096;
 
     public static function available(): bool
     {
@@ -55,6 +58,11 @@ class ImageOptimizer
     {
         // Sans GD, ou GIF d'une annonce (souvent anime : l'animation serait perdue), le fichier est garde tel quel.
         if (! self::available() || ($maxSide > self::AVATAR && $file->getMimeType() === 'image/gif')) {
+            $info = @getimagesize($file->getRealPath());
+            if ($info && max($info[0], $info[1]) > self::GIF_MAX_SIDE) {
+                throw ValidationException::withMessages([$field => 'Cette image est trop grande : '.self::GIF_MAX_SIDE.' pixels de côté au plus.']);
+            }
+
             return $file->store($directory, 'public');
         }
         $image = self::read($file->getRealPath(), $field);
@@ -131,7 +139,11 @@ class ImageOptimizer
     {
         $info = @getimagesize($path);
         if ($info && $info[0] * $info[1] > self::MAX_PIXELS) {
-            throw ValidationException::withMessages([$field => 'Cette image est trop grande (plus de 50 millions de pixels) : réduisez-la ou choisissez une autre photo.']);
+            throw ValidationException::withMessages([$field => 'Cette image est trop grande (plus de 30 millions de pixels) : réduisez-la ou choisissez une autre photo.']);
+        }
+        // Memoire : l'image decodee (4 octets par pixel, plus une copie tournee) doit tenir dans ce qui reste.
+        if ($info && ! self::fitsInMemory((int) $info[0] * (int) $info[1])) {
+            throw ValidationException::withMessages([$field => 'Cette image est trop lourde à traiter pour le serveur : réduisez-la ou choisissez une autre photo.']);
         }
         $raw = @file_get_contents($path);
         $image = $raw === false ? false : @imagecreatefromstring($raw);
@@ -140,6 +152,20 @@ class ImageOptimizer
         }
 
         return self::orient($image, $raw);
+    }
+
+    /** Memoire restante suffisante pour decoder puis tourner une image de ce nombre de pixels ? */
+    private static function fitsInMemory(int $pixels): bool
+    {
+        $limit = trim((string) ini_get('memory_limit'));
+        if ($limit === '' || $limit === '-1') {
+            return true;
+        }
+        $bytes = (int) $limit * match (strtolower(substr($limit, -1))) {
+            'g' => 1024 ** 3, 'm' => 1024 ** 2, 'k' => 1024, default => 1,
+        };
+
+        return memory_get_usage(true) + $pixels * 10 < $bytes * 0.9;
     }
 
     /** Applique l'orientation EXIF (photos de telephone enregistrees « couchees »). */

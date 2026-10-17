@@ -175,6 +175,10 @@ class MyNotificationController extends Controller
             ->where('user_agent', mb_substr((string) $request->userAgent(), 0, 250))
             ->where('endpoint_hash', '!=', PushSubscription::hashEndpoint($data['endpoint']))
             ->delete();
+        // Dix appareils au plus par compte (les plus anciens sont retires) : un envoi a ce membre ne
+        // declenche jamais des centaines de requetes sortantes.
+        $keep = PushSubscription::where('user_id', $request->user()->id)->orderByDesc('updated_at')->limit(10)->pluck('id');
+        PushSubscription::where('user_id', $request->user()->id)->whereNotIn('id', $keep)->delete();
 
         return response()->json(['message' => 'Notifications activées sur cet appareil.']);
     }
@@ -226,7 +230,8 @@ class MyNotificationController extends Controller
             return response()->json(['message' => 'Le serveur ne peut pas préparer les notifications : '.$e->getMessage(), 'devices' => []], 500);
         }
 
-        $current = $request->input('endpoint') ? PushSubscription::hashEndpoint((string) $request->input('endpoint')) : null;
+        $endpoint = $request->input('endpoint');
+        $current = is_string($endpoint) && $endpoint !== '' ? PushSubscription::hashEndpoint($endpoint) : null;
         $byId = $subs->keyBy('id');
         $devices = collect($result['devices'])->map(function ($d) use ($byId, $current) {
             $sub = $byId->get($d['id']);
@@ -259,7 +264,7 @@ class MyNotificationController extends Controller
         $data = $request->validate([
             'endpoint' => ['required', 'string', 'max:2000', 'starts_with:https://'],
             'status' => ['required', 'in:shown,error'],
-            'error' => ['nullable', 'string', 'max:250'],
+            'error' => ['nullable', 'string', 'max:2000'], // tronque a 250 a l'enregistrement
         ]);
         PushSubscription::where('endpoint_hash', PushSubscription::hashEndpoint($data['endpoint']))->update([
             'last_received_at' => now(),

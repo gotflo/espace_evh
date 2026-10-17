@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\AutomationLock;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
@@ -20,12 +21,14 @@ class TriggerAutomation
     {
         $response = $next($request);
 
-        if (config('services.automation.auto_tick') && Cache::add('automation:tick-lock', now()->timestamp, 300)) {
+        // Seulement si le cron ne tourne pas (sinon les automatismes passeraient deux fois), et un seul
+        // passage a la fois (verrou commun avec le cron).
+        if (config('services.automation.auto_tick') && ! AutomationLock::cronSeen() && Cache::add('automation:tick-lock', now()->timestamp, 300)) {
             defer(function () {
                 ignore_user_abort(true);
                 @set_time_limit(300);
                 try {
-                    Artisan::call('app:tick');
+                    AutomationLock::run(fn () => Artisan::call('app:tick'));
                 } catch (\Throwable $e) {
                     Log::warning('Automatismes : echec', ['error' => $e->getMessage()]);
                 }

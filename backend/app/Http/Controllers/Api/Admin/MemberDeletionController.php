@@ -20,12 +20,18 @@ class MemberDeletionController extends Controller
     {
         $viewer = $request->user();
         $canDelete = MemberDeletionService::canDelete($viewer, $user);
+        $canRequest = ! $canDelete && MemberDeletionService::canRequest($viewer, $user);
+        // Rien a voir pour qui ne peut ni supprimer, ni demander, ni suivre ce membre.
+        abort_unless($canDelete || $canRequest || $viewer->canManageMember($user), 403, 'Accès refusé.');
         $pending = MemberDeletionRequest::where('user_id', $user->id)->where('status', 'pending')->with('requester.profile')->first();
+        // Le motif d'une demande n'est montre qu'au Pasteur Resident et a son auteur.
+        $seesRequest = $pending && ($canDelete || (int) $pending->requested_by === $viewer->id);
 
         return response()->json([
             'can_delete' => $canDelete,
-            'can_request' => ! $canDelete && MemberDeletionService::canRequest($viewer, $user),
-            'pending_request' => $pending ? [
+            'can_request' => $canRequest,
+            'has_pending' => (bool) $pending,
+            'pending_request' => $seesRequest ? [
                 'id' => $pending->id,
                 'reason' => $pending->reason,
                 'by' => $pending->requester?->profile?->full_name,

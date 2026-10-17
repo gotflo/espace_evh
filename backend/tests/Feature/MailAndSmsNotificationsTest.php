@@ -208,14 +208,16 @@ class MailAndSmsNotificationsTest extends TestCase
         $this->assertStringContainsString('Ne fréquente plus', $html);
         $app = 'https://espace.vasesdhonneurchicoutimi.org/admin/validations?suppression='.$req->id;
 
-        // Un antivirus de messagerie qui « ouvre » le lien (sans clic) ne decide rien : page d'un instant.
+        // Accepter une suppression (definitive) demande toujours un appui sur le bouton de la page : un antivirus
+        // de messagerie qui ouvre le lien, meme dans un vrai navigateur (en-tete du clic), ne supprime rien.
         $approve = $mail->payload['approveUrl'];
         auth()->forgetGuards();
-        $this->get($approve)->assertOk()->assertSee('Suppression en cours');
+        $this->get($approve)->assertOk()->assertSee('Confirmer la suppression définitive')->assertDontSee('f.submit()', false);
+        $this->get($approve, ['Sec-Fetch-User' => '?1', 'Sec-Fetch-Mode' => 'navigate'])->assertOk()->assertSee('Supprimer Marie Test ?');
         $this->assertNotNull(User::find($this->marie->id));
 
-        // Vrai clic dans le navigateur : la decision part aussitot, puis l'application confirme le resultat.
-        $this->get($approve, ['Sec-Fetch-User' => '?1', 'Sec-Fetch-Mode' => 'navigate'])->assertStatus(303)->assertRedirect($app.'&resultat=approuvee');
+        // Appui sur le bouton : la decision part, puis l'application confirme le resultat.
+        $this->post($approve)->assertStatus(303)->assertRedirect($app.'&resultat=approuvee');
         $this->assertNull(User::find($this->marie->id));
         $this->assertSame('approved', $req->fresh()->status);
         $this->assertSame(1, UserNotification::where('user_id', $this->patriarch->id)->where('title', 'Suppression effectuée : Marie Test')->count());

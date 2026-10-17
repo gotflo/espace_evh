@@ -9,6 +9,7 @@ use App\Support\Audit;
 use App\Support\Like;
 use App\Support\ProfileCompletion;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -59,6 +60,21 @@ class FamilyService
      * Designe le conjoint : membre inscrit (spouseUserId) ou simple nom.
      * Null + null => aucun conjoint (relation retiree des deux cotes).
      */
+    /** Membre designable comme conjoint ou enfant : inscription terminee et validee, compte actif, jamais le compte de gestion. */
+    private static function designable(?User $user): bool
+    {
+        return $user && $user->profile?->is_completed && ! $user->blocked_at && ! $user->isPlatformManager()
+            && ($user->approval_status ?? User::APPROVED) === User::APPROVED;
+    }
+
+    /** Une seule notification par jour pour un meme lien (designer, retirer, recommencer ne previent pas en boucle). */
+    private static function notifyOnce(int $to, User $from, string $kind, string $title, string $body): void
+    {
+        if (Cache::add("family-notice:{$kind}:{$from->id}:{$to}", 1, now()->addDay())) {
+            Notifier::send([$to], 'family', $title, $body, '/mon-profil#famille');
+        }
+    }
+
     public static function setSpouse(User $me, ?int $spouseUserId, ?string $name): void
     {
         DB::transaction(function () use ($me, $spouseUserId, $name) {
@@ -74,7 +90,7 @@ class FamilyService
             if ($spouseUserId) {
                 abort_if($spouseUserId === $me->id, 422, 'Vous ne pouvez pas vous désigner vous-même.');
                 $other = User::with('profile')->find($spouseUserId);
-                abort_unless($other?->profile, 422, 'Personne introuvable.');
+                abort_unless(self::designable($other), 422, 'Personne introuvable.');
                 $otherSpouse = FamilyLink::where('user_id', $spouseUserId)->where('relation', 'spouse')->where('status', 'confirmed')->first();
                 abort_if($otherSpouse && (int) $otherSpouse->relative_user_id !== $me->id, 422,
                     'Cette personne est déjà liée à un(e) conjoint(e). Vérifiez votre choix ou contactez un responsable.');
@@ -95,8 +111,8 @@ class FamilyService
                 Audit::log('family.spouse_designated', $me, $me->id, [], ['spouse_user_id' => $spouseUserId, 'status' => $status]);
 
                 if ($status === 'pending') {
-                    Notifier::send([$spouseUserId], 'family', ($profile->full_name ?: 'Un membre').' vous a indiqué comme conjoint(e)',
-                        'Confirmez ce lien dans votre profil (ou refusez-le s\'il s\'agit d\'une erreur).', '/mon-profil#famille');
+                    self::notifyOnce($spouseUserId, $me, 'spouse', ($profile->full_name ?: 'Un membre').' vous a indiqué comme conjoint(e)',
+                        'Confirmez ce lien dans votre profil (ou refusez-le s\'il s\'agit d\'une erreur).');
                 } else {
                     self::syncMarriage($me, $other);
                     Notifier::send([$spouseUserId], 'family', 'Lien conjugal confirmé', ($profile->full_name).' et vous êtes désormais liés comme conjoints.', '/mon-profil#famille');
@@ -176,6 +192,7 @@ class FamilyService
             foreach ($hasChildren ? $children : [] as $child) {
                 $userId = ! empty($child['user_id']) ? (int) $child['user_id'] : null;
                 abort_if($userId === $me->id, 422, 'Vous ne pouvez pas vous désigner comme enfant.');
+                abort_if($userId && ! self::designable(User::with('profile')->find($userId)), 422, 'Personne introuvable.');
                 $wasConfirmed = $userId && $existing->contains(fn ($l) => (int) $l->relative_user_id === $userId && $l->status === 'confirmed');
                 $birthDate = $child['birth_date'] ?? null;
                 // Ancienne version de l'application (annee seule, sans champ date) : la date deja connue est gardee.
@@ -196,8 +213,8 @@ class FamilyService
                     'confirmed_at' => $userId && ! $wasConfirmed ? null : now(),
                 ]);
                 if ($userId && ! $wasConfirmed) {
-                    Notifier::send([$userId], 'family', ($me->profile?->full_name ?: 'Un membre').' vous a indiqué comme son enfant',
-                        'Confirmez ce lien dans votre profil.', '/mon-profil#famille');
+                    self::notifyOnce($userId, $me, 'child', ($me->profile?->full_name ?: 'Un membre').' vous a indiqué comme son enfant',
+                        'Confirmez ce lien dans votre profil.');
                 }
                 $kept[] = ['relative_name' => $link->relative_name, 'birth_date' => $link->birth_date?->toDateString(), 'birth_year' => $link->birth_year, 'relative_user_id' => $userId];
             }

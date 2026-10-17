@@ -75,8 +75,10 @@ use Illuminate\Support\Facades\Route;
 // Rate limiting : bride les tentatives (anti-force brute / anti-spam SMS) par IP.
 // Limites propres a chaque route (3e parametre = compteur separe) : sans lui, toutes les limites d'une meme
 // adresse IP ou d'un meme compte partageaient un seul compteur (une limite de 8 comptait aussi les autres appels).
-Route::post('/auth/request-otp', [AuthController::class, 'requestOtp'])->middleware('throttle:8,1,otp-request');
-Route::post('/auth/verify-otp', [AuthController::class, 'verifyOtp'])->middleware('throttle:12,1,otp-verify');
+// Par adresse : assez large pour le Wi-Fi de l'eglise (une seule adresse pour tous le dimanche). La fraude
+// est arretee ailleurs : 45 s entre deux codes et verrouillage par numero, pays acceptes, plafond global de SMS.
+Route::post('/auth/request-otp', [AuthController::class, 'requestOtp'])->middleware('throttle:20,1,otp-request');
+Route::post('/auth/verify-otp', [AuthController::class, 'verifyOtp'])->middleware('throttle:30,1,otp-verify');
 // Compte de gestion principal (sans code SMS) : le numero suffit sur un appareil de confiance ; un nouvel
 // appareil s'autorise une fois avec le code genere sur le serveur. Essais limites (adresse + verrouillage).
 Route::post('/auth/manager-activation', [AuthController::class, 'activateManager'])->middleware('throttle:manager-activation');
@@ -111,7 +113,8 @@ Route::post('/monitor/client-errors', [ClientErrorController::class, 'store'])->
 
 // --- Agent de supervision : API de controle appelee par la console (projet evh_monitoring) ---
 // Chaque requete est signee (HMAC-SHA256, secret partage MONITOR_AGENT_SECRET, horodatage, anti-rejeu).
-Route::prefix('agent')->middleware([VerifyAgentSignature::class, 'throttle:agent'])->group(function () {
+// Limite AVANT la signature : un flot de requetes non signees est freine sans calcul ni ecriture.
+Route::prefix('agent')->middleware(['throttle:agent', VerifyAgentSignature::class])->group(function () {
     Route::get('/health', [AgentController::class, 'health']);
     Route::get('/packages', [AgentController::class, 'packages']);
     Route::get('/logs/files', [AgentController::class, 'logFiles']);
@@ -132,8 +135,8 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
     Route::get('/profile', [ProfileController::class, 'show']);
-    Route::put('/profile', [ProfileController::class, 'update']);
-    Route::post('/profile', [ProfileController::class, 'update']); // POST accepte pour l'upload de photo
+    Route::put('/profile', [ProfileController::class, 'update'])->middleware('throttle:profile-photo');
+    Route::post('/profile', [ProfileController::class, 'update'])->middleware('throttle:profile-photo'); // POST accepte pour l'upload de photo
 
     Route::get('/reference', [ReferenceController::class, 'index']);
 
@@ -172,20 +175,20 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
 
     // --- Servir : inscription a un service (departement) ---
     Route::get('/me/services', [MyServiceController::class, 'index']);
-    Route::post('/me/services/{department}/join', [MyServiceController::class, 'join']);
-    Route::delete('/me/services/{department}', [MyServiceController::class, 'leave']);
+    Route::post('/me/services/{department}/join', [MyServiceController::class, 'join'])->middleware('throttle:member-writes');
+    Route::delete('/me/services/{department}', [MyServiceController::class, 'leave'])->middleware('throttle:member-writes');
 
     // --- Espace fidele : evenements a venir + participation (RSVP) ---
     Route::get('/me/events', [MyEventController::class, 'index']);
     Route::post('/me/events/{event}/rsvp', [MyEventController::class, 'rsvp']);
     // Agenda personnel (programme depuis le calendrier, visible par soi seul)
-    Route::post('/me/events', [MyEventController::class, 'store']);
-    Route::put('/me/events/{event}', [MyEventController::class, 'update']);
+    Route::post('/me/events', [MyEventController::class, 'store'])->middleware('throttle:member-writes');
+    Route::put('/me/events/{event}', [MyEventController::class, 'update'])->middleware('throttle:member-writes');
     Route::delete('/me/events/{event}', [MyEventController::class, 'destroy']);
 
     // --- Espace fidele : mes demandes aux responsables ---
     Route::get('/me/requests', [MyRequestController::class, 'index']);
-    Route::post('/me/requests', [MyRequestController::class, 'store']);
+    Route::post('/me/requests', [MyRequestController::class, 'store'])->middleware('throttle:member-requests');
 
     // --- Espace fidele : apercu gamifie (assiduite, vertumetre, ponctualite) ---
     Route::get('/me/overview', [MyOverviewController::class, 'index']);
@@ -231,8 +234,8 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
     // --- Famille (conjoint, enfants) ---
     Route::get('/me/family', [MyFamilyController::class, 'show']);
     Route::get('/me/family/search', [MyFamilyController::class, 'search'])->middleware('throttle:member-search');
-    Route::put('/me/family/spouse', [MyFamilyController::class, 'setSpouse']);
-    Route::put('/me/family/children', [MyFamilyController::class, 'setChildren']);
+    Route::put('/me/family/spouse', [MyFamilyController::class, 'setSpouse'])->middleware('throttle:member-writes');
+    Route::put('/me/family/children', [MyFamilyController::class, 'setChildren'])->middleware('throttle:member-writes');
     Route::post('/me/family/links/{link}/confirm', [MyFamilyController::class, 'confirm']);
     Route::post('/me/family/links/{link}/decline', [MyFamilyController::class, 'decline']);
 
@@ -245,7 +248,7 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
 
     // --- Espace fidele : mon journal spirituel (self-service) ---
     Route::get('/me/spiritual', [MySpiritualController::class, 'show'])->middleware('module:spiritual');
-    Route::post('/me/spiritual/entries', [MySpiritualController::class, 'storeEntry'])->middleware('module:spiritual');
+    Route::post('/me/spiritual/entries', [MySpiritualController::class, 'storeEntry'])->middleware(['module:spiritual', 'throttle:member-writes']);
     Route::delete('/me/spiritual/entries/{entry}', [MySpiritualController::class, 'destroyEntry'])->middleware('module:spiritual');
     Route::post('/me/spiritual/milestones', [MySpiritualController::class, 'toggleMilestone'])->middleware('module:spiritual');
 

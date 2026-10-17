@@ -45,6 +45,16 @@ class AppServiceProvider extends ServiceProvider
         // Lecteur video : un signal toutes les ~15 s (marge pour pauses, reprises, onglets multiples).
         RateLimiter::for('video-progress', fn (Request $r) => Limit::perMinute(40)->by('video-progress:'.($r->user()?->id ?: $r->ip())));
         RateLimiter::for('member-search', fn (Request $r) => Limit::perMinute(60)->by('member-search:'.($r->user()?->id ?: $r->ip())));
+        // Actions d'un membre qui prevennent d'autres personnes (famille, services, demandes) ou qui
+        // ajoutent des donnees (agenda, journal) : pas de rafale, ni de notifications en boucle.
+        RateLimiter::for('member-writes', fn (Request $r) => [
+            Limit::perMinute(20)->by('member-writes:'.($r->user()?->id ?: $r->ip())),
+            Limit::perHour(120)->by('member-writes-h:'.($r->user()?->id ?: $r->ip())),
+        ]);
+        // Photo envoyee avec le profil : le decodage d'une image coute de la memoire et du temps.
+        RateLimiter::for('profile-photo', fn (Request $r) => $r->hasFile('photo')
+            ? Limit::perMinute(6)->by('profile-photo:'.($r->user()?->id ?: $r->ip()))
+            : Limit::none());
         // Compte de gestion (autorisation d'un appareil) : 5 essais par minute et par adresse, verrouillage apres 5 codes faux.
         RateLimiter::for('manager-activation', fn (Request $r) => Limit::perMinute(5)->by('manager-activation:'.$r->ip()));
 
@@ -60,9 +70,13 @@ class AppServiceProvider extends ServiceProvider
             DB::listen(fn (QueryExecuted $query) => Monitor::onQuery($query));
         }
 
-        // En production : force la generation d'URLs en HTTPS (liens, images /storage).
+        // En production : force la generation d'URLs en HTTPS sur le domaine officiel (liens signes des
+        // courriels, images /storage) : un en-tete Host forge ne peut pas detourner un lien envoye au pasteur.
         if ($this->app->environment('production')) {
             URL::forceScheme('https');
+            if ($root = config('app.url')) {
+                URL::forceRootUrl(rtrim((string) $root, '/'));
+            }
         }
     }
 }

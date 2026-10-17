@@ -70,6 +70,9 @@ class SpiritualController extends Controller
     {
         abort_unless($request->user()->canManageMember($user, 'spiritual.record'), 403, 'Consultation seule : action non autorisée.');
         abort_unless($entry->member_user_id === $user->id, 404);
+        // Une entree ne s'efface que par son auteur, ou par une autorite pastorale.
+        abort_unless((int) $entry->author_user_id === $request->user()->id || $request->user()->hasPermission('members.view_all'), 403,
+            'Seul son auteur (ou un pasteur) peut supprimer cette entrée.');
         $entry->delete();
 
         return response()->json(['message' => 'Entrée supprimée.']);
@@ -90,8 +93,11 @@ class SpiritualController extends Controller
                 ['reached_at' => Carbon::today(), 'recorded_by' => $request->user()->id],
             );
         } else {
-            Milestone::where('member_user_id', $user->id)
-                ->where('milestone_key', $data['milestone_key'])->delete();
+            // Decocher l'etape notee par quelqu'un d'autre : seulement une autorite pastorale.
+            $milestone = Milestone::where('member_user_id', $user->id)->where('milestone_key', $data['milestone_key'])->first();
+            abort_if($milestone && $milestone->recorded_by && (int) $milestone->recorded_by !== $request->user()->id
+                && ! $request->user()->hasPermission('members.view_all'), 403, 'Cette étape a été notée par un autre responsable : seul un pasteur peut la retirer.');
+            $milestone?->delete();
         }
 
         return response()->json(['message' => 'Étape mise à jour.']);

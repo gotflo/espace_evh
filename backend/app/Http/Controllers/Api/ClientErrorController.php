@@ -42,6 +42,13 @@ class ClientErrorController extends Controller
         $firstFrame = $stack[1] ?? ($stack[0] ?? (($data['source'] ?? '').':'.($data['line'] ?? '')));
         $frameKey = preg_replace('/-[A-Za-z0-9_-]{6,}\.js/', '.js', (string) $firstFrame); // nom de fichier sans l'empreinte de version
 
+        // Plafonds : 20 fois la meme erreur et 300 erreurs en tout par heure (une rafale ne remplit pas le disque).
+        $fingerprint = Redactor::fingerprint('client', $data['kind'], $data['message'], (string) $frameKey);
+        $hour = now()->format('YmdH');
+        if (! Monitor::underCap("client-errors:{$fingerprint}:{$hour}", 20, 3700) || ! Monitor::underCap("client-errors:all:{$hour}", 300, 3700)) {
+            return response()->json(['ok' => true]);
+        }
+
         Monitor::event('error', 'browser', 'client.error', $data['message'], array_filter([
             'kind' => $data['kind'],
             'page' => $path,
@@ -50,8 +57,7 @@ class ClientErrorController extends Controller
             'component' => isset($data['component']) ? Redactor::text(mb_substr($data['component'], 0, 600), 600) : null,
             'release' => $data['release'] ?? null,
             'browser' => self::device($request->userAgent()),
-        ]), 'failure', $user instanceof User ? $user->id : null,
-            Redactor::fingerprint('client', $data['kind'], $data['message'], (string) $frameKey));
+        ]), 'failure', $user instanceof User ? $user->id : null, $fingerprint);
 
         return response()->json(['ok' => true]);
     }

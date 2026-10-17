@@ -7,9 +7,10 @@ use App\Models\Attendance;
 use App\Models\Department;
 use App\Models\Profile;
 use App\Models\User;
+use App\Services\ActivityService;
+use App\Support\MemberScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -22,6 +23,13 @@ class AttendanceController extends Controller
      */
     public function roster(Request $request): JsonResponse
     {
+        $request->validate([
+            'date' => ['nullable', 'date_format:Y-m-d'],
+            'event' => ['nullable', 'string', 'max:60'],
+            'kind' => ['nullable', 'string'],
+            'q' => ['nullable', 'string', 'max:80'],
+            'department_id' => ['nullable', 'integer'],
+        ]);
         $date = $request->query('date') ?: now()->toDateString();
         $department = $this->department($request);
         $event = $this->eventName($request->query('event') ?: 'Culte', $department);
@@ -78,9 +86,9 @@ class AttendanceController extends Controller
             'attended_on' => ['required', 'date', 'before_or_equal:today'],
             'event' => ['required', 'string', 'max:60'],
             'kind' => ['nullable', 'in:culte,repetition'],
-            'present_user_ids' => ['array'],
+            'present_user_ids' => ['array', 'max:3000'],
             'present_user_ids.*' => ['integer'],
-            'statuses' => ['array'], // repetition : { user_id: status }
+            'statuses' => ['array', 'max:3000'], // repetition : { user_id: status }
             'department_id' => ['nullable', 'integer'],
         ]);
 
@@ -127,7 +135,7 @@ class AttendanceController extends Controller
 
         // Etre present (ou en retard) a une session est une activite : un membre inactif redevient actif.
         User::whereIn('id', $rows->whereIn('status', ['present', 'retard'])->pluck('uid'))->where('activity_status', 'inactive')->get()
-            ->each(fn (User $u) => \App\Services\ActivityService::touch($u, false, 'attendance'));
+            ->each(fn (User $u) => ActivityService::touch($u, false, 'attendance'));
 
         return response()->json(['message' => "Session enregistrée ({$present} présent(s))."]);
     }
@@ -141,7 +149,7 @@ class AttendanceController extends Controller
         $query = Profile::with(['tribe', 'user:id,activity_status,activity_override'])->has('user')
             ->when($department, fn ($q) => $q->whereHas('departments', fn ($d) => $d->whereKey($department->id)));
 
-        return \App\Support\MemberScope::manageableProfiles($query, $user, $permission)
+        return MemberScope::manageableProfiles($query, $user, $permission)
             ->orderBy('last_name')->orderBy('first_name')->get();
     }
 

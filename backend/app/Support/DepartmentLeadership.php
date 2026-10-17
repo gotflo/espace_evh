@@ -93,6 +93,20 @@ class DepartmentLeadership
         }
     }
 
+    /**
+     * Le membre quitte le departement (de lui-meme, ou par la fiche du membre) : s'il en etait responsable,
+     * il ne l'est plus, et le role suit.
+     */
+    public static function leave(Department $department, int $userId, ?int $actorId): void
+    {
+        $before = self::leaderIds($department);
+        if (! in_array($userId, $before, true)) {
+            return;
+        }
+        self::dismiss($department, $userId);
+        self::syncRole($department, $before, self::leaderIds($department), $actorId ?? $userId);
+    }
+
     /** Departement supprime : ses attributions du role disparaissent avec lui. */
     public static function forget(Department $department): void
     {

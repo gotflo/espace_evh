@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Gem;
 use App\Models\Profile;
+use App\Models\Role;
 use App\Models\Tribe;
 use App\Models\User;
 use App\Support\GemRules;
 use App\Support\LeaderRole;
+use App\Support\RoleGrants;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -70,6 +72,7 @@ class GemController extends Controller
         $data = $this->validated($request);
         $leader = $data['leader_user_id'] ?? null;
         unset($data['leader_user_id']);
+        $this->ensureCanAppointGarde($request->user(), $leader, null);
         $gem = Gem::create($data);
         // Le responsable nomme recoit aussitot le role Garde sur ce GEM (et le rejoint).
         GemRules::appointLeader($gem, $leader, $request->user()->id);
@@ -83,6 +86,7 @@ class GemController extends Controller
         $data = $this->validated($request);
         $leader = $data['leader_user_id'] ?? null;
         unset($data['leader_user_id']);
+        $this->ensureCanAppointGarde($request->user(), $leader, $gem->leader_user_id);
 
         // Changer la tribu d'un GEM qui a deja des membres d'une autre tribu casserait la regle.
         if ((int) $data['tribe_id'] !== (int) $gem->tribe_id
@@ -94,6 +98,21 @@ class GemController extends Controller
         GemRules::appointLeader($gem, $leader, $request->user()->id);
 
         return response()->json(['message' => 'GEM mis à jour.']);
+    }
+
+    /**
+     * Nommer (ou retirer) un Garde lui donne (ou retire) le role Garde : memes regles que pour attribuer
+     * ce role (rang, acces confidentiels detenus), voir RoleGrants.
+     */
+    private function ensureCanAppointGarde(User $actor, mixed $leader, mixed $current): void
+    {
+        if ((int) $leader === (int) $current) {
+            return;
+        }
+        $role = Role::where('key', 'garde')->first();
+        if ($role && ($refusal = RoleGrants::assignRefusal($actor, $role))) {
+            abort(403, $refusal);
+        }
     }
 
     public function destroy(Request $request, Gem $gem): JsonResponse

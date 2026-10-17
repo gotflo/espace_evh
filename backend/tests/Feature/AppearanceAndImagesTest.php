@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Announcement;
+use App\Models\AuditLog;
 use App\Models\Profile;
 use App\Models\Role;
 use App\Models\Tribe;
@@ -148,7 +149,7 @@ class AppearanceAndImagesTest extends TestCase
         $this->deleteJson('/api/admin/appearance/home')->assertOk()->assertJsonPath('home_changed', false);
         Storage::disk('public')->assertMissing($this->stored($second['large']));
         $this->assertSame('/verset/fond-1600.jpg', $this->getJson('/api/appearance')->json('home.large'));
-        $this->assertGreaterThanOrEqual(4, \App\Models\AuditLog::where('action', 'like', 'appearance.%')->count());
+        $this->assertGreaterThanOrEqual(4, AuditLog::where('action', 'like', 'appearance.%')->count());
     }
 
     public function test_uploads_must_be_real_images_of_a_reasonable_size(): void
@@ -274,7 +275,7 @@ class AppearanceAndImagesTest extends TestCase
     {
         $this->actAs($this->marie);
         $this->post('/api/profile', ['first_name' => 'Marie', 'last_name' => 'T', 'gender' => 'femme', 'photo' => $this->decompressionBomb()], ['Accept' => 'application/json'])
-            ->assertStatus(422)->assertJsonPath('errors.photo.0', 'Cette image est trop grande (plus de 50 millions de pixels) : réduisez-la ou choisissez une autre photo.');
+            ->assertStatus(422)->assertJsonPath('errors.photo.0', 'Cette image est trop grande (plus de 30 millions de pixels) : réduisez-la ou choisissez une autre photo.');
         $this->assertNull(Profile::where('user_id', $this->marie->id)->value('photo_path'));
         $this->actAs($this->pastor);
         $this->post('/api/admin/appearance/home', ['image' => $this->decompressionBomb(), 'x' => 50, 'y' => 50], ['Accept' => 'application/json'])->assertStatus(422);

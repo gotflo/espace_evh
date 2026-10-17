@@ -38,6 +38,11 @@ return [
     // Envoi/validation des codes OTP. 'log' en dev, 'twilio_verify' en production.
     'sms' => [
         'driver' => env('SMS_DRIVER', 'log'),
+        // Anti-fraude (pompage de SMS factures) : pays acceptes pour l'envoi d'un code, et plafonds
+        // globaux au-dela desquels plus aucun code ne part (alerte dans la supervision).
+        'allowed_regions' => env('SMS_ALLOWED_REGIONS', 'CA,US'),
+        'max_per_hour' => (int) env('SMS_MAX_PER_HOUR', 40),
+        'max_per_day' => (int) env('SMS_MAX_PER_DAY', 200),
         'twilio' => [
             'sid' => env('TWILIO_ACCOUNT_SID'),
             'token' => env('TWILIO_AUTH_TOKEN'),

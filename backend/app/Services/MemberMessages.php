@@ -8,6 +8,7 @@ use App\Models\DepartmentJoinRequest;
 use App\Models\User;
 use App\Support\French;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Courriels et textos aux membres (devoir, FISS, rapports) : courriel si l'adresse est remplie, sinon
@@ -26,10 +27,14 @@ class MemberMessages
     {
         $count = 0;
         foreach (collect($userIds)->unique()->chunk(200) as $chunk) {
-            foreach (User::with('profile')->whereIn('id', $chunk->all())->where('activity_status', 'active')
-                ->whereHas('profile', fn ($p) => $p->where('is_completed', true))->get() as $user) {
-                $count += $fn($user) ? 1 : 0;
-            }
+            $users = User::with('profile')->whereIn('id', $chunk->all())->where('activity_status', 'active')
+                ->whereHas('profile', fn ($p) => $p->where('is_completed', true))->get();
+            // Un lot = une seule ecriture validee (et non 200) : publier pour toute l'eglise reste rapide.
+            DB::transaction(function () use ($users, $fn, &$count) {
+                foreach ($users as $user) {
+                    $count += $fn($user) ? 1 : 0;
+                }
+            });
         }
 
         return $count;

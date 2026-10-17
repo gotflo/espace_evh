@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Admin\EventController;
 use App\Http\Controllers\Controller;
 use App\Models\Event;
 use App\Models\EventParticipation;
@@ -13,6 +14,9 @@ use Illuminate\Validation\ValidationException;
 
 class MyEventController extends Controller
 {
+    /** Rendez-vous a venir (ou repetes) au plus dans un agenda personnel. */
+    private const MAX_PERSONAL = 200;
+
     /**
      * Evenements a venir qui concernent le fidele (portee : tous / sa tribu / son GEM /
      * ses departements), recurrences deroulees, sur les N prochains jours (30 par defaut).
@@ -43,6 +47,13 @@ class MyEventController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        // Plafond : chaque passage des automatismes deroule les agendas personnels (rappels).
+        $active = Event::where('is_personal', true)->where('created_by', $request->user()->id)
+            ->where(fn ($q) => $q->where('starts_at', '>=', now()->subDay())->orWhere(fn ($r) => $r->where('recurrence', '!=', 'none')
+                ->where(fn ($u) => $u->whereNull('recurrence_until')->orWhere('recurrence_until', '>=', now()->toDateString()))))
+            ->count();
+        abort_if($active >= self::MAX_PERSONAL, 422, 'Votre agenda contient déjà '.self::MAX_PERSONAL.' rendez-vous à venir : supprimez-en avant d\'en ajouter.');
+
         $event = Event::create($this->personal($request) + [
             'is_personal' => true,
             'created_by' => $request->user()->id,
@@ -78,7 +89,7 @@ class MyEventController extends Controller
         $data = $request->validate([
             'title' => ['required', 'string', 'max:150'],
             'description' => ['nullable', 'string', 'max:2000'],
-            'category' => ['nullable', 'in:'.implode(',', array_keys(\App\Http\Controllers\Api\Admin\EventController::CATEGORIES))],
+            'category' => ['nullable', 'in:'.implode(',', array_keys(EventController::CATEGORIES))],
             'starts_at' => ['required', 'date'],
             'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
             'all_day' => ['nullable', 'boolean'],

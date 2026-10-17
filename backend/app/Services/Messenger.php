@@ -6,6 +6,7 @@ use App\Mail\NotificationMail;
 use App\Models\OutboundMessage;
 use App\Models\User;
 use App\Services\Sms\TwilioMessagingClient;
+use App\Support\Monitoring\Redactor;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -129,9 +130,10 @@ class Messenger
                 continue;
             }
             foreach ($due as $message) {
-                // Reserve le message (un seul envoi meme si deux taches tournent en meme temps).
+                // Reserve le message (un seul envoi meme si deux taches tournent en meme temps). Heure reelle de
+                // la reservation : un passage long ne remet pas en file un message en cours d'envoi.
                 $claimed = OutboundMessage::where('id', $message->id)->where('status', 'pending')
-                    ->update(['status' => 'sending', 'attempts' => DB::raw('attempts + 1'), 'updated_at' => $now]);
+                    ->update(['status' => 'sending', 'attempts' => DB::raw('attempts + 1'), 'updated_at' => now()]);
                 if ($claimed !== 1) {
                     continue;
                 }
@@ -151,10 +153,14 @@ class Messenger
                     $message->forceFill([
                         'status' => $final ? 'failed' : 'pending',
                         'available_at' => $now->copy()->addMinutes(self::RETRY_MINUTES[min($message->attempts - 1, count(self::RETRY_MINUTES) - 1)]),
-                        'last_error' => mb_substr($e->getMessage(), 0, 500),
+                        // Message d'erreur du fournisseur masque (il peut contenir le numero ou l'adresse complets).
+                        'last_error' => Redactor::text($e->getMessage(), 500),
                     ])->save();
                     $final ? $failed++ : null;
-                    Log::warning('Envoi '.$channel.' impossible', ['id' => $message->id, 'kind' => $message->kind, 'attempt' => $message->attempts, 'error' => mb_substr($e->getMessage(), 0, 300)]);
+                    Log::warning('Envoi '.$channel.' impossible', ['id' => $message->id, 'kind' => $message->kind, 'attempt' => $message->attempts, 'error' => Redactor::text($e->getMessage(), 300)]);
+                    // Serveur d'envoi injoignable ou refus : on s'arrete pour ce passage (les suivants
+                    // attendraient chacun le delai maximal) ; le reste repart au passage suivant.
+                    break;
                 }
             }
         }

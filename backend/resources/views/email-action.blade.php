@@ -21,6 +21,17 @@
   </style>
 </head>
 <body>
+  @if (! empty($confirm))
+  {{-- Decision definitive : rien ne part sans un appui sur le bouton. --}}
+  <main class="card">
+    <div class="brand"><img src="{{ $assetUrl }}/logo-vh.png" alt=""><span>My vasesdhonneur</span></div>
+    <h1>{{ $title }}</h1>
+    <p>Le compte et ses données seront supprimés définitivement. L'application s'ouvrira ensuite pour vous confirmer le résultat.</p>
+    <form method="post" action="{{ $action }}">
+      <button type="submit">{{ $confirm }}</button>
+    </form>
+  </main>
+  @else
   {{-- Page d'un instant : la decision part toute seule, puis l'application s'ouvre et la confirme. --}}
   <main class="card">
     <div class="brand"><img src="{{ $assetUrl }}/logo-vh.png" alt=""><span>My vasesdhonneur</span></div>
@@ -34,5 +45,6 @@
   <script>
     (function () { var f = document.getElementById('decision'); if (!f.dataset.sent) { f.dataset.sent = '1'; f.submit(); } })();
   </script>
+  @endif
 </body>
 </html>

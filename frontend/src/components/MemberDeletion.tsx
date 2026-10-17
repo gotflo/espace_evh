@@ -6,6 +6,7 @@ interface DeletionInfo {
   can_delete: boolean
   can_request: boolean
   pending_request: { id: number; reason: string; by: string | null; created_at: string } | null
+  has_pending?: boolean
   impact: { deleted: { label: string; count: number }[] } | null
 }
 
@@ -45,6 +46,9 @@ export function MemberDeletion({ userId, name }: { userId: string; name: string 
       {info.pending_request && (
         <p className="helper">Demande en attente{info.pending_request.by ? ` de ${info.pending_request.by}` : ''} : « {info.pending_request.reason} ».</p>
       )}
+      {!info.pending_request && info.has_pending && (
+        <p className="helper">Une demande de suppression est déjà en attente auprès du Pasteur Résident.</p>
+      )}
       {!open ? (
         <>
           <p className="helper">
@@ -52,7 +56,7 @@ export function MemberDeletion({ userId, name }: { userId: string; name: string 
               ? 'Suppression définitive du compte et de ses données. Son numéro ne pourra plus servir à une nouvelle inscription (vous pourrez le débloquer dans Validations).'
               : 'Le Pasteur Résident recevra votre demande et décidera.'}
           </p>
-          {(info.can_delete || !info.pending_request) && (
+          {(info.can_delete || !(info.pending_request || info.has_pending)) && (
             <button className="btn btn-ghost small" onClick={() => setOpen(true)}>{info.can_delete ? 'Supprimer…' : 'Demander la suppression…'}</button>
           )}
         </>

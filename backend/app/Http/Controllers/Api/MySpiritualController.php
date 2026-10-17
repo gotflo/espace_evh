@@ -85,14 +85,15 @@ class MySpiritualController extends Controller
         ]);
 
         $user = $request->user();
+        $milestone = Milestone::where('member_user_id', $user->id)->where('milestone_key', $data['milestone_key'])->first();
+        // Une etape notee par un responsable (bapteme...) reste telle quelle : le membre ne la retire ni ne la redate.
+        abort_if($milestone && $milestone->recorded_by && (int) $milestone->recorded_by !== $user->id, 403,
+            'Cette étape a été notée par un responsable : demandez-lui pour la modifier.');
         if ($data['reached']) {
-            Milestone::updateOrCreate(
-                ['member_user_id' => $user->id, 'milestone_key' => $data['milestone_key']],
-                ['reached_at' => Carbon::today(), 'recorded_by' => $user->id],
-            );
+            $milestone ?? Milestone::create(['member_user_id' => $user->id, 'milestone_key' => $data['milestone_key'],
+                'reached_at' => Carbon::today(), 'recorded_by' => $user->id]);
         } else {
-            Milestone::where('member_user_id', $user->id)
-                ->where('milestone_key', $data['milestone_key'])->delete();
+            $milestone?->delete();
         }
 
         return response()->json(['message' => 'Étape mise à jour.']);

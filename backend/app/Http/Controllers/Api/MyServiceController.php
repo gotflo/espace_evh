@@ -9,6 +9,7 @@ use App\Models\Event;
 use App\Services\CalendarService;
 use App\Services\DepartmentJoinService;
 use App\Services\Notifier;
+use App\Support\DepartmentLeadership;
 use App\Support\Recipients;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -93,6 +94,7 @@ class MyServiceController extends Controller
         }
 
         if ($profile->departments()->detach($department->id)) {
+            DepartmentLeadership::leave($department, $user->id, $user->id);
             $name = $profile->full_name ?: $user->phone;
             Notifier::send(
                 array_diff(Recipients::departmentLeaders($department), [$user->id]),
