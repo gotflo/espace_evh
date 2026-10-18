@@ -509,6 +509,13 @@ OPcache, cron disponible. Pas de Redis ni de worker permanent supposés : l'appl
   (`LOG_STACK=daily`). Les notifications de plus de 6 mois sont nettoyées automatiquement (`app:tick`).
 - **État des automatismes** : `/api/health` indique depuis combien de minutes ils ont tourné et si une étape a échoué ;
   le détail (durée et résultat de chaque étape) est gardé en cache.
+- **Courriels** : si l'envoi n'est pas configuré (`MAIL_MAILER` absent en production), les courriels restent en file
+  24 h (« En attente », compté dans la supervision) et partent dès que l'envoi est rétabli ; au-delà, ils sont marqués
+  « Non envoyé ». Les erreurs passagères du serveur d'envoi sont retentées (5 essais). Pour relancer des courriels en
+  échec : `php artisan app:outbox-retry` (aperçu, rien n'est envoyé), puis `--oui` pour les remettre en file
+  (`--kind=fiss_reminder` pour un seul type, `--jours=14` par défaut). Ne repartent jamais : un membre supprimé ou
+  bloqué, une adresse retirée, des courriels coupés dans ses préférences, un rappel FISS d'un autre mois ou dont la
+  fiche est déjà remplie.
 - **Sauvegardes** : Hostinger sauvegarde le compte (stockage à Boston). Avant chaque mise à jour, faire en plus un
   export SQL (phpMyAdmin → Exporter) et une copie de `.env` et `storage/app/webpush-vapid.json`.
 - **Restauration** (à tester une fois sur une base vide avant d'en avoir besoin) :

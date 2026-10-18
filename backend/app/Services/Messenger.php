@@ -30,6 +30,18 @@ class Messenger
     /** Motif enregistre quand aucun envoi de courriel n'est configure sur le serveur. */
     public const MAIL_NOT_CONFIGURED = 'Non envoyé : aucun envoi de courriel configuré sur le serveur (MAIL_MAILER).';
 
+    /** Motif d'un courriel garde en file pendant que l'envoi n'est pas configure. */
+    public const MAIL_WAITING = 'En attente : aucun envoi de courriel configuré sur le serveur (MAIL_MAILER).';
+
+    /**
+     * Envoi non configure : un courriel reste en file ce temps-la (il part des que la configuration est
+     * retablie), puis il est abandonne (un rappel perime n'aurait plus de sens).
+     */
+    public const NOT_CONFIGURED_GRACE_HOURS = 24;
+
+    /** Pendant que l'envoi n'est pas configure, nouvel essai toutes les ... minutes. */
+    private const NOT_CONFIGURED_RETRY_MINUTES = 15;
+
     /**
      * Les courriels partent-ils vraiment ? Avec le pilote « log » ou « array », ils ne sont qu'ecrits dans un
      * journal : accepte en developpement et pendant les tests, jamais compte comme un envoi ailleurs.
@@ -121,11 +133,18 @@ class Messenger
         foreach (['email' => (int) config('mail.per_minute', 20), 'sms' => (int) config('services.sms.per_minute', 30)] as $channel => $limit) {
             $due = OutboundMessage::where('channel', $channel)->where('status', 'pending')->where('available_at', '<=', $now)
                 ->orderBy('available_at')->orderBy('id')->limit(max(1, $limit))->get();
-            // Courriels sans envoi configure : marques « non envoyes » (jamais « envoyes »), sans tentative.
+            // Courriels sans envoi configure : jamais comptes « envoyes ». Ils restent en file (sans tentative)
+            // pour partir des que la configuration est retablie ; trop anciens, ils sont marques « non envoyes ».
             if ($channel === 'email' && ! self::emailDeliverable() && $due->isNotEmpty()) {
-                $failed += OutboundMessage::whereIn('id', $due->pluck('id'))->where('status', 'pending')
+                $ids = $due->pluck('id');
+                $failed += OutboundMessage::whereIn('id', $ids)->where('status', 'pending')
+                    ->where('created_at', '<', $now->copy()->subHours(self::NOT_CONFIGURED_GRACE_HOURS))
                     ->update(['status' => 'failed', 'last_error' => self::MAIL_NOT_CONFIGURED, 'updated_at' => $now]);
-                Log::warning('Courriels non envoyés : aucun envoi configuré (MAIL_MAILER)', ['count' => $due->count()]);
+                $waiting = OutboundMessage::whereIn('id', $ids)->where('status', 'pending')->update([
+                    'available_at' => $now->copy()->addMinutes(self::NOT_CONFIGURED_RETRY_MINUTES),
+                    'last_error' => self::MAIL_WAITING, 'updated_at' => $now,
+                ]);
+                Log::warning('Courriels non envoyés : aucun envoi configuré (MAIL_MAILER)', ['waiting' => $waiting, 'abandoned' => $due->count() - $waiting]);
 
                 continue;
             }
