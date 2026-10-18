@@ -7,6 +7,7 @@ import { SkeletonCard } from '../components/Skeleton'
 import { usePulse } from '../pulse'
 import { clearDraft, readDraft, useDraft } from '../utils/drafts'
 import type { AppointmentItem, AppointmentSession, AppointmentUrgency, MyAppointmentsData } from '../types'
+import { scrollPageTo } from '../utils/pageScroll'
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 const hhmm = (t: string) => { const [h, m] = t.split(':'); return `${Number(h)}h${m}` }
@@ -165,7 +166,7 @@ export default function Appointments() {
       })
       if (draftKey) clearDraft(draftKey)
       setMessage(''); setChoice(null); setUrgency('normal')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      scrollPageTo(0, true)
     } catch { /* toast */ } finally { setBusy(false); load() }
   }
 

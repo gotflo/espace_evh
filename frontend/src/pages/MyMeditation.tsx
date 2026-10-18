@@ -9,6 +9,7 @@ import { MeditationSheetView } from '../components/MeditationSheetView'
 import { clearDraft, readDraft, useDraft } from '../utils/drafts'
 import { filledOn, MEDITATION_FIELDS, MEDITATION_MAX } from '../utils/meditation'
 import type { MeditationField, MeditationSheet, MeditationSummary } from '../types'
+import { scrollPageTo } from '../utils/pageScroll'
 
 type Texts = Record<MeditationField, string>
 
@@ -80,7 +81,7 @@ export default function MyMeditation() {
       // La nouvelle fiche en tete de l'historique, avec la date enregistree par le serveur.
       setSheets((list) => [{ id: r.sheet.id, submitted_at: r.sheet.submitted_at }, ...(list ?? []).filter((s) => s.id !== r.sheet.id)])
       setParams({}, { replace: true })
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      scrollPageTo(0, true)
       load()
     } catch {
       /* message d'erreur affiche automatiquement ; la saisie et son brouillon restent */

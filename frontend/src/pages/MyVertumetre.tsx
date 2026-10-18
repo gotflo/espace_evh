@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, peek } from '../api/client'
 import { AppLayout } from '../components/AppLayout'
+import { scrollPageTo } from '../utils/pageScroll'
 import { SkeletonCard } from '../components/Skeleton'
 import { Icon } from '../components/Icon'
 import { VertumetreAnswers } from '../components/VertumetreAnswers'
@@ -163,7 +164,7 @@ export default function MyVertumetre() {
       // On reste sur le mois enregistre (confirmation et reponses verrouillees), sans sauter au mois suivant a remplir.
       setParams({ mois: period! }, { replace: true })
       load()
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      scrollPageTo(0, true)
     } catch { setConfirming(false) } finally { setBusy(false) }
   }
 
@@ -236,9 +237,9 @@ export default function MyVertumetre() {
           {section.questions.map((q) => <Question key={q.key} q={q} a={answers} set={set} />)}
 
           <div className="vt-nav">
-            {step > 0 && <button className="btn btn-ghost" onClick={() => { setStep(step - 1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}>Précédent</button>}
+            {step > 0 && <button className="btn btn-ghost" onClick={() => { setStep(step - 1); scrollPageTo(0, true) }}>Précédent</button>}
             {step < sections.length - 1 ? (
-              <button className="btn btn-primary" disabled={missing > 0} onClick={() => { setStep(step + 1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}>
+              <button className="btn btn-primary" disabled={missing > 0} onClick={() => { setStep(step + 1); scrollPageTo(0, true) }}>
                 {missing > 0 ? `Encore ${missing} réponse${missing > 1 ? 's' : ''}` : 'Suivant'}
               </button>
             ) : (

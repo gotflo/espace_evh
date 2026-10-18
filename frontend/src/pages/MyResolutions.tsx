@@ -8,6 +8,7 @@ import { clearDraft, readDraft, useDraft } from '../utils/drafts'
 import { usePulse } from '../pulse'
 import type { MonthlyResolution, ResolutionKey, ResolutionOutcome, ResolutionResource, ResolutionsData } from '../types'
 import { de } from '../utils/french'
+import { scrollPageTo } from '../utils/pageScroll'
 
 
 type Texts = Record<ResolutionKey, string>
@@ -185,7 +186,7 @@ export default function MyResolutions() {
       await api('/me/resolutions', { method: 'PUT', body: texts })
       if (draftKey) clearDraft(draftKey)
       load()
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      scrollPageTo(0, true)
     } catch { /* toast automatique */ } finally { setBusy(false) }
   }
 

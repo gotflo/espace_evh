@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { shellOn } from '../utils/iosViewport'
+import { pageScrollTop } from '../utils/pageScroll'
 
 /** Vrai seulement quand l'app tourne en mode installe (ecran d'accueil). */
 function isStandalone(): boolean {
@@ -8,8 +10,8 @@ function isStandalone(): boolean {
 
 /**
  * Tirer vers le bas pour recharger, comme les applications natives.
- * Actif uniquement en mode installe : dans un navigateur classique, le geste
- * natif existe deja, on ne le double pas.
+ * Actif en mode installe, et sur iPhone / iPad dans l'application connectee (la page ne defile plus, seul le
+ * cadre defile : le geste natif du navigateur ne fonctionne plus). Ailleurs, le geste natif existe deja.
  */
 export function PullToRefresh() {
   const [pull, setPull] = useState(0)
@@ -20,13 +22,17 @@ export function PullToRefresh() {
   const busy = useRef(false)
 
   useEffect(() => {
-    if (!isStandalone()) return
+    const standalone = isStandalone()
     const THRESHOLD = 72
     const MAX = 110
     const set = (v: number) => { pullRef.current = v; setPull(v) }
 
     const onStart = (e: TouchEvent) => {
-      if (window.scrollY > 3 || busy.current) { active.current = false; return }
+      active.current = false
+      if ((!standalone && !shellOn()) || pageScrollTop() > 3 || busy.current) return
+      // Geste dans le menu, une fenetre ou une liste deja defilee : c'est un defilement, pas un rechargement.
+      const target = e.target instanceof Element ? e.target : null
+      if (target?.closest('.sidebar, .menu-overlay, #app-layer, .modal-overlay, .ms-backdrop, .ms-panel')) return
       startY.current = e.touches[0].clientY
       active.current = true
     }

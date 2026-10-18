@@ -1,4 +1,4 @@
-import { createContext, Suspense, useContext, useEffect, useState, type MouseEvent, type ReactNode } from 'react'
+import { createContext, Suspense, useContext, useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { NavLink, Outlet, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
@@ -11,6 +11,8 @@ import { APP_NAME } from '../config'
 import { warmRoute } from '../utils/routeData'
 import { PushSettings } from './PushSettings'
 import { usePulse } from '../pulse'
+import { enterAppShell, shellOn } from '../utils/iosViewport'
+import { rememberPageScroll, restorePageScroll, scrollPageTo } from '../utils/pageScroll'
 
 /**
  * Cadre persistant : menu lateral, en-tete et barre du bas sont affiches une seule fois pour
@@ -24,17 +26,22 @@ export function ShellLayout() {
   const { loading, isAuthenticated } = useAuth()
   const [head, setHead] = useState<HTMLElement | null>(null)
   const [actions, setActions] = useState<HTMLElement | null>(null)
-  const { pathname } = useLocation()
+  const { pathname, key } = useLocation()
   const navigationType = useNavigationType()
 
   // Reglages de la plateforme modifies (modules actives...) : le compte est relu, menus et pages suivent.
   const { refresh } = useAuth()
   usePulse('settings', () => { void refresh() }, isAuthenticated)
 
-  // Nouvelle page : on repart du haut (le retour arriere garde la position du navigateur).
+  // Nouvelle page : on repart du haut ; le retour arriere retrouve la position (le navigateur s'en charge pour la
+  // fenetre, restorePageScroll pour le cadre de l'application sur iPhone). Seul un changement d'adresse compte.
+  const lastPath = useRef(pathname)
   useEffect(() => {
-    if (navigationType !== 'POP') window.scrollTo(0, 0)
-  }, [pathname, navigationType])
+    if (lastPath.current === pathname) return
+    lastPath.current = pathname
+    if (navigationType !== 'POP') scrollPageTo(0)
+    else restorePageScroll(key)
+  }, [pathname, navigationType, key])
 
   // Session en cours de verification ou absente : les gardes des routes (RequireAuth) decident.
   if (loading || !isAuthenticated) {
@@ -130,6 +137,23 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
   // (l'ancienne reste visible pendant ce temps, sans ecran blanc).
   const location = useLocation()
   const [leavingKey, setLeavingKey] = useState<string | null>(null)
+
+  // iPhone / iPad : la page ne defile plus, seul ce cadre defile (la barre du bas ne peut plus partir avec le
+  // defilement, voir utils/iosViewport.ts). La position de chaque page est notee pour le retour arriere.
+  const appRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => enterAppShell(), [])
+  useEffect(() => {
+    const el = appRef.current
+    if (!el || !shellOn()) return
+    const key = location.key
+    let frame = 0
+    const save = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => rememberPageScroll(key, el.scrollTop))
+    }
+    el.addEventListener('scroll', save, { passive: true })
+    return () => { el.removeEventListener('scroll', save); cancelAnimationFrame(frame) }
+  }, [location.key])
   const navigating = leavingKey === location.key
   function onLinkClick(e: MouseEvent<HTMLDivElement>) {
     const link = (e.target as Element).closest('a[href]')
@@ -149,7 +173,7 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
   }
 
   return (
-    <div className="app" onClickCapture={onLinkClick} onMouseOver={onLinkIntent} onTouchStart={onLinkIntent} onFocus={onLinkIntent}>
+    <div className="app" ref={appRef} onClickCapture={onLinkClick} onMouseOver={onLinkIntent} onTouchStart={onLinkIntent} onFocus={onLinkIntent}>
       {navigating && <div className="nav-progress" aria-hidden />}
       <a className="skip-link" href="#contenu">Aller au contenu</a>
       <OfflineBanner />

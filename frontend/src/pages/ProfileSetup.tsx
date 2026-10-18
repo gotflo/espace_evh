@@ -10,6 +10,7 @@ import { Icon } from '../components/Icon'
 import { useDirty } from '../utils/dirty'
 import { toast } from '../toast'
 import { PhotoCropper } from '../components/PhotoCropper'
+import { scrollPageTo } from '../utils/pageScroll'
 
 const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 
@@ -91,7 +92,7 @@ export default function ProfileSetup() {
       // Nouveau compte : l'inscription part chez le pasteur, l'ecran d'attente s'affiche.
       if (res.membership && res.membership.status !== 'approved') {
         setMembership(res.membership)
-        window.scrollTo({ top: 0 })
+        scrollPageTo(0)
         return
       }
       // Compte valide (ou valide aussitot en mode d'essai local) : l'espace s'ouvre.

@@ -9,6 +9,7 @@ import { clearDraft, readDraft, useDraft } from '../utils/drafts'
 import type { WatchResult } from '../utils/playback'
 import { usePulse } from '../pulse'
 import type { Assignment, MyAssignmentsData } from '../types'
+import { scrollPageTo } from '../utils/pageScroll'
 
 const fmt = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' }) : '')
 
@@ -172,7 +173,7 @@ export default function MyAssignments() {
 
   function pick(a: Assignment) {
     setParams({ d: String(a.id) }, { replace: true })
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    scrollPageTo(0, true)
   }
 
   return (

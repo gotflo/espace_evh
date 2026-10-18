@@ -5,6 +5,7 @@ import { toast } from '../toast'
 import { usePulse } from '../pulse'
 import { useAuth } from '../auth/AuthContext'
 import { AppLayout } from '../components/AppLayout'
+import { scrollPageTo } from '../utils/pageScroll'
 import { SkeletonCard } from '../components/Skeleton'
 import { FissEvolution } from '../components/FissEvolution'
 import { FissDetail } from '../components/FissDetail'
@@ -181,7 +182,7 @@ export default function MyFiss() {
   function startEdit(f: FissForm) {
     setEditing(f)
     setForm(Object.fromEntries(FIELDS.map((k) => [k, f[k] ?? null])) as unknown as FissForm)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    scrollPageTo(0, true)
   }
 
   // Abandon de la modification d'une fiche passee : son brouillon est oublie, et la saisie du mois

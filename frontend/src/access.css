@@ -235,15 +235,25 @@ input[type="date"]::-webkit-calendar-picker-indicator, input[type="time"]::-webk
 .flip { transform: scaleX(-1); }
 a.resource-card { text-decoration: none; color: inherit; }
 
-/* iPhone : recalage des elements fixes du bas quand Safari garde un affichage raccourci apres le clavier
-   (voir utils/iosViewport.ts ; --ios-gap vaut 0 en temps normal). La propriete « translate » s'ajoute aux
+/* iPhone / iPad, coque de l'application connectee (voir utils/iosViewport.ts) : la page ne defile pas, seul le
+   cadre .app defile. Safari ne peut donc plus laisser la barre du bas, le menu ou les fenetres en arriere. */
+html.app-shell, html.app-shell body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+html.app-shell #root { height: 100%; min-height: 0; }
+html.app-shell #root > .app { height: 100%; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; }
+@media print {
+  html.app-shell, html.app-shell body, html.app-shell #root, html.app-shell #root > .app { height: auto; overflow: visible; }
+}
+
+/* Filet de securite : ecart restant entre l'ecran visible et l'endroit ou Safari place les elements fixes
+   (--ios-top en haut, --ios-gap en bas ; 0 en temps normal). La propriete « translate » s'ajoute aux
    transformations existantes sans les remplacer. */
-:root { --ios-gap: 0px; }
+:root { --ios-gap: 0px; --ios-top: 0px; }
 @media (max-width: 860px) {
   .bottom-nav, .offline-banner, .install-banner, .rm-save, .settings-savebar, .ms-panel { translate: 0 var(--ios-gap); }
-  .sidebar, .menu-overlay { bottom: calc(0px - var(--ios-gap)); }
+  .sidebar, .menu-overlay { top: var(--ios-top); bottom: calc(0px - var(--ios-gap)); }
 }
-.modal-overlay, .ms-backdrop { bottom: calc(0px - var(--ios-gap)); }
+.modal-overlay, .ms-backdrop { top: var(--ios-top); bottom: calc(0px - var(--ios-gap)); }
+.toaster, .nav-progress, .ptr { translate: 0 var(--ios-top); }
 
 /* Choix segmentes (Toute l'eglise / Choisir des groupes...) : sur petit ecran, les libelles passent a la
    ligne plutot que d'etre coupes ou caches par un defilement horizontal. */
