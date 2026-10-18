@@ -23,8 +23,8 @@ function sectionText(s: GuideSection): string {
   ].filter(Boolean).join(' ')
 }
 
-const src = (name: string) => `/guide/${name}.webp`
-const src2x = (name: string) => `/guide/${name}@2x.webp`
+const src = (name: string) => `/guide-captures/${name}.webp`
+const src2x = (name: string) => `/guide-captures/${name}@2x.webp`
 
 /** Captures iPhone d'une section : rangee qui defile sur telephone, touchees pour agrandir. */
 function Shots({ shots, onOpen }: { shots: GuideShot[]; onOpen: (index: number) => void }) {
