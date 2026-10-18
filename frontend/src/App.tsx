@@ -42,6 +42,7 @@ const Announcements = page(() => import('./pages/admin/Announcements'), true, '/
 const Events = page(() => import('./pages/admin/Events'), true, '/admin/evenements')
 const Requests = page(() => import('./pages/admin/Requests'), true, '/admin/demandes')
 const Contact = page(() => import('./pages/Contact'), false, '/contact')
+const Guide = page(() => import('./pages/Guide'), false, '/guide')
 const MySpiritual = page(() => import('./pages/MySpiritual'), false, '/ma-vie-spirituelle')
 const MyProfile = page(() => import('./pages/MyProfile'), false, '/mon-profil')
 const MyFiss = page(() => import('./pages/MyFiss'), false, '/ma-fiche')
@@ -255,6 +256,7 @@ export default function App() {
         <Route path="/admin/devoirs-rm" element={<RequireAuth requireComplete anyPermission={['assignments.publish', 'spiritual.view']}><Growth /></RequireAuth>} />
         <Route path="/admin/horaires" element={<RequireAuth requireComplete anyPermission={['schedule.view']}><ServiceTimes /></RequireAuth>} />
         <Route path="/contact" element={<RequireAuth requireComplete memberSpace><Contact /></RequireAuth>} />
+        <Route path="/guide" element={<RequireAuth requireComplete memberSpace><Guide /></RequireAuth>} />
         <Route path="/calendrier" element={<RequireAuth requireComplete memberSpace><Calendar /></RequireAuth>} />
         <Route path="/servir" element={<RequireAuth requireComplete memberSpace><Services /></RequireAuth>} />
         <Route path="/exercices" element={<RequireAuth module="exercises" requireComplete memberSpace><MyExercisesPage /></RequireAuth>} />

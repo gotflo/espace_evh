@@ -180,6 +180,7 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
               {moduleOn('exercises') && <NavLink to="/exercices" className="nav-item"><Icon path={ICONS.play} /><span>Mes exercices</span></NavLink>}
               {!isPastorHost && moduleOn('appointments') && <NavLink to="/rendez-vous" className="nav-item"><Icon path={ICONS.clock} /><span>Prendre rendez-vous</span></NavLink>}
               <NavLink to="/contact" className="nav-item"><Icon path={ICONS.requests} /><span>Nous contacter</span></NavLink>
+              <NavLink to="/guide" className="nav-item"><Icon path={ICONS.help} /><span>Guide</span></NavLink>
             </>
           )}
 
