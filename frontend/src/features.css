@@ -254,7 +254,10 @@
 .agenda-meta { font-size: 0.78rem; color: #4a5a57; }
 .cal-list { padding: 0.6rem 1rem 1rem; display: flex; flex-direction: column; }
 .cal-list-day { display: flex; gap: 1rem; padding: 0.8rem 0; border-bottom: 1px solid var(--border-subtle); }
-.cal-list-day:last-child { border-bottom: none; }
+.cal-list > div:last-child .cal-list-day { border-bottom: none; }
+.cal-list-past { align-self: center; min-height: 44px; padding: 0 0.75rem; }
+.cal-list-month { margin: 1rem 0 0.2rem; font-size: 1rem; }
+.cal-list-none { margin: 0; align-self: center; }
 .cal-list-day.is-past { opacity: 0.6; }
 .cal-list-date { flex-shrink: 0; width: 52px; display: flex; flex-direction: column; align-items: center; }
 .cal-list-date .num { font-size: 1.5rem; font-weight: 800; line-height: 1.1; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; }

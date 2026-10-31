@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useNavigationType, useSearchParams } from 'react-router-dom'
 import { api, ApiError, peek } from '../api/client'
 import { AppLayout } from '../components/AppLayout'
 import { EventEditor } from '../components/EventEditor'
@@ -9,6 +9,7 @@ import { CAT_LABEL, hhmm, longDay, optimisticRsvp, parseYmd, rsvpOccurrence, tim
 import { Icon } from '../components/Icon'
 import { useLatestRequest } from '../utils/latestRequest'
 import { ModalLayer } from '../components/ModalLayer'
+import { pageScrollTop, scrollPageTo } from '../utils/pageScroll'
 
 type View = 'month' | 'week' | 'list'
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
@@ -23,6 +24,10 @@ function mondayOf(d: Date): Date {
 function addDays(d: Date, n: number): Date {
   const x = new Date(d); x.setDate(x.getDate() + n); return x
 }
+function isThisMonth(d: Date): boolean {
+  const now = new Date()
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+}
 
 /** Premier et dernier jour affiches selon la vue. */
 function rangeFor(view: View, cursor: Date): { from: Date; to: Date } {
@@ -32,7 +37,8 @@ function rangeFor(view: View, cursor: Date): { from: Date; to: Date } {
   }
   const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
   const last = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0)
-  if (view === 'list') return { from: first, to: last }
+  // Liste du mois en cours : aussi le mois suivant, pour voir ce qui arrive meme en fin de mois.
+  if (view === 'list') return { from: first, to: isThisMonth(cursor) ? new Date(cursor.getFullYear(), cursor.getMonth() + 2, 0) : last }
   const from = mondayOf(first)
   const to = addDays(mondayOf(last), 6)
   return { from, to }
@@ -94,6 +100,7 @@ function ChipContent({ item, details }: { item: CalendarItem; details: boolean }
 
 export default function Calendar() {
   const navigate = useNavigate()
+  const navigationType = useNavigationType()
   const [params, setParams] = useSearchParams()
   const initialDate = params.get('date')
   const [view, setView] = useState<View>(() => {
@@ -104,6 +111,9 @@ export default function Calendar() {
   const [cursor, setCursor] = useState<Date>(() => (initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? parseYmd(initialDate) : new Date()))
   const [selectedDay, setSelectedDay] = useState<string>(() => initialDate ?? ymd(new Date()))
   const [details, setDetails] = useState(false)
+  // Liste du mois en cours : elle commence aujourd'hui (ou a la date demandee par un lien, si elle est passee).
+  const [listStart, setListStart] = useState<string | null>(() => (initialDate && initialDate < ymd(new Date()) ? initialDate : null))
+  const [showPast, setShowPast] = useState(false)
   const [filters, setFilters] = useState<Filters>(() => {
     try { return { birthdays: true, holidays: true, tasks: true, ...JSON.parse(localStorage.getItem(FILTER_KEY) ?? '{}') } }
     catch { return { birthdays: true, holidays: true, tasks: true } }
@@ -122,6 +132,9 @@ export default function Calendar() {
   const { begin } = useLatestRequest()
   // Jour qui doit recevoir le focus apres un deplacement au clavier (une fois affiche).
   const focusDay = useRef<string | null>(null)
+  // Jour a montrer a l'ecran une fois affiche. Pas au retour arriere : la page retrouve sa position.
+  const revealDay = useRef<string | null>(navigationType === 'POP' && (window.history.state?.idx ?? 0) > 0 ? null : selectedDay)
+  const [revealTick, setRevealTick] = useState(0)
 
   const { from, to } = useMemo(() => rangeFor(view, cursor), [view, cursor])
   const fromS = ymd(from)
@@ -162,7 +175,8 @@ export default function Calendar() {
   }, [])
 
   const move = useCallback((dir: -1 | 1) => {
-    const next = view === 'week' ? addDays(cursor, dir * 7) : new Date(cursor.getFullYear(), cursor.getMonth() + dir, 1)
+    const first = new Date(cursor.getFullYear(), cursor.getMonth() + dir, 1)
+    const next = view === 'week' ? addDays(cursor, dir * 7) : isThisMonth(first) ? new Date() : first
     setCursor(next)
     setSelectedDay((s) => keepSelected(view, next, s))
   }, [view, cursor])
@@ -170,6 +184,9 @@ export default function Calendar() {
   function goToday() {
     const now = new Date()
     setCursor(now); setSelectedDay(ymd(now))
+    setListStart(null); setShowPast(false)
+    revealDay.current = ymd(now)
+    setRevealTick((n) => n + 1)
   }
 
   // Raccourcis clavier : fleches (precedent/suivant), T (aujourd'hui), N (programmer).
@@ -191,6 +208,25 @@ export default function Calendar() {
     const cell = document.querySelector<HTMLElement>(`[data-day="${focusDay.current}"]`)
     if (cell) { focusDay.current = null; cell.focus() }
   }, [selectedDay, fromS, toS])
+
+  // A l'ouverture (et avec « Aujourd'hui ») : le jour en cours est visible tout de suite.
+  useEffect(() => {
+    const day = revealDay.current
+    if (!day || !data) return
+    if (view === 'list') {
+      revealDay.current = null
+      if (revealTick > 0) scrollPageTo(0)
+      return
+    }
+    const cell = document.querySelector<HTMLElement>(`[data-day="${day}"]`)
+    if (!cell) return
+    revealDay.current = null
+    const box = cell.getBoundingClientRect()
+    const nav = document.querySelector('.bottom-nav')
+    const top = (document.querySelector('.app .topbar')?.getBoundingClientRect().bottom ?? 0) + 12
+    const bottom = nav && getComputedStyle(nav).display !== 'none' ? nav.getBoundingClientRect().top : window.innerHeight
+    if (box.top < top || box.bottom > bottom) scrollPageTo(Math.max(0, pageScrollTop() + box.top - top))
+  }, [data, view, revealTick])
 
   /** Elements par jour (les evenements de plusieurs jours apparaissent chaque jour). */
   const byDay = useMemo(() => {
@@ -314,7 +350,15 @@ export default function Calendar() {
   }
 
   const selectedItems = byDay.get(selectedDay) ?? []
-  const listDays = days.filter((d) => (byDay.get(ymd(d)) ?? []).length > 0)
+  const currentList = view === 'list' && isThisMonth(cursor)
+  const hasItems = (key: string) => (byDay.get(key) ?? []).length > 0
+  // Mois en cours : jours passes replies, jour en cours toujours affiche (meme sans rien de prevu).
+  const firstShown = currentList && !showPast ? (listStart ?? today) : fromS
+  const listDays = days.filter((d) => {
+    const key = ymd(d)
+    return key >= firstShown && (hasItems(key) || (currentList && key === today && !!data))
+  })
+  const hasHiddenPast = currentList && days.some((d) => ymd(d) < (listStart ?? today) && hasItems(ymd(d)))
 
   return (
     <AppLayout title="Calendrier" subtitle="Tout ce qui est programmé dans l'église">
@@ -414,15 +458,28 @@ export default function Calendar() {
             {!loading && listDays.length === 0 && (
               <div className="empty-state"><Icon name="calendar" size={28} /><p>Rien de programmé pour {labelCap.toLowerCase()}.</p></div>
             )}
-            {listDays.map((d) => {
+            {hasHiddenPast && (
+              <button type="button" className="btn-link cal-list-past" onClick={() => setShowPast(!showPast)} aria-expanded={showPast}>
+                {showPast ? 'Masquer les jours passés' : 'Voir les jours passés'}
+              </button>
+            )}
+            {listDays.map((d, index) => {
               const key = ymd(d)
+              const items = byDay.get(key) ?? []
+              const before = index > 0 ? listDays[index - 1] : cursor
+              const month = d.toLocaleDateString('fr-CA', { month: 'long', year: 'numeric' })
               return (
-                <div key={key} className={`cal-list-day ${key === today ? 'is-today' : ''} ${key < today ? 'is-past' : ''}`}>
-                  <div className="cal-list-date">
-                    <span className="num">{d.getDate()}</span>
-                    <span className="dow">{d.toLocaleDateString('fr-CA', { weekday: 'short' }).replace('.', '')}</span>
+                <div key={key}>
+                  {d.getMonth() !== before.getMonth() && <h3 className="cal-list-month">{month.charAt(0).toUpperCase() + month.slice(1)}</h3>}
+                  <div className={`cal-list-day ${key === today ? 'is-today' : ''} ${key < today ? 'is-past' : ''}`}>
+                    <div className="cal-list-date">
+                      <span className="num">{d.getDate()}</span>
+                      <span className="dow">{d.toLocaleDateString('fr-CA', { weekday: 'short' }).replace('.', '')}</span>
+                    </div>
+                    {items.length > 0
+                      ? <AgendaList items={items} onOpen={openItem} details={details} />
+                      : <p className="helper cal-list-none">Rien de prévu aujourd'hui.</p>}
                   </div>
-                  <AgendaList items={byDay.get(key) ?? []} onOpen={openItem} details={details} />
                 </div>
               )
             })}
