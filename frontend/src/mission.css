@@ -191,6 +191,7 @@
 .completion-items { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .completion-item { border: none; font: inherit; font-size: 0.8rem; font-weight: 600; padding: 0.3rem 0.7rem; border-radius: 999px; background: #f0c419; color: #1d2a27; cursor: pointer; }
 .completion-item.soft { background: rgba(255, 255, 255, 0.16); color: #fff; font-weight: 500; }
+.completion-card.done .completion-item.soft { background: #fff; color: #0d5f57; }
 .completion-pct { font-size: 1.1rem; font-variant-numeric: tabular-nums; }
 .completion-pct.good { color: #137a44; }
 .completion-pct.mid { color: #8a5a00; }
