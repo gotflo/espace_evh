@@ -247,7 +247,7 @@
   border-left-width: 4px; border-radius: 6px; padding: 0.55rem 0.75rem; font: inherit; color: var(--text); cursor: pointer;
 }
 .agenda-row:hover { filter: brightness(0.97); }
-.agenda-time { flex-shrink: 0; width: 70px; font-weight: 700; font-size: 0.84rem; }
+.agenda-time { flex-shrink: 0; width: 70px; font-weight: 700; font-size: 0.84rem; white-space: nowrap; }
 .agenda-text { display: flex; flex-direction: column; min-width: 0; }
 .agenda-title { font-weight: 600; font-size: 0.92rem; }
 .agenda-title .recur-icon { margin-right: 0.3rem; }
@@ -303,7 +303,9 @@
   .cal-grid.week .cal-cell { min-height: 0; border-right: none; padding-top: 2rem; }
   .cal-grid.week .cal-num { left: 0.6rem; transform: none; }
   .cal-grid.week + .cal-day-panel { display: none; }
-  .agenda-time { width: 58px; }
+  /* « Échéance » tient sur une ligne ; l'espace pris au titre reste le même (58 + 0,8rem). */
+  .agenda-row { gap: 0.3rem; }
+  .agenda-time { width: 66px; }
 }
 
 /* --- Servir --- */
