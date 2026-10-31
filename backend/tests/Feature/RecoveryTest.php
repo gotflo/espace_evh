@@ -133,10 +133,16 @@ class RecoveryTest extends TestCase
     {
         $member = $this->member('+14187000003', 'Ruth', ['birth_day' => 14, 'birth_month' => 10]);
 
-        // Panne pendant l'envoi : la table des notifications est momentanement inaccessible.
-        Schema::rename('user_notifications', 'user_notifications_hors_service');
+        // Panne pendant l'envoi : l'ecriture des notifications echoue. (Pas de changement de table ici : sur
+        // MySQL il validerait la transaction du test, et l'annulation de l'envoi ne serait plus eprouvee.)
+        $outage = true;
+        DB::listen(function ($query) use (&$outage) {
+            if ($outage && str_contains($query->sql, 'user_notifications') && str_starts_with($query->sql, 'insert')) {
+                throw new \RuntimeException('Base momentanément inaccessible');
+            }
+        });
         $this->artisan('app:tick', ['--only' => 'birthdays'])->assertSuccessful();
-        Schema::rename('user_notifications_hors_service', 'user_notifications');
+        $outage = false;
         $this->assertSame(0, UserNotification::where('user_id', $member->id)->count());
 
         // Passage suivant du cron : le message part, puis plus jamais le meme jour.

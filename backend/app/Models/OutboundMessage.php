@@ -9,7 +9,7 @@ class OutboundMessage extends Model
 {
     protected $fillable = [
         'channel', 'user_id', 'recipient', 'kind', 'subject', 'view', 'payload', 'dedupe_key',
-        'status', 'attempts', 'available_at', 'sent_at', 'last_error',
+        'status', 'attempts', 'available_at', 'sent_at', 'last_error', 'priority',
     ];
 
     protected $casts = ['payload' => 'array', 'available_at' => 'datetime', 'sent_at' => 'datetime', 'attempts' => 'integer'];

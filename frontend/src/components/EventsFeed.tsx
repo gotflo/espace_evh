@@ -22,7 +22,7 @@ export function EventsFeed({ days = 30, limit = 8 }: { days?: number; limit?: nu
   }, [days])
 
   useEffect(() => { load() }, [load])
-  usePulse('events', load)
+  usePulse(['events', 'mine'], load)
 
   async function rsvp(ev: EventOccurrence, response: 'present' | 'absent', volunteer?: boolean) {
     setItems((prev) => prev?.map((e) => e.key === ev.key ? optimisticRsvp(e, response, volunteer) : e) ?? null)
@@ -96,7 +96,7 @@ export function EventsFeed({ days = 30, limit = 8 }: { days?: number; limit?: nu
                           <p className="event-meta">{longDay(e.occurs_on)} · {timeRange(e)}{e.recurring ? ` · ${e.recurrence_label}` : ''}</p>
                           <p className="event-meta-soft">{e.target}</p>
                           {e.description && <p className="event-desc">{e.description}</p>}
-                          {e.image_url && <img className="event-image mt" src={e.image_url} alt={e.title} loading="lazy" />}
+                          {e.image_url && <img className="event-image mt" src={e.image_url} alt={e.title} loading="lazy" decoding="async" />}
                         </div>
                       )}
                       <div className="rsvp">

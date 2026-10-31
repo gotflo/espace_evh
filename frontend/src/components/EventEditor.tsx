@@ -86,12 +86,6 @@ export function EventEditor({ date, event, onClose, onSaved }: {
   const requestClose = useCallback(() => { if (confirmDiscard(dirty)) onClose() }, [dirty, onClose])
 
   useEffect(() => { titleRef.current?.focus() }, [])
-  useEffect(() => {
-    // Echap deja traite par une liste ouverte (destinataires) : il ne ferme que cette liste.
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented) requestClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [requestClose])
 
   const church = f.audience === 'church'
   const endBeforeStart = !f.allDay && f.end && `${f.endDate}T${f.end}` < `${f.date}T${f.start}`

@@ -8,6 +8,7 @@ import { toast } from '../../toast'
 import type { ReportData, ReportMemberRow, ReportOptions } from '../../types'
 import { Icon } from '../../components/Icon'
 import { LoadError } from '../../components/LoadError'
+import { useLatestRequest } from '../../utils/latestRequest'
 
 interface MembersPage { members: ReportMemberRow[]; total: number; has_more: boolean }
 
@@ -94,6 +95,10 @@ export default function Reports() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [query, setQuery] = useState('')
   const [exporting, setExporting] = useState(false)
+  const [rowsError, setRowsError] = useState('')
+  const [rowsTry, setRowsTry] = useState(0)
+  const { begin: beginReport } = useLatestRequest()
+  const { begin: beginRows, follow: followRows } = useLatestRequest()
 
   // Echec de lecture : message et « Réessayer », jamais « Aucune tribu » ni un squelette sans fin.
   const loadOptions = useCallback(() => {
@@ -111,12 +116,13 @@ export default function Reports() {
 
   const loadReport = useCallback(() => {
     if (!scope) return
+    const isLatest = beginReport()
     setLoading(true); setReportError('')
     api<ReportData>(`/admin/reports?scope=${encodeURIComponent(scope)}&months=${months}`)
-      .then(setReport)
-      .catch((err) => { setReport(null); setReportError(err instanceof ApiError ? err.firstMessage : 'Erreur.') })
-      .finally(() => setLoading(false))
-  }, [scope, months])
+      .then((r) => { if (isLatest()) setReport(r) })
+      .catch((err) => { if (!isLatest()) return; setReport(null); setReportError(err instanceof ApiError ? err.firstMessage : 'Erreur.') })
+      .finally(() => { if (isLatest()) setLoading(false) })
+  }, [scope, months, beginReport])
   useEffect(() => { loadReport() }, [loadReport])
 
   // Liste affichee par pages de 60 (recherche cote serveur) ; la liste complete passe par l'export PDF.
@@ -125,20 +131,22 @@ export default function Reports() {
   [scope, filter, query])
   useEffect(() => {
     if (!scope || tab !== 'members') return
+    const isLatest = beginRows()
     const t = window.setTimeout(() => {
-      setRows(null)
+      setRows(null); setRowsError('')
       api<MembersPage>(membersUrl(1))
-        .then((r) => { setRows(r.members); setTotal(r.total); setHasMore(r.has_more); setPage(1) })
-        .catch(() => { setRows([]); setTotal(0); setHasMore(false) })
+        .then((r) => { if (!isLatest()) return; setRows(r.members); setTotal(r.total); setHasMore(r.has_more); setPage(1) })
+        .catch((err) => { if (!isLatest()) return; setRowsError(err instanceof ApiError ? err.firstMessage : 'Erreur.'); setTotal(0); setHasMore(false) })
     }, 250)
     return () => window.clearTimeout(t)
-  }, [scope, tab, membersUrl])
+  }, [scope, tab, membersUrl, rowsTry, beginRows])
 
   function moreMembers() {
+    const stillThisList = followRows()
     setLoadingMore(true)
     api<MembersPage>(membersUrl(page + 1))
-      .then((r) => { setRows((prev) => [...(prev ?? []), ...r.members]); setHasMore(r.has_more); setPage(page + 1) })
-      .catch(() => {})
+      .then((r) => { if (!stillThisList()) return; setRows((prev) => [...(prev ?? []), ...r.members]); setHasMore(r.has_more); setPage(page + 1) })
+      .catch(() => toast.error('Impossible d’afficher la suite. Vérifiez votre réseau puis réessayez.'))
       .finally(() => setLoadingMore(false))
   }
   const shown = rows ?? []
@@ -299,7 +307,9 @@ export default function Reports() {
             </div>
             <input aria-label="Rechercher" className="input" type="search" placeholder="Rechercher…" value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
-          {rows === null ? (
+          {rows === null && rowsError ? (
+            <LoadError message={rowsError} onRetry={() => setRowsTry((n) => n + 1)} />
+          ) : rows === null ? (
             <div className="member-cards">{[0, 1, 2, 3].map((i) => <div key={i} className="skeleton skeleton-row" />)}</div>
           ) : shown.length === 0 ? (
             <div className="empty-state compact"><Icon name="members" size={28} /><p>Aucun membre pour ce filtre.</p></div>

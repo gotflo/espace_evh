@@ -22,8 +22,13 @@ class AnnouncementController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $items = Announcement::withCount('recipients')->with('creator.profile', 'scopes')->latest()->limit(200)->get()
-            ->filter(fn (Announcement $a) => Audience::canManage($user, $a->created_by, $a->audienceList()))
+        $announcements = Announcement::with('creator.profile', 'scopes')->latest()->limit(200)->get()
+            ->filter(fn (Announcement $a) => Audience::canManage($user, $a->created_by, $a->audienceList()));
+        // Nombre de destinataires garde sur l'annonce : il n'est recompte que pour une annonce qui ne l'a pas.
+        $unknown = $announcements->whereNull('recipients_count')->pluck('id');
+        $counted = $unknown->isEmpty() ? collect() : DB::table('announcement_user')->whereIn('announcement_id', $unknown)
+            ->selectRaw('announcement_id, count(*) as total')->groupBy('announcement_id')->pluck('total', 'announcement_id');
+        $items = $announcements
             ->map(fn (Announcement $a) => [
                 'id' => $a->id,
                 'title' => $a->title,
@@ -31,7 +36,7 @@ class AnnouncementController extends Controller
                 'image_url' => $a->image_url,
                 'target' => $a->audienceLabel(),
                 'scopes' => $a->audienceList(),
-                'recipients_count' => $a->recipients_count,
+                'recipients_count' => (int) ($a->recipients_count ?? $counted[$a->id] ?? 0),
                 'created_at' => $a->created_at->toDateString(),
                 'author' => PlatformManager::nameOf($a->creator),
             ])->values();
@@ -70,6 +75,7 @@ class AnnouncementController extends Controller
             // Diffusion : une ligne de reception par destinataire, sauf l'auteur.
             $recipients = array_values(array_diff(Audience::userIds($scopes), [$author->id]));
             $announcement->recipients()->attach($recipients);
+            $announcement->forceFill(['recipients_count' => count($recipients)])->save();
             Audit::log('announcement.published', $announcement, null, [], ['title' => $announcement->title, 'scopes' => $scopes, 'recipients' => count($recipients)]);
 
             return [$announcement, $recipients];

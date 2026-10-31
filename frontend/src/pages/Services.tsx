@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, peek } from '../api/client'
+import { api, ApiError, peek } from '../api/client'
 import { usePulse } from '../pulse'
 import { useAuth } from '../auth/AuthContext'
 import { AppLayout } from '../components/AppLayout'
 import { SkeletonCard } from '../components/Skeleton'
+import { LoadError } from '../components/LoadError'
 import type { ServiceItem } from '../types'
 import { Icon } from '../components/Icon'
 import { ModalLayer } from '../components/ModalLayer'
@@ -16,9 +17,12 @@ export default function Services() {
   const [busy, setBusy] = useState<number | null>(null)
   const [confirmJoin, setConfirmJoin] = useState<ServiceItem | null>(null)
   const [query, setQuery] = useState('')
+  const [loadError, setLoadError] = useState('')
 
+  // Liste deja affichee : gardee si une relecture echoue ; sans liste, le message et « Réessayer ».
   const load = useCallback(() => {
-    api<{ services: ServiceItem[] }>('/me/services').then((r) => setItems(r.services)).catch(() => setItems((p) => p ?? []))
+    api<{ services: ServiceItem[] }>('/me/services').then((r) => { setItems(r.services); setLoadError('') })
+      .catch((err) => setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.'))
   }, [])
   useEffect(() => { load() }, [load])
   // Demande acceptee ou refusee par le responsable : la liste se met a jour d'elle-meme.
@@ -56,7 +60,8 @@ export default function Services() {
 
 
       {items === null ? (
-        <div className="serve-grid"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>
+        loadError ? <LoadError message={loadError} onRetry={() => { setLoadError(''); load() }} />
+          : <div className="serve-grid"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>
       ) : (
         <>
           <h3 className="section-label">Mes services ({mine.length})</h3>
@@ -125,7 +130,7 @@ function ServiceCard({ s, busy, onJoin, onLeave }: { s: ServiceItem; busy: boole
       <div className="serve-meta">
         {s.leader && (
           <span className="serve-leader">
-            {s.leader_photo_url ? <img src={s.leader_photo_url} alt="" /> : <Icon name="profile" size={20} />}
+            {s.leader_photo_url ? <img src={s.leader_photo_url} alt="" width={20} height={20} loading="lazy" decoding="async" /> : <Icon name="profile" size={20} />}
             Responsable : {s.leader}
           </span>
         )}

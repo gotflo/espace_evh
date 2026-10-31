@@ -45,12 +45,6 @@ export function ImageFramer({ file, src, x: x0 = 50, y: y0 = 50, previews, title
   }, [file])
   useEffect(() => () => release(imageRef.current), [])
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) onCancel() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onCancel, busy])
-
   const url = image?.url ?? src ?? ''
   const position = `${pos.x}% ${pos.y}%`
 

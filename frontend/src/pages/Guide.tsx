@@ -4,7 +4,7 @@ import { useAuth } from '../auth/AuthContext'
 import { AppLayout } from '../components/AppLayout'
 import { Icon } from '../components/Icon'
 import { ModalLayer } from '../components/ModalLayer'
-import { GUIDE_CHAPTERS, GUIDE_FAQ, type GuideChapter, type GuideSection, type GuideShot } from '../data/guide'
+import { GUIDE_CHAPTERS, GUIDE_FAQ, GUIDE_VIDEO, type GuideChapter, type GuideSection, type GuideShot } from '../data/guide'
 
 /** Texte sans accents ni majuscules, pour la recherche. */
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
@@ -218,6 +218,17 @@ export default function Guide() {
           </label>
           <p className="helper">Les captures montrent des personnes fictives.</p>
         </section>
+
+        {!q && (
+          <section className="panel gd-video" aria-labelledby="guide-video-title">
+            <h3 id="guide-video-title">{GUIDE_VIDEO.title}</h3>
+            <div className="yt-frame">
+              <video src={GUIDE_VIDEO.src} poster={GUIDE_VIDEO.poster} aria-labelledby="guide-video-title" controls playsInline preload="none"
+                controlsList="nodownload noplaybackrate noremoteplayback" disablePictureInPicture disableRemotePlayback x-webkit-airplay="deny"
+                onContextMenu={(e) => e.preventDefault()} />
+            </div>
+          </section>
+        )}
 
         {q && shown.length === 0 && shownFaq.length === 0 && (
           <p className="gd-empty">Aucun résultat pour « {query.trim()} ». Essayez un autre mot (ex. : rapport, profil, notifications).</p>

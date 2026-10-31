@@ -8,7 +8,6 @@ use App\Models\DepartmentJoinRequest;
 use App\Models\User;
 use App\Support\French;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Courriels et textos aux membres (devoir, FISS, rapports) : courriel si l'adresse est remplie, sinon
@@ -22,19 +21,20 @@ class MemberMessages
         return rtrim((string) config('app.url'), '/').$path;
     }
 
-    /** Membres (profil complete, actifs) : charges par lots, avec profil et preferences. */
-    private static function each(iterable $userIds, callable $fn): int
+    /**
+     * Diffusion : membres (profil complete, actifs) charges par lots de 500, avec profil et preferences,
+     * et une seule ecriture par lot (et non deux requetes par membre). Chaque message a sa cle anti-doublon :
+     * relancer une diffusion interrompue n'envoie rien en double. Retourne le nombre de messages ajoutes.
+     *
+     * @param  callable(User): (array<string, mixed>|null)  $row  ligne de Messenger::memberRow
+     */
+    private static function each(iterable $userIds, callable $row): int
     {
         $count = 0;
-        foreach (collect($userIds)->unique()->chunk(200) as $chunk) {
+        foreach (collect($userIds)->unique()->chunk(500) as $chunk) {
             $users = ActivityService::whereEffective(User::with('profile')->whereIn('id', $chunk->all()))
                 ->whereHas('profile', fn ($p) => $p->where('is_completed', true))->get();
-            // Un lot = une seule ecriture validee (et non 200) : publier pour toute l'eglise reste rapide.
-            DB::transaction(function () use ($users, $fn, &$count) {
-                foreach ($users as $user) {
-                    $count += $fn($user) ? 1 : 0;
-                }
-            });
+            $count += Messenger::queueMany($users->map($row)->filter()->values()->all());
         }
 
         return $count;
@@ -51,7 +51,7 @@ class MemberMessages
         $url = self::url('/mon-devoir?d='.$a->id);
         $title = mb_strlen($a->title) > 70 ? mb_substr($a->title, 0, 67).'...' : $a->title;
 
-        return self::each($userIds, fn (User $u) => Messenger::toMember($u, 'assignment', "assignment:{$a->id}:{$u->id}", [
+        return self::each($userIds, fn (User $u) => Messenger::memberRow($u, 'assignment', "assignment:{$a->id}:{$u->id}", [
             'subject' => 'Nouveau devoir : '.$title, // titre raccourci : un sujet trop long est coupe par les messageries
             'view' => 'assignment',
             'data' => [
@@ -81,7 +81,7 @@ class MemberMessages
             ? "My vasesdhonneur : votre fiche de sante spirituelle {$deMonth} n'est pas encore remplie. Il reste ".max(0, $daysLeft).' jour(s) : '.$url
             : "My vasesdhonneur : votre fiche de sante spirituelle {$deMonth} n'est pas encore remplie. Quelques minutes suffisent : {$url}";
 
-        return self::each($userIds, fn (User $u) => Messenger::toMember($u, 'fiss_reminder', "fiss:{$period}:{$stage}:{$u->id}", [
+        return self::each($userIds, fn (User $u) => Messenger::memberRow($u, 'fiss_reminder', "fiss:{$period}:{$stage}:{$u->id}", [
             'subject' => $stage === 'last' ? 'Rappel : votre fiche de santé spirituelle '.$deMonth : 'Votre fiche de santé spirituelle '.$deMonth,
             'view' => 'fiss-reminder',
             'data' => ['firstName' => $u->profile?->first_name ?: 'cher membre', 'stage' => $stage, 'deMonth' => $deMonth, 'daysLeft' => $daysLeft, 'url' => $url],

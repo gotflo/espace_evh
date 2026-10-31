@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\OtpCode;
+use App\Models\User;
 use App\Services\Monitoring\Monitor;
 use App\Services\Sms\SmsSender;
 use App\Services\Sms\TwilioVerifyClient;
@@ -29,6 +30,15 @@ class OtpService
 
     /** Codes faux cumules pour un meme numero (tous envois confondus) avant un verrouillage d'une heure. */
     public const MAX_FAILURES_PER_HOUR = 10;
+
+    /** Codes faux par heure pour un numero, toutes adresses confondues (une seule adresse ne verrouille pas un membre). */
+    public const MAX_FAILURES_ALL_ADDRESSES = 30;
+
+    /** Codes envoyes par heure a un meme numero. */
+    public const MAX_CODES_PER_NUMBER_HOUR = 6;
+
+    /** Part du plafond global de SMS ouverte aux numeros inconnus : le reste est garde aux membres. */
+    private const UNKNOWN_NUMBERS_SHARE = 0.8;
 
     public function __construct(private SmsSender $sms, private TwilioVerifyClient $twilioVerify) {}
 
@@ -87,14 +97,17 @@ class OtpService
         if (! $valid) {
             $otp->increment('attempts');
             // Compteur cumule : redemander un code ne remet pas les essais a zero.
-            Cache::add(self::failuresKey($phone), 0, now()->addHour());
-            Cache::increment(self::failuresKey($phone));
+            foreach ([self::failuresKey($phone), self::allFailuresKey($phone)] as $key) {
+                Cache::add($key, 0, now()->addHour());
+                Cache::increment($key);
+            }
 
             return false;
         }
 
         $otp->update(['consumed_at' => Carbon::now()]);
         Cache::forget(self::failuresKey($phone));
+        Cache::forget(self::allFailuresKey($phone));
 
         return true;
     }
@@ -102,12 +115,19 @@ class OtpService
     /** Trop de codes faux pour ce numero dans l'heure : verrouille (meme avec un nouveau code). */
     public function isLocked(string $phone): bool
     {
-        return (int) Cache::get(self::failuresKey($phone), 0) >= self::MAX_FAILURES_PER_HOUR;
+        return (int) Cache::get(self::failuresKey($phone), 0) >= self::MAX_FAILURES_PER_HOUR
+            || (int) Cache::get(self::allFailuresKey($phone), 0) >= self::MAX_FAILURES_ALL_ADDRESSES;
     }
 
+    /** Par numero et par adresse : quelqu'un qui tape de faux codes ne bloque pas le vrai membre, ailleurs. */
     private static function failuresKey(string $phone): string
     {
-        return 'otp-failures:'.hash('sha256', $phone);
+        return 'otp-failures:'.hash('sha256', $phone.'|'.request()->ip());
+    }
+
+    private static function allFailuresKey(string $phone): string
+    {
+        return 'otp-failures-all:'.hash('sha256', $phone);
     }
 
     /**
@@ -129,9 +149,14 @@ class OtpService
         if (! in_array($util->getNumberType($number), [PhoneNumberType::MOBILE, PhoneNumberType::FIXED_LINE_OR_MOBILE], true)) {
             return 'Ce numéro ne peut pas recevoir de SMS : saisissez un numéro de téléphone mobile.';
         }
+        if (OtpCode::where('phone', $phone)->where('created_at', '>=', now()->subHour())->count() >= self::MAX_CODES_PER_NUMBER_HOUR) {
+            return 'Trop de codes demandés pour ce numéro : réessayez dans une heure.';
+        }
         $hour = OtpCode::where('created_at', '>=', now()->subHour())->count();
         $day = OtpCode::where('created_at', '>=', now()->subDay())->count();
-        if ($hour >= (int) config('services.sms.max_per_hour', 100) || $day >= (int) config('services.sms.max_per_day', 300)) {
+        // Une rafale de numeros inconnus n'empeche pas les membres de se reconnecter.
+        $share = User::where('phone', $phone)->exists() ? 1 : self::UNKNOWN_NUMBERS_SHARE;
+        if ($hour >= (int) ceil((int) config('services.sms.max_per_hour', 100) * $share) || $day >= (int) ceil((int) config('services.sms.max_per_day', 300) * $share)) {
             Monitor::event('critical', 'security', 'auth.sms_ceiling', 'Plafond de SMS atteint : envois de codes suspendus', ['hour' => $hour, 'day' => $day], 'denied');
 
             return 'Trop de demandes de code en ce moment : réessayez dans quelques minutes.';

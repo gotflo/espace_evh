@@ -116,7 +116,7 @@ class MemberController extends Controller
                 'last_seen' => $lastSeen?->toDateString(),
             ]),
             'profile' => $user->profile,
-            'spiritual_profile' => $user->spiritualProfile,
+            'spiritual_profile' => $viewer->canViewMember($user, 'spiritual.view') ? $user->spiritualProfile : null,
             'completion' => $user->profile ? ProfileCompletion::for($user->profile) : null,
             'family' => FamilyService::overview($user),
             'can_manage' => $viewer->canManageMember($user),

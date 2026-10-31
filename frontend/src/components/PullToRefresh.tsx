@@ -1,11 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
+import { hasUnsavedInput } from '../utils/dirty'
 import { shellOn } from '../utils/iosViewport'
-import { pageScrollTop } from '../utils/pageScroll'
+import { pageScroller, pageScrollTop } from '../utils/pageScroll'
 
 /** Vrai seulement quand l'app tourne en mode installe (ecran d'accueil). */
 function isStandalone(): boolean {
   return window.matchMedia('(display-mode: standalone)').matches
     || (window.navigator as unknown as { standalone?: boolean }).standalone === true
+}
+
+/** Geste commence dans un bloc deja defile (liste, tableau...) : c'est ce bloc qui doit defiler. */
+function insideScrolledBlock(el: Element | null): boolean {
+  const page = pageScroller()
+  for (let n = el; n && n !== document.documentElement; n = n.parentElement) {
+    if (n !== page && n.scrollTop > 0) return true
+  }
+  return false
 }
 
 /**
@@ -29,10 +39,10 @@ export function PullToRefresh() {
 
     const onStart = (e: TouchEvent) => {
       active.current = false
-      if ((!standalone && !shellOn()) || pageScrollTop() > 3 || busy.current) return
+      if ((!standalone && !shellOn()) || pageScrollTop() > 3 || busy.current || hasUnsavedInput()) return
       // Geste dans le menu, une fenetre ou une liste deja defilee : c'est un defilement, pas un rechargement.
       const target = e.target instanceof Element ? e.target : null
-      if (target?.closest('.sidebar, .menu-overlay, #app-layer, .modal-overlay, .ms-backdrop, .ms-panel')) return
+      if (target?.closest('.sidebar, .menu-overlay, #app-layer, .modal-overlay, .ms-backdrop, .ms-panel, textarea') || insideScrolledBlock(target)) return
       startY.current = e.touches[0].clientY
       active.current = true
     }
@@ -45,7 +55,7 @@ export function PullToRefresh() {
     const onEnd = () => {
       if (!active.current) return
       active.current = false
-      if (pullRef.current >= THRESHOLD) {
+      if (pullRef.current >= THRESHOLD && !hasUnsavedInput()) {
         busy.current = true
         setRefreshing(true)
         set(THRESHOLD)

@@ -29,7 +29,7 @@ export function AnnouncementsFeed() {
             </div>
             {a.title && <h4 className="feed-title">{a.title}</h4>}
             {a.body && <p className="feed-body">{a.body}</p>}
-            {a.image_url && <img className="feed-image" src={a.image_url} alt={a.title ?? 'Annonce'} loading="lazy" />}
+            {a.image_url && <img className="feed-image" src={a.image_url} alt={a.title ?? 'Annonce'} loading="lazy" decoding="async" />}
           </article>
         ))}
       </div>

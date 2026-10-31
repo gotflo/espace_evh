@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { clearDraft, readDraft, useDraft } from '../utils/drafts'
 import { api, ApiError, peek } from '../api/client'
 import { usePulse } from '../pulse'
 import { AppLayout } from '../components/AppLayout'
 import { SkeletonCard } from '../components/Skeleton'
+import { LoadError } from '../components/LoadError'
 import type { MyRequest, RequestCategory } from '../types'
 
 const CATEGORIES: { key: RequestCategory; label: string }[] = [
@@ -17,6 +18,9 @@ const CATEGORIES: { key: RequestCategory; label: string }[] = [
 export default function Contact() {
   const [items, setItems] = useState<MyRequest[]>(() => peek<{ requests: MyRequest[] }>('/me/requests')?.requests ?? [])
   const [loading, setLoading] = useState(() => !peek('/me/requests'))
+  // Liste deja lue : gardee si une relecture echoue ; sinon le message et « Réessayer », jamais « aucune demande ».
+  const listKnown = useRef(!!peek('/me/requests'))
+  const [loadError, setLoadError] = useState('')
   // Brouillon : un message commence n'est jamais perdu (restaure a l'ouverture).
   const [draft] = useState(() => readDraft<{ category: RequestCategory; subject: string; message: string }>('contact'))
   const [category, setCategory] = useState<RequestCategory>(draft?.category ?? 'question')
@@ -28,7 +32,8 @@ export default function Contact() {
 
   function load() {
     api<{ requests: MyRequest[] }>('/me/requests')
-      .then((r) => setItems(r.requests)).catch(() => {})
+      .then((r) => { setItems(r.requests); listKnown.current = true; setLoadError('') })
+      .catch((err) => { if (!listKnown.current) setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.') })
       .finally(() => setLoading(false))
   }
   useEffect(() => { load() }, [])
@@ -75,7 +80,7 @@ export default function Contact() {
 
         <section className="panel">
           <div className="panel-head"><h3>Mes demandes</h3></div>
-          {loading ? <SkeletonCard /> : (
+          {loading ? <SkeletonCard /> : loadError ? <LoadError compact message={loadError} onRetry={() => { setLoadError(''); setLoading(true); load() }} /> : (
             <div className="feed">
               {items.map((r) => (
                 <article key={r.id} className="feed-item">

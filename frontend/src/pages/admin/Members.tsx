@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { api, peek } from '../../api/client'
+import { api, ApiError, peek } from '../../api/client'
+import { toast } from '../../toast'
 import { usePulse } from '../../pulse'
 import { getReference } from '../../api/reference'
 import { useAuth } from '../../auth/AuthContext'
 import { AppLayout } from '../../components/AppLayout'
+import { LoadError } from '../../components/LoadError'
+import { useLatestRequest } from '../../utils/latestRequest'
 import type { MemberListItem, Tribe } from '../../types'
 
 interface MemberPage { members: MemberListItem[]; total: number; has_more: boolean }
@@ -41,6 +44,10 @@ export default function Members() {
   const [tribes, setTribes] = useState<Tribe[]>([])
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(!known)
+  const [loadError, setLoadError] = useState('')
+  const { begin, follow } = useLatestRequest()
+  // Adresse de la liste affichee : si sa relecture echoue, elle reste ; un autre filtre n'a rien a montrer.
+  const shownUrl = useRef(known ? membersPath(1, '', statut, tribe) : '')
   const navigate = useNavigate()
   const { hasPermission, roles } = useAuth()
   const allTribes = hasPermission('members.view_all')
@@ -56,26 +63,37 @@ export default function Members() {
   // Temps reel : un membre inscrit ou modifie ailleurs apparait en silence (premiere page seulement,
   // pour ne jamais faire perdre la position a quelqu'un qui a deja charge la suite).
   const [refresh, setRefresh] = useState(0)
-  usePulse('members', () => { if (page === 1) setRefresh((n) => n + 1) })
+  usePulse('members', () => { if (page === 1 && !loadingMore) setRefresh((n) => n + 1) })
 
   useEffect(() => {
-    const cached = peek<MemberPage>(url(1))
-    if (cached) { setMembers(cached.members); setTotal(cached.total); setHasMore(cached.has_more); setPage(1); setLoading(false) }
+    const first = url(1)
+    const isLatest = begin()
+    const cached = peek<MemberPage>(first)
+    if (cached) { setMembers(cached.members); setTotal(cached.total); setHasMore(cached.has_more); setPage(1); setLoading(false); setLoadError(''); shownUrl.current = first }
     const t = setTimeout(() => {
       if (!cached) setLoading(true)
       api<MemberPage>(url(1))
-        .then((r) => { setMembers(r.members); setTotal(r.total); setHasMore(r.has_more); setPage(1) })
-        .catch(() => { setMembers([]); setTotal(0); setHasMore(false) })
-        .finally(() => setLoading(false))
+        .then((r) => {
+          if (!isLatest()) return
+          setMembers(r.members); setTotal(r.total); setHasMore(r.has_more); setPage(1); setLoadError('')
+          shownUrl.current = first
+        })
+        .catch((err) => {
+          if (!isLatest() || shownUrl.current === first) return
+          setMembers([]); setTotal(0); setHasMore(false); shownUrl.current = ''
+          setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
+        })
+        .finally(() => { if (isLatest()) setLoading(false) })
     }, 250)
     return () => clearTimeout(t)
-  }, [url, refresh])
+  }, [url, refresh, begin])
 
   function more() {
+    const stillThisList = follow()
     setLoadingMore(true)
     api<MemberPage>(url(page + 1))
-      .then((r) => { setMembers((prev) => [...prev, ...r.members]); setHasMore(r.has_more); setPage(page + 1) })
-      .catch(() => {})
+      .then((r) => { if (!stillThisList()) return; setMembers((prev) => [...prev, ...r.members]); setHasMore(r.has_more); setPage(page + 1) })
+      .catch(() => toast.error('Impossible d’afficher la suite. Vérifiez votre réseau puis réessayez.'))
       .finally(() => setLoadingMore(false))
   }
 
@@ -110,13 +128,13 @@ export default function Members() {
           </div>
         </div>
 
-        <p className="helper">{loading ? 'Chargement…' : total > members.length ? `${members.length} sur ${total} membres` : `${total} membre(s)`}</p>
+        <p className="helper">{loading ? 'Chargement…' : loadError ? '' : total > members.length ? `${members.length} sur ${total} membres` : `${total} membre(s)`}</p>
 
         <div className="member-table">
           {members.map((m) => (
             <button key={m.user_id} className="member-row" onClick={() => navigate(`/admin/membres/${m.user_id}`)}>
               {m.photo_url
-                ? <img className="member-avatar" src={m.photo_url} alt="" />
+                ? <img className="member-avatar" src={m.photo_url} alt="" width={42} height={42} loading="lazy" decoding="async" />
                 : <span className="member-avatar">{(m.full_name[0] ?? '?').toUpperCase()}</span>}
               <span className="member-main">
                 <span className="member-name">{m.full_name}</span>
@@ -133,7 +151,8 @@ export default function Members() {
               <span className={`status-dot ${m.activity === 'active' ? 'on' : 'off'}`} title={m.activity === 'active' ? 'Actif' : 'Inactif'} />
             </button>
           ))}
-          {!loading && members.length === 0 && <p className="helper center">Aucun membre trouvé.</p>}
+          {!loading && loadError && <LoadError compact message={loadError} onRetry={() => { setLoadError(''); setLoading(true); setRefresh((n) => n + 1) }} />}
+          {!loading && !loadError && members.length === 0 && <p className="helper center">Aucun membre trouvé.</p>}
         </div>
         {hasMore && !loading && (
           <div className="center mt">

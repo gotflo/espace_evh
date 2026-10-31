@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { api, ApiError } from '../api/client'
 import { getReference } from '../api/reference'
 import { useAuth } from '../auth/AuthContext'
 import { AppLayout } from '../components/AppLayout'
 import { PhotoCropper } from '../components/PhotoCropper'
+import { SkeletonCard } from '../components/Skeleton'
 import { Link } from 'react-router-dom'
 import { CompletionCard } from '../components/profile/CompletionCard'
 import { FamilySection } from '../components/profile/FamilySection'
@@ -11,6 +12,7 @@ import { TribeChange } from '../components/profile/TribeChange'
 import type { Profile, ProfileCompletion, SpiritualProfileData, Tribe } from '../types'
 import { PersonName } from '../components/PersonName'
 import { Icon } from '../components/Icon'
+import { LoadError } from '../components/LoadError'
 import { useDirty } from '../utils/dirty'
 
 const CIVILITY = [['dr', 'Dr'], ['reverend', 'Révérend'], ['pasteur', 'Pasteur'], ['m', 'M.'], ['mme', 'Mme'], ['mlle', 'Mlle']]
@@ -64,6 +66,9 @@ export default function MyProfile() {
 
   // --- Etat vie spirituelle ---
   const [sp, setSp] = useState<SpiritualProfileData>(emptySpiritual)
+  // Formulaire ouvert seulement quand la lecture a reussi : sinon il serait vide et « Enregistrer » effacerait tout sur le serveur.
+  const [spLoaded, setSpLoaded] = useState(false)
+  const [spError, setSpError] = useState('')
   const setSpField = <K extends keyof SpiritualProfileData>(k: K, v: SpiritualProfileData[K]) => setSp((p) => ({ ...p, [k]: v }))
 
   // Boutons « Enregistrer » actifs seulement quand quelque chose a change.
@@ -72,11 +77,18 @@ export default function MyProfile() {
   const spiritual = useDirty(sp)
   const resetSpiritual = spiritual.reset
 
+  const loadSpiritual = useCallback(() => {
+    setSpError('')
+    api<{ spiritual: SpiritualProfileData }>('/me/spiritual-profile')
+      .then((r) => { setSp({ ...emptySpiritual, ...r.spiritual }); resetSpiritual(); setSpLoaded(true) })
+      .catch((err) => setSpError(err instanceof ApiError ? err.firstMessage : 'Erreur.'))
+  }, [resetSpiritual])
+
   useEffect(() => {
     getReference().then((r) => setTribes(r.tribes)).catch(() => {})
-    api<{ spiritual: SpiritualProfileData }>('/me/spiritual-profile').then((r) => { setSp({ ...emptySpiritual, ...r.spiritual }); resetSpiritual() }).catch(() => {})
+    loadSpiritual()
     api<{ completion: ProfileCompletion | null }>('/profile').then((r) => setCompletion(r.completion)).catch(() => {})
-  }, [resetSpiritual])
+  }, [loadSpiritual])
 
   // Photo choisie : cadrage d'abord (PhotoCropper), puis la version reduite remplace l'apercu.
   function onPickPhoto(e: ChangeEvent<HTMLInputElement>) {
@@ -259,7 +271,11 @@ export default function MyProfile() {
         </section>
       )}
 
-      {tab === 'spirituel' && (
+      {tab === 'spirituel' && !spLoaded && (
+        spError ? <LoadError message={spError} onRetry={loadSpiritual} /> : <SkeletonCard />
+      )}
+
+      {tab === 'spirituel' && spLoaded && (
         <section className="panel form-panel">
           <div className="field-row">
             <div className="field"><label>Année de conversion</label>

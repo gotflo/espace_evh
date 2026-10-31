@@ -1138,7 +1138,8 @@ h1, h2, h3 { font-family: var(--font-serif); font-weight: 600; line-height: 1.15
 .reh-status.on.reh-absent_justifie { background: #2563c9; border-color: #2563c9; color: #fff; }
 .reh-status.on.reh-absent { background: #d62828; border-color: #d62828; color: #fff; }
 .reh-status:disabled { cursor: default; }
-@media (max-width: 640px) { .reh-status-btns { margin-left: 0; width: 100%; } }
+/* Telephone : les boutons passent sous le nom (sinon le nom, ecrase, s'ecrit une lettre par ligne). */
+@media (max-width: 640px) { .reh-row { flex-wrap: wrap; } .reh-status-btns { margin-left: 0; width: 100%; } }
 
 /* GEMs */
 .gem-list { display: flex; flex-direction: column; gap: 0.5rem; }

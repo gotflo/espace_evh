@@ -6,7 +6,7 @@ import { useEffect, useRef } from 'react'
 import { api, auth, markStale, onDataChanged } from './api/client'
 import { setUnread } from './notifications'
 
-export type PulseKey = 'announcements' | 'events' | 'exercises' | 'requests' | 'members' | 'validations' | 'fiss' | 'attendance' | 'leader_reports' | 'gem_reports' | 'resolutions' | 'assignments' | 'appointments' | 'services' | 'verses' | 'settings' | 'unread'
+export type PulseKey = 'announcements' | 'events' | 'exercises' | 'requests' | 'members' | 'validations' | 'fiss' | 'attendance' | 'leader_reports' | 'gem_reports' | 'resolutions' | 'assignments' | 'appointments' | 'services' | 'verses' | 'settings' | 'unread' | 'mine'
 
 type Versions = Partial<Record<PulseKey, string>>
 type Listener = (v: Versions) => void
@@ -68,9 +68,13 @@ export function startPulse() {
     window.clearTimeout(soon)
     soon = window.setTimeout(() => void pollNow(), 400)
   })
-  // Push recu : on met a jour tout de suite.
+  // Push recu : mise a jour rapide, etalee sur 20 s (une diffusion arrive en meme temps sur tous les
+  // appareils ; le message s'affiche dès l'arrivée du push, seul le rafraichissement est etale).
+  let afterPush: number | undefined
   navigator.serviceWorker?.addEventListener('message', (e: MessageEvent) => {
-    if (e.data?.type === 'evh-push') void pollNow()
+    if (e.data?.type !== 'evh-push') return
+    window.clearTimeout(afterPush)
+    afterPush = window.setTimeout(() => void pollNow(), Math.round(Math.random() * 20000))
   })
 }
 

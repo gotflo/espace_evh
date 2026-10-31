@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError, peek } from '../../api/client'
 import { usePulse } from '../../pulse'
 import { AppLayout } from '../../components/AppLayout'
 import { SkeletonCard } from '../../components/Skeleton'
+import { LoadError } from '../../components/LoadError'
 import type { AdminRequest, RequestStatus } from '../../types'
 import { Icon } from '../../components/Icon'
 
@@ -16,6 +17,9 @@ export default function Requests() {
   const [items, setItems] = useState<AdminRequest[]>(() => peek<{ requests: AdminRequest[] }>('/admin/requests')?.requests ?? [])
   // Liste deja vue : affichee tout de suite ; les mises a jour (apres une action) se font en silence.
   const [loading, setLoading] = useState(() => !peek('/admin/requests'))
+  // Liste deja lue : gardee si une relecture echoue ; sinon le message et « Réessayer », jamais « aucune demande ».
+  const listKnown = useRef(!!peek('/admin/requests'))
+  const [loadError, setLoadError] = useState('')
   const [error, setError] = useState('')
   const [replyFor, setReplyFor] = useState<number | null>(null)
   const [replyText, setReplyText] = useState('')
@@ -23,7 +27,8 @@ export default function Requests() {
 
   const load = useCallback(() => {
     api<{ requests: AdminRequest[] }>('/admin/requests')
-      .then((r) => setItems(r.requests)).catch(() => {})
+      .then((r) => { setItems(r.requests); listKnown.current = true; setLoadError('') })
+      .catch((err) => { if (!listKnown.current) setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.') })
       .finally(() => setLoading(false))
   }, [])
   useEffect(() => { load() }, [load])
@@ -56,6 +61,8 @@ export default function Requests() {
       {error && <div className="alert alert-error">{error}</div>}
       {loading ? (
         <div className="feed"><SkeletonCard /><SkeletonCard /></div>
+      ) : loadError ? (
+        <LoadError message={loadError} onRetry={() => { setLoadError(''); setLoading(true); load() }} />
       ) : (
         <div className="feed">
           {items.map((r) => (

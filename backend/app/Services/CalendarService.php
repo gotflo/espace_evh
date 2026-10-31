@@ -83,11 +83,15 @@ class CalendarService
         $eventIds = $occurrences->map(fn ($o) => $o['event']->id)->unique()->values();
         $dates = $occurrences->map(fn ($o) => $o['start']->toDateString())->unique()->values();
 
-        $participations = EventParticipation::whereIn('event_id', $eventIds)
-            ->whereIn('occurs_on', $dates)->get(['event_id', 'user_id', 'occurs_on', 'response', 'volunteer']);
-        $going = $participations->where('response', 'present')
-            ->countBy(fn ($p) => $p->event_id.'|'.$p->occurs_on);
-        $mine = $participations->where('user_id', $user->id)
+        // Comptes calcules par la base (et non toutes les reponses de l'eglise chargees a chaque ouverture) ;
+        // seules les reponses du membre sont lues ligne par ligne.
+        $going = [];
+        foreach (EventParticipation::whereIn('event_id', $eventIds)->whereIn('occurs_on', $dates)->where('response', 'present')
+            ->toBase()->selectRaw('event_id, occurs_on, count(*) as going')->groupBy('event_id', 'occurs_on')->get() as $row) {
+            $going[$row->event_id.'|'.$row->occurs_on] = (int) $row->going;
+        }
+        $mine = EventParticipation::where('user_id', $user->id)->whereIn('event_id', $eventIds)->whereIn('occurs_on', $dates)
+            ->get(['event_id', 'occurs_on', 'response', 'volunteer'])
             ->keyBy(fn ($p) => $p->event_id.'|'.$p->occurs_on);
 
         // Qui peut modifier quoi : son agenda personnel, ce qu'on a cree, ou (avec events.manage)

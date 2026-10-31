@@ -96,6 +96,34 @@ class VertumetreCatalog
             'label' => str_replace([' ?', ' :'], [' ?', ' :'], $q['label'])] + $q, $section['questions'])] + $section, self::sections());
     }
 
+    /**
+     * Reponses pour le journal : le fait qu'un texte libre a change (empreinte), jamais son contenu.
+     *
+     * @param  array<string, mixed>  $answers
+     * @return array<string, mixed>
+     */
+    public static function forJournal(array $answers): array
+    {
+        $free = [];
+        foreach (self::questions() as $key => $q) {
+            if ($q['type'] === 'text') {
+                $free[] = $key;
+            }
+            foreach (['other', 'details'] as $extra) {
+                if (isset($q[$extra]['key'])) {
+                    $free[] = $q[$extra]['key'];
+                }
+            }
+        }
+        foreach ($free as $key) {
+            if (filled($answers[$key] ?? null)) {
+                $answers[$key] = 'texte #'.substr(hash_hmac('sha256', (string) $answers[$key], (string) config('app.key')), 0, 10);
+            }
+        }
+
+        return $answers;
+    }
+
     /** @return array<string, array<string, mixed>> questions par cle */
     public static function questions(): array
     {

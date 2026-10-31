@@ -16,7 +16,7 @@ class RequestController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $scoped = MemberScope::isScoped($user);
+        $scoped = MemberScope::isScoped($user, 'requests.handle');
         // Ses propres demandes vont a ses responsables a lui : jamais dans sa propre liste.
         $visibleIds = $scoped ? array_diff(MemberScope::manageableUserIds($user, 'requests.handle'), [$user->id]) : null;
 

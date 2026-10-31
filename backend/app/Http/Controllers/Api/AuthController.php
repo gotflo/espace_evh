@@ -98,6 +98,9 @@ class AuthController extends Controller
                 'phone' => 'Un code vient déjà d\'être envoyé. Patientez un instant avant de réessayer.',
             ]);
         }
+        if ($this->otp->isLocked($phone)) {
+            throw ValidationException::withMessages(['phone' => 'Trop de codes erronés pour ce numéro : réessayez dans une heure.']);
+        }
         // Anti-fraude : pays accepte, numero mobile, plafond global de SMS (codes factures).
         if ($refusal = $this->otp->smsRefusal($phone)) {
             Monitor::event('warning', 'security', 'auth.sms_refused', 'Code refusé (pays, type de numéro ou plafond)', ['phone' => '…'.substr($phone, -4)], 'denied');

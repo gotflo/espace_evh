@@ -28,6 +28,10 @@ class AppointmentController extends Controller
         $viewer = $request->user();
         abort_unless(AppointmentService::canOrganize($viewer), 403, 'Réservé au pasteur et au protocole.');
         $hosts = User::whereIn('id', AppointmentService::hostIds())->with('profile')->get();
+        // Le protocole et le Pasteur Resident voient tous les pasteurs ; un autre pasteur, seulement ses rendez-vous.
+        if (! $viewer->hasPermission('appointments.organize')) {
+            $hosts = $hosts->where('id', $viewer->id)->values();
+        }
         $host = $this->host($request, $hosts);
         $isHost = $host && $viewer->id === $host->id;
 

@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../../api/client'
 import { getReference, type ReferenceData } from '../../api/reference'
 import { useAuth } from '../../auth/AuthContext'
 import { AppLayout } from '../../components/AppLayout'
 import { Icon } from '../../components/Icon'
+import { LoadError } from '../../components/LoadError'
+import { useLatestRequest } from '../../utils/latestRequest'
 import { SkeletonCard } from '../../components/Skeleton'
 import { toast } from '../../toast'
 import type { ManagedRole } from '../../types'
@@ -122,9 +124,22 @@ export default function Accounts() {
   const url = useCallback((page: number) =>
     `/admin/accounts?page=${page}&q=${encodeURIComponent(query.trim())}${roleFilter ? `&role=${encodeURIComponent(roleFilter)}` : ''}`, [query, roleFilter])
 
+  const [loadError, setLoadError] = useState('')
+  const { begin, follow } = useLatestRequest()
+  // Adresse de la liste affichee : si sa relecture echoue, elle reste ; un autre filtre n'a rien a montrer.
+  const shownUrl = useRef('')
+
   const load = useCallback(() => {
-    api<AccountsPage>(url(1)).then(setData).catch(() => setData({ accounts: [], total: 0, page: 1, has_more: false }))
-  }, [url])
+    const first = url(1)
+    const isLatest = begin()
+    api<AccountsPage>(url(1))
+      .then((r) => { if (!isLatest()) return; setData(r); setLoadError(''); shownUrl.current = first })
+      .catch((err) => {
+        if (!isLatest() || shownUrl.current === first) return
+        setData(null); shownUrl.current = ''
+        setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
+      })
+  }, [url, begin])
 
   useEffect(() => {
     const t = window.setTimeout(load, 250)
@@ -138,10 +153,11 @@ export default function Accounts() {
 
   function more() {
     if (!data) return
+    const stillThisList = follow()
     setLoadingMore(true)
     api<AccountsPage>(url(data.page + 1))
-      .then((r) => setData({ ...r, accounts: [...data.accounts, ...r.accounts] }))
-      .catch(() => {}).finally(() => setLoadingMore(false))
+      .then((r) => { if (stillThisList()) setData({ ...r, accounts: [...data.accounts, ...r.accounts] }) })
+      .catch(() => toast.error('Impossible d’afficher la suite. Vérifiez votre réseau puis réessayez.')).finally(() => setLoadingMore(false))
   }
 
   async function removeRole(a: Account, r: AccountRole) {
@@ -165,14 +181,14 @@ export default function Accounts() {
       </section>
       <p className="helper acc-note"><Icon name="lock" size={13} /> Seuls le nom, la tribu, la fin du numéro et les fonctions sont affichés : les fiches des membres restent privées.</p>
 
-      {!data ? <SkeletonCard /> : (
+      {!data ? (loadError ? <LoadError message={loadError} onRetry={() => { setLoadError(''); load() }} /> : <SkeletonCard />) : (
         <>
           <p className="helper">{data.total} compte{data.total > 1 ? 's' : ''}</p>
           <ul className="acc-list">
             {data.accounts.map((a) => (
               <li key={a.id} className="panel acc-row">
                 <div className="acc-main">
-                  {a.photo_url ? <img className="mini-avatar" src={a.photo_url} alt="" /> : <span className="mini-avatar">{initials(a)}</span>}
+                  {a.photo_url ? <img className="mini-avatar" src={a.photo_url} alt="" width={34} height={34} loading="lazy" decoding="async" /> : <span className="mini-avatar">{initials(a)}</span>}
                   <div className="acc-id">
                     <strong className="acc-name">{a.name ?? 'Sans nom'}</strong>
                     <small>{[a.tribe ? `Tribu ${a.tribe}` : null, a.phone, a.status === 'blocked' ? 'Suspendu' : a.status === 'inactive' ? 'Inactif' : null].filter(Boolean).join(' · ')}</small>

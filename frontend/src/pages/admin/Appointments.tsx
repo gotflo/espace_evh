@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { api, peek } from '../../api/client'
+import { api, ApiError, peek } from '../../api/client'
 import { AppLayout } from '../../components/AppLayout'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { Icon } from '../../components/Icon'
+import { LoadError } from '../../components/LoadError'
 import { SkeletonCard } from '../../components/Skeleton'
 import { usePulse } from '../../pulse'
 import { ymd } from '../../utils/events'
+import { useLatestRequest } from '../../utils/latestRequest'
 import type { AdminAppointmentsData, AppointmentItem, AppointmentSession, AppointmentSlot, AppointmentUrgency } from '../../types'
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
@@ -29,7 +31,7 @@ type Dialog =
 function Who({ a }: { a: AppointmentItem }) {
   return (
     <div className="appt-who">
-      {a.member?.photo_url ? <img className="mini-avatar" src={a.member.photo_url} alt="" /> : <span className="mini-avatar">{(a.member?.name ?? '?').charAt(0).toUpperCase()}</span>}
+      {a.member?.photo_url ? <img className="mini-avatar" src={a.member.photo_url} alt="" width={34} height={34} loading="lazy" decoding="async" /> : <span className="mini-avatar">{(a.member?.name ?? '?').charAt(0).toUpperCase()}</span>}
       <div className="appt-who-text">
         <strong>{a.member?.name}</strong>
         <small>{[a.member?.tribe ? `Tribu ${a.member.tribe}` : null, a.created_at ? `demandé ${waited(a.created_at)}` : null].filter(Boolean).join(' · ')}</small>
@@ -51,9 +53,14 @@ export default function AdminAppointments() {
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
+  const [loadError, setLoadError] = useState('')
+  const { begin } = useLatestRequest()
   const load = useCallback(() => {
-    api<AdminAppointmentsData>(hostId ? `/admin/appointments?host=${hostId}` : '/admin/appointments').then((d) => { setData(d); if (!hostId && d.host_id) setHostId(d.host_id) }).catch(() => {})
-  }, [hostId])
+    const isLatest = begin()
+    api<AdminAppointmentsData>(hostId ? `/admin/appointments?host=${hostId}` : '/admin/appointments')
+      .then((d) => { if (!isLatest()) return; setData(d); setLoadError(''); if (!hostId && d.host_id) setHostId(d.host_id) })
+      .catch((err) => { if (isLatest()) setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.') })
+  }, [hostId, begin])
   useEffect(() => { load() }, [load])
   usePulse('appointments', load)
 
@@ -80,7 +87,7 @@ export default function AdminAppointments() {
 
   return (
     <AppLayout title="Rendez-vous avec le pasteur" subtitle={host ? (data!.is_host ? 'Vos rendez-vous et vos disponibilités' : `Rendez-vous de ${host.name}`) : 'Demandes et rencontres après les cultes'}>
-      {!data ? <SkeletonCard /> : data.hosts.length === 0 ? (
+      {!data ? (loadError ? <LoadError message={loadError} onRetry={() => { setLoadError(''); load() }} /> : <SkeletonCard />) : data.hosts.length === 0 ? (
         <div className="empty-state"><Icon name="calendar" size={28} /><h3>Aucun pasteur ne reçoit de rendez-vous</h3><p>Le Pasteur Résident reçoit les rendez-vous ; d'autres pasteurs peuvent en recevoir avec la permission « Recevoir des rendez-vous ».</p></div>
       ) : (
         <div className="appt-page">
@@ -89,7 +96,7 @@ export default function AdminAppointments() {
               {data.hosts.map((h) => (
                 <button key={h.id} type="button" role="radio" aria-checked={h.id === data.host_id} className={`appt-host ${h.id === data.host_id ? 'on' : ''}`}
                   onClick={() => { setHostId(h.id); setPlacing(null) }}>
-                  {h.photo_url ? <img src={h.photo_url} alt="" /> : <span className="mini-avatar">{h.name.charAt(0)}</span>}
+                  {h.photo_url ? <img src={h.photo_url} alt="" width={32} height={32} loading="lazy" decoding="async" /> : <span className="mini-avatar">{h.name.charAt(0)}</span>}
                   <span>{h.name}</span>
                 </button>
               ))}

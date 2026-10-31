@@ -9,6 +9,7 @@ use App\Services\Sms\TwilioMessagingClient;
 use App\Support\Monitoring\Redactor;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -26,6 +27,14 @@ class Messenger
     private const RETRY_MINUTES = [1, 5, 30, 120];
 
     private const MAX_ATTEMPTS = 5;
+
+    /** Priorite d'envoi : les messages urgents passent devant une diffusion en cours. */
+    public const PRIORITY_URGENT = 1;
+
+    public const PRIORITY_NORMAL = 5;
+
+    /** Attendus aussitot : validation d'un compte, inscription a un service, demande de suppression. */
+    private const URGENT_KINDS = ['membership_request', 'membership_patriarch', 'membership_approved', 'membership_rejected', 'service_request', 'deletion_request'];
 
     /** Motif enregistre quand aucun envoi de courriel n'est configure sur le serveur. */
     public const MAIL_NOT_CONFIGURED = 'Non envoyé : aucun envoi de courriel configuré sur le serveur (MAIL_MAILER).';
@@ -91,6 +100,57 @@ class Messenger
 
     // ---------------------------------------------------------------- File
 
+    public static function priorityOf(string $kind): int
+    {
+        return in_array($kind, self::URGENT_KINDS, true) ? self::PRIORITY_URGENT : self::PRIORITY_NORMAL;
+    }
+
+    /**
+     * Meme choix que toMember, sans rien ecrire : la ligne a mettre en file (null : rien a envoyer).
+     * Une diffusion ecrit ces lignes par lots (queueMany) au lieu de deux requetes par membre.
+     *
+     * @param  array{subject: string, view: string, data: array<string, mixed>}  $mail
+     * @return array<string, mixed>|null
+     */
+    public static function memberRow(User $user, string $kind, string $dedupe, array $mail, ?string $sms, ?string $category = null): ?array
+    {
+        $email = self::emailOf($user);
+        if ($email && self::wants($user, 'email', $category)) {
+            return ['channel' => 'email', 'recipient' => $email, 'user_id' => $user->id, 'kind' => $kind, 'subject' => mb_substr($mail['subject'], 0, 200),
+                'view' => $mail['view'], 'payload' => $mail['data'], 'dedupe_key' => $dedupe, 'available_at' => null];
+        }
+        if ($sms !== null && $user->phone && TwilioMessagingClient::enabled() && self::wants($user, 'sms', $category)) {
+            return ['channel' => 'sms', 'recipient' => $user->phone, 'user_id' => $user->id, 'kind' => $kind, 'subject' => null, 'view' => null,
+                'payload' => ['text' => self::smsText($sms)], 'dedupe_key' => $dedupe, 'available_at' => self::smsAllowedAt(now())];
+        }
+
+        return null;
+    }
+
+    /**
+     * Met en file des lignes de memberRow, en une ecriture par lot de 500. La cle anti-doublon ignore ce qui
+     * est deja en file : une diffusion interrompue peut etre relancee sans risque. Retourne le nombre ajoute.
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     */
+    public static function queueMany(array $rows): int
+    {
+        $now = now();
+        $added = 0;
+        foreach (array_chunk($rows, 500) as $chunk) {
+            $added += DB::table('outbound_messages')->insertOrIgnore(array_map(fn (array $row) => array_merge($row, [
+                'payload' => json_encode($row['payload'], JSON_UNESCAPED_UNICODE),
+                'available_at' => $row['available_at'] ?? $now,
+                'priority' => self::priorityOf($row['kind']),
+                'status' => 'pending',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]), $chunk));
+        }
+
+        return $added;
+    }
+
     /** @param array<string, mixed> $data */
     public static function queueEmail(string $to, ?int $userId, string $kind, string $subject, string $view, array $data, ?string $dedupe): ?OutboundMessage
     {
@@ -111,28 +171,48 @@ class Messenger
             return null;
         }
         try {
-            return OutboundMessage::create($row + ['status' => 'pending', 'available_at' => $row['available_at'] ?? now()]);
+            return OutboundMessage::create($row + ['status' => 'pending', 'available_at' => $row['available_at'] ?? now(), 'priority' => self::priorityOf($row['kind'])]);
         } catch (UniqueConstraintViolationException) {
             return null; // deja en file (deux passages simultanes)
         }
     }
 
     /**
-     * Envoie ce qui est du (courriels et textos), dans la limite par minute de l'hebergeur.
+     * Envoie ce qui est du (courriels et textos), les messages urgents d'abord, dans la limite par minute de
+     * l'hebergeur, y compris les minutes ou les automatismes envoient aussi : un seul passage a la fois, et
+     * ce qui est deja parti dans la minute est deduit.
      *
      * @return array{sent: int, failed: int}
      */
     public static function flush(?Carbon $now = null): array
     {
         $now ??= now();
+        $lock = Cache::lock('outbox:flush', 600);
+        if (! $lock->get()) {
+            return ['sent' => 0, 'failed' => 0];
+        }
+        try {
+            return self::flushLocked($now);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /** @return array{sent: int, failed: int} */
+    private static function flushLocked(Carbon $now): array
+    {
         // Envoi interrompu (coupure du serveur) : de nouveau en file apres 10 min.
         OutboundMessage::where('status', 'sending')->where('updated_at', '<', $now->copy()->subMinutes(10))->update(['status' => 'pending']);
 
         $sent = 0;
         $failed = 0;
         foreach (['email' => (int) config('mail.per_minute', 20), 'sms' => (int) config('services.sms.per_minute', 30)] as $channel => $limit) {
+            $room = max(1, $limit) - OutboundMessage::where('channel', $channel)->where('sent_at', '>=', $now->copy()->startOfMinute())->count();
+            if ($room <= 0) {
+                continue;
+            }
             $due = OutboundMessage::where('channel', $channel)->where('status', 'pending')->where('available_at', '<=', $now)
-                ->orderBy('available_at')->orderBy('id')->limit(max(1, $limit))->get();
+                ->orderBy('priority')->orderBy('available_at')->orderBy('id')->limit($room)->get();
             // Courriels sans envoi configure : jamais comptes « envoyes ». Ils restent en file (sans tentative)
             // pour partir des que la configuration est retablie ; trop anciens, ils sont marques « non envoyes ».
             if ($channel === 'email' && ! self::emailDeliverable() && $due->isNotEmpty()) {

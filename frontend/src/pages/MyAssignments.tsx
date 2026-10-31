@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { api, peek } from '../api/client'
+import { api, ApiError, peek } from '../api/client'
 import { AppLayout } from '../components/AppLayout'
 import { SkeletonCard } from '../components/Skeleton'
+import { LoadError } from '../components/LoadError'
 import { Icon } from '../components/Icon'
 import { MediaPlayer } from '../components/MediaPlayer'
 import { clearDraft, readDraft, useDraft } from '../utils/drafts'
@@ -150,7 +151,11 @@ function AssignmentWork({ a, reminder, onSaved }: { a: Assignment; reminder: str
 export default function MyAssignments() {
   const [data, setData] = useState<MyAssignmentsData | null>(() => peek<MyAssignmentsData>('/me/assignments') ?? null)
   const [params, setParams] = useSearchParams()
-  const load = useCallback(() => { api<MyAssignmentsData>('/me/assignments').then(setData).catch(() => {}) }, [])
+  const [loadError, setLoadError] = useState('')
+  const load = useCallback(() => {
+    api<MyAssignmentsData>('/me/assignments').then((d) => { setData(d); setLoadError('') })
+      .catch((err) => setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.'))
+  }, [])
   useEffect(() => { load() }, [load])
   usePulse('assignments', load)
 
@@ -163,7 +168,13 @@ export default function MyAssignments() {
     if (current && wanted !== current.id) setParams({ d: String(current.id) }, { replace: true })
   }, [current, wanted, setParams])
 
-  if (!data) return <AppLayout title="Mon devoir"><div className="panel-grid"><SkeletonCard /></div></AppLayout>
+  if (!data) {
+    return (
+      <AppLayout title="Mon devoir">
+        {loadError ? <LoadError message={loadError} onRetry={() => { setLoadError(''); load() }} /> : <div className="panel-grid"><SkeletonCard /></div>}
+      </AppLayout>
+    )
+  }
 
   const others = data.assignments.filter((a) => a.id !== current?.id)
   const monday = weekStart()

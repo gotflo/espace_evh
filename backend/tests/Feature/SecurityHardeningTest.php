@@ -350,9 +350,10 @@ class SecurityHardeningTest extends TestCase
             }
             Carbon::setTestNow(now()->addMinute());
         }
-        // Dix codes faux dans l'heure : meme le bon code d'un nouvel envoi est refuse.
-        $code = $this->postJson('/api/auth/request-otp', ['phone' => $phone])->assertOk()->json('dev_code');
-        $this->postJson('/api/auth/verify-otp', ['phone' => $phone, 'code' => $code])->assertStatus(422)
+        // Dix codes faux dans l'heure : plus aucun SMS, et meme un code encore valide est refuse.
+        $this->postJson('/api/auth/request-otp', ['phone' => $phone])->assertStatus(422)
+            ->assertJsonPath('errors.phone.0', 'Trop de codes erronés pour ce numéro : réessayez dans une heure.');
+        $this->postJson('/api/auth/verify-otp', ['phone' => $phone, 'code' => '000000'])->assertStatus(422)
             ->assertJsonPath('errors.code.0', 'Trop de codes erronés pour ce numéro : réessayez dans une heure.');
         Carbon::setTestNow(now()->addMinutes(61));
         $code = $this->postJson('/api/auth/request-otp', ['phone' => $phone])->assertOk()->json('dev_code');

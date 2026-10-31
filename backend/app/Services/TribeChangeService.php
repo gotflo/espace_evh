@@ -60,7 +60,7 @@ class TribeChangeService
         if ($user->id === $req->user_id || ! $user->hasPermission('tribes.transfer') || $req->status !== 'pending') {
             return [];
         }
-        if ($user->hasPermission('members.view_all')) {
+        if ($user->isChurchWideFor('tribes.transfer')) {
             return ['both'];
         }
         $tribes = $user->scopeTribeIds();

@@ -1,4 +1,11 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+
+// Formulaires modifies et pas encore enregistres, sur tout l'ecran : aucun rechargement automatique
+// (nouvelle version, tirage vers le bas) tant qu'il en reste un.
+let unsaved = 0
+export function hasUnsavedInput(): boolean {
+  return unsaved > 0
+}
 
 /**
  * Formulaire modifie ou non : compare les valeurs actuelles a une reference prise au premier
@@ -12,7 +19,13 @@ export function useDirty(value: unknown): { dirty: boolean; reset: () => void } 
   if (base.current === null) base.current = current
   // Reference reprise au rendu suivant (celui qui porte les nouvelles valeurs).
   const reset = useCallback(() => { base.current = null; rerender((n) => n + 1) }, [])
-  return { dirty: base.current !== current, reset }
+  const dirty = base.current !== current
+  useEffect(() => {
+    if (!dirty) return
+    unsaved += 1
+    return () => { unsaved -= 1 }
+  }, [dirty])
+  return { dirty, reset }
 }
 
 /**

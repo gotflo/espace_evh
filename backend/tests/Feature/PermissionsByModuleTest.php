@@ -83,6 +83,13 @@ class PermissionsByModuleTest extends TestCase
     }
 
     /** @return array<int, string> */
+    /** Migrations a annuler pour revenir juste avant le decoupage des permissions (lui compris). */
+    private static function stepsBackToPermissions(): int
+    {
+        return count(array_filter(array_map('basename', glob(database_path('migrations/*.php'))),
+            fn (string $file) => $file >= '2026_10_12_100001_permissions_by_module_and_platform_manager.php'));
+    }
+
     private function keysOf(string $roleKey): array
     {
         return Role::where('key', $roleKey)->first()->permissions()->pluck('key')->all();
@@ -117,9 +124,9 @@ class PermissionsByModuleTest extends TestCase
 
     public function test_the_migration_converts_old_roles_and_rolls_back_cleanly(): void
     {
-        // Fiches de meditation, motif des blocages de rendez-vous, role de responsable de departement, reglages,
-        // lectures des ressources, services, appareils de confiance, puis permissions.
-        Artisan::call('migrate:rollback', ['--step' => 9]);
+        // Revenir juste avant les permissions : toutes les migrations plus recentes, puis celle-ci. Le nombre
+        // est calcule, une nouvelle migration ne casse donc pas cet essai.
+        Artisan::call('migrate:rollback', ['--step' => self::stepsBackToPermissions()]);
         $this->assertFalse(Schema::hasTable('meditation_sheets'));
         $this->assertNull(Permission::where('key', 'meditations.view')->first());
         $this->assertNotNull(Permission::where('key', 'content.manage')->first());

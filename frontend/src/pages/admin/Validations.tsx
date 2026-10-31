@@ -74,7 +74,7 @@ function MembershipCard({ m, busy, onDecide }: { m: MembershipRequest; busy: boo
   return (
     <article className={`validation-card membership-card ${rejected ? 'is-rejected' : ''}`}>
       <div className="membership-head">
-        {m.photo_url ? <img className="membership-photo" src={m.photo_url} alt="" /> : <span className="membership-photo">{initials}</span>}
+        {m.photo_url ? <img className="membership-photo" src={m.photo_url} alt="" width={52} height={52} loading="lazy" decoding="async" /> : <span className="membership-photo">{initials}</span>}
         <div className="membership-who">
           <strong>{m.name}</strong>
           <small>{rejected ? `Refusée ${m.decided_at ? ago(m.decided_at) : ''}` : `Nouvelle inscription · ${m.requested_at ? ago(m.requested_at) : ''}`}</small>
@@ -254,7 +254,7 @@ export default function Validations() {
             {data.services!.map((r) => (
               <article key={r.id} className="validation-card">
                 <div className="validation-head">
-                  {r.member.photo_url ? <img className="mini-avatar" src={r.member.photo_url} alt="" /> : <span className="validation-icon"><Icon name="serve" size={20} /></span>}
+                  {r.member.photo_url ? <img className="mini-avatar" src={r.member.photo_url} alt="" width={34} height={34} loading="lazy" decoding="async" /> : <span className="validation-icon"><Icon name="serve" size={20} /></span>}
                   <div>
                     <button className="btn-link strong" onClick={() => navigate(`/admin/membres/${r.member.user_id}`)}>{r.member.name}</button>
                     <small>{r.member.tribe ? `Tribu ${r.member.tribe}` : 'Sans tribu'}{r.created_at ? ` · ${ago(r.created_at)}` : ''}</small>

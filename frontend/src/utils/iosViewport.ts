@@ -33,6 +33,9 @@ export function enterAppShell(): () => void {
   return () => root.classList.remove('app-shell')
 }
 
+/** Au-dela de cet ecart sous le bas visible (px), le repere suit le clavier ou une transition (barre de Safari : ~60 px). */
+const MAX_BELOW = -60
+
 export function installIosViewportFix(): void {
   if (!isIos()) return
   const root = document.documentElement
@@ -57,23 +60,34 @@ export function installIosViewportFix(): void {
     const appFrame = document.querySelector('#root > .app')
     const limit = Math.max(root.scrollHeight, appFrame ? appFrame.scrollHeight : 0, window.innerHeight) + vv.height
     const keep = (d: number) => (Math.abs(d) > 2 && Math.abs(d) < limit ? d : 0)
+    const bottom = Math.round(vv.height - bottomProbe.getBoundingClientRect().bottom)
     return [
       keep(Math.round(-topProbe.getBoundingClientRect().top)),
-      keep(Math.round(vv.height - bottomProbe.getBoundingClientRect().bottom)),
+      // Repere loin sous le bas visible : clavier ou transition en cours, jamais un decrochage (qui fait remonter la barre).
+      bottom < MAX_BELOW ? 0 : keep(bottom),
     ]
   }
 
   let topPx = 0
   let bottomPx = 0
   let frame = 0
+  let watching: number | undefined
+  let tellLater: number | undefined
   const update = () => {
     if (frame) return
     frame = requestAnimationFrame(() => {
       frame = 0
       const [top, bottom] = measure()
+      const changed = top !== topPx || bottom !== bottomPx
       if (top !== topPx) { topPx = top; root.style.setProperty('--ios-top', `${top}px`) }
       if (bottom !== bottomPx) { bottomPx = bottom; root.style.setProperty('--ios-gap', `${bottom}px`) }
-      if (top || bottom) requestAnimationFrame(diagnose)
+      // Compensation en cours : remesuree sans attendre un evenement de Safari, elle ne reste jamais perimee.
+      if ((top || bottom) && watching === undefined) watching = window.setInterval(update, 500)
+      if (!top && !bottom && watching !== undefined) { window.clearInterval(watching); watching = undefined }
+      if (changed && (top || bottom)) {
+        window.clearTimeout(tellLater)
+        tellLater = window.setTimeout(diagnose, 1200)
+      }
     })
   }
 
@@ -82,6 +96,9 @@ export function installIosViewportFix(): void {
   let toldStillWrong = false
   const diagnose = () => {
     if (!vv || isField(document.activeElement)) return
+    // Rien tant que ca bouge : seul un etat stable est un vrai constat.
+    const [nowTop, nowBottom] = measure()
+    if (nowTop !== topPx || nowBottom !== bottomPx) return
     const facts = `coque ${shellOn() ? 'oui' : 'non'}, innerHeight ${window.innerHeight}, visualViewport `
       + `${Math.round(vv.height)}+${Math.round(vv.offsetTop)}, compensation haut ${topPx} px, bas ${bottomPx} px`
     if (!toldCompensated && Math.max(Math.abs(topPx), Math.abs(bottomPx)) >= 40) {

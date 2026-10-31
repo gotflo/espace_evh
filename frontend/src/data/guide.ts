@@ -2,9 +2,9 @@ import type { ModuleName } from '../types'
 import type { IconName } from '../utils/icons'
 
 /**
- * Contenu du Guide (tutoriel de l'application), repris du PowerPoint « Guide du Garde ».
+ * Contenu du Guide (tutoriel de l'application), repris des PowerPoint « Guide du fidèle » et « Guide du Garde ».
  * Partie « tous » : chaque fidele. Partie « garde » : les Gardes, et leurs responsables (patriarche, AP, pasteurs)
- * qui les encadrent. Les captures (public/guide, nom.webp et nom@2x.webp) montrent des personnes fictives.
+ * qui les encadrent. Les captures (public/guide-captures, nom.webp et nom@2x.webp) montrent des personnes fictives.
  */
 
 export type GuideAudience = 'tous' | 'garde'
@@ -45,71 +45,62 @@ export interface GuideChapter {
 
 export interface GuideFaq { q: string; a: string; audience: GuideAudience }
 
+/** Presentation de l'application aux fideles : fichier de la plateforme, lue dans la page du Guide. */
+export const GUIDE_VIDEO = { src: '/guide-captures/presentation-application.mp4', poster: '/guide-captures/video-affiche.webp', title: 'Présentation de l’application' }
+
 export const GUIDE_CHAPTERS: GuideChapter[] = [
   // ------------------------------------------------------------------ Pour tous
   {
     id: 'inscription', part: 'tous', icon: 'profile',
     title: 'S’inscrire et se connecter',
-    summary: 'Du numéro de téléphone jusqu’à votre espace : code SMS, profil, validation, installation.',
+    summary: 'Du numéro de téléphone jusqu’à votre espace : installation, code SMS, profil, validation.',
     sections: [
       {
-        id: 'numero', title: 'Un numéro de téléphone, un code SMS',
-        shots: [
-          { name: 'connexion-numero', caption: 'Écran « Connexion » : votre numéro de cellulaire' },
-          { name: 'connexion-code', caption: 'Écran « Vérification » : le code reçu par SMS' },
-        ],
+        id: 'installer', title: 'Installer l’application',
+        shots: [{ name: 'fidele-installer-banniere', caption: 'L’invitation « Installer My vasesdhonneur »' }],
         steps: [
-          { title: 'Votre numéro de cellulaire', text: 'Tapez votre numéro puis touchez « Recevoir mon code ». Aucun mot de passe : le numéro suffit.' },
-          { title: 'Un code à 6 chiffres par SMS', text: 'Valable 10 minutes. La connexion se fait toute seule au 6e chiffre ; le téléphone peut aussi proposer le code reçu.' },
-          { title: 'Nouveau numéro, nouveau compte', text: 'Le premier code crée le compte, qui attend ensuite la validation du pasteur.' },
-        ],
-        tips: [
-          'Le code n’arrive pas ? Touchez « Modifier le numéro », vérifiez-le, puis « Recevoir mon code » (45 secondes entre deux envois).',
-          'Un numéro de ligne fixe ne reçoit pas de code : utilisez un cellulaire.',
+          { title: 'Sur iPhone', text: 'Dans Safari : Partager, puis « Sur l’écran d’accueil ». Ouvrez ensuite l’application depuis son icône.' },
+          { title: 'Sur Android', text: 'Touchez « Installer » dans le bandeau « Installer My vasesdhonneur ».' },
         ],
       },
       {
-        id: 'profil-inscription', title: 'Compléter son profil',
+        id: 'numero', title: 'Un numéro de téléphone, un code SMS',
         shots: [
-          { name: 'profil-rempli-haut', caption: 'Écran « Bienvenue ! » : photo, prénoms, nom, anniversaire' },
-          { name: 'profil-rempli-tribu', caption: 'Le choix de la tribu et « Envoyer mon inscription »' },
+          { name: 'fidele-connexion-numero', caption: 'Écran « Connexion » : votre numéro de cellulaire' },
+          { name: 'fidele-connexion-code', caption: 'Écran « Vérification » : le code reçu par SMS' },
+        ],
+        steps: [
+          { title: 'Votre numéro de cellulaire', text: 'Aucun mot de passe : le numéro suffit.' },
+          { title: 'Un code à 6 chiffres par SMS', text: 'Valable 10 minutes. La connexion se fait toute seule au 6e chiffre.' },
+          { title: 'Nouveau numéro, nouveau compte', text: 'Le premier code crée votre compte, qui attend ensuite la validation du pasteur.' },
+        ],
+        tips: ['Le code n’arrive pas ? Touchez « Modifier le numéro », vérifiez-le, puis « Recevoir mon code » (45 secondes entre deux envois).'],
+      },
+      {
+        id: 'profil-inscription', title: 'Compléter votre profil',
+        shots: [
+          { name: 'fidele-profil-rempli-haut', caption: 'Écran « Bienvenue ! » : photo, prénoms, nom, anniversaire' },
+          { name: 'fidele-profil-rempli-tribu', caption: 'Le choix de la tribu et « Envoyer mon inscription »' },
         ],
         steps: [
           { title: 'Obligatoire', text: 'Prénoms, Nom, Genre et Tribu.' },
           { title: 'Conseillé', text: 'Courriel (pour être prévenu de la validation et recevoir vos rappels), photo, anniversaire (jour et mois).' },
-          { title: 'Envoyer mon inscription', text: 'Le bouton reste grisé tant qu’il manque quelque chose, et l’écran dit ce qui manque.' },
         ],
         tips: [
-          'La tribu est ensuite verrouillée : pour en changer, faites une demande depuis Mon profil ; les responsables des deux tribus la valident.',
-          'Le GEM n’est pas choisi ici : un responsable vous rattache à un GEM après votre inscription. Pour servir dans un département, faites votre demande plus tard depuis « Service ».',
+          'La tribu est ensuite verrouillée. Pour en changer : une demande depuis Mon profil, validée par les responsables des deux tribus.',
+          'Le GEM n’est pas choisi ici : un responsable vous rattache à un GEM après votre inscription.',
         ],
       },
       {
-        id: 'validation', title: 'Le pasteur valide l’inscription',
+        id: 'validation', title: 'Le pasteur valide votre inscription',
         shots: [
-          { name: 'attente-validation', caption: 'L’écran d’attente, avec le verset du moment' },
-          { name: 'pasteur-validation', caption: 'Ce que voit le pasteur dans Validations' },
+          { name: 'fidele-attente-validation', caption: 'L’écran d’attente, avec le verset du moment' },
+          { name: 'fidele-bienvenue', caption: 'Votre espace s’ouvre, avec un mot de bienvenue' },
         ],
         steps: [
           { title: 'En attente', text: '« Compte en attente de validation » : votre espace s’ouvrira tout seul.' },
-          { title: 'Le pasteur valide', text: 'Il est prévenu (notification et courriel) et touche « Valider ».' },
-          { title: 'L’espace s’ouvre', text: 'Vous êtes prévenu ; vos responsables reçoivent « Nouveau membre ».' },
-        ],
-      },
-      {
-        id: 'installer', title: 'Installer l’application, activer les notifications',
-        shots: [
-          { name: 'installer-banniere', caption: 'L’invitation « Installer My vasesdhonneur »' },
-          { name: 'bienvenue', caption: 'Premier passage : le mot de bienvenue et « Activez les notifications »' },
-        ],
-        steps: [
-          { title: 'Sur iPhone', text: 'Dans Safari : Partager, puis « Sur l’écran d’accueil ». Ouvrez ensuite l’application depuis son icône.' },
-          { title: 'Sur Android', text: 'Touchez « Installer » dans le bandeau « Installer My vasesdhonneur ».' },
-          { title: 'Activer les notifications', text: '« Activer » : annonces, rappels et tâches arrivent sur le téléphone. Sur iPhone, depuis l’application installée.' },
-        ],
-        tips: [
-          'Vous restez connecté 60 jours, prolongés tant que vous utilisez l’application. « Déconnexion » est en bas du menu.',
-          '« Plus tard » repropose l’invitation aux notifications quelques jours après.',
+          { title: 'Le pasteur valide', text: 'Il est prévenu de votre inscription et la valide.' },
+          { title: 'Votre espace s’ouvre', text: 'Vous êtes prévenu, et un mot de bienvenue vous accueille.' },
         ],
       },
     ],
@@ -117,14 +108,19 @@ export const GUIDE_CHAPTERS: GuideChapter[] = [
   {
     id: 'espace', part: 'tous', icon: 'dashboard',
     title: 'Votre espace',
-    summary: 'L’accueil, la barre du bas et le menu.',
+    summary: 'L’accueil, la barre du bas et le menu : pour vous repérer en un instant.',
     sections: [
       {
         id: 'accueil', title: 'Le tableau de bord',
-        shots: [{ name: 'accueil-haut', caption: 'L’accueil : le verset du moment et « Mon mois »' }],
+        shots: [
+          { name: 'fidele-accueil-haut', caption: 'L’accueil : le verset du moment et « Mon mois »' },
+          { name: 'fidele-accueil-exercices', caption: 'Plus bas : vos exercices et « Nos rendez-vous »' },
+        ],
         steps: [
           { title: 'Le verset du moment', text: 'Choisi par l’église, en haut de l’accueil.' },
-          { title: 'Mon mois', text: 'Ce qu’il vous reste à faire ce mois-ci : fiche, Vertumètre, résolutions, devoir. L’anneau montre où vous en êtes.' },
+          { title: 'Mon mois', text: 'Ce qu’il vous reste à faire ce mois-ci : fiche, Vertumètre, résolutions, devoir.' },
+          { title: 'Mes exercices', text: 'Ce que vos responsables vous proposent, avec la date limite.' },
+          { title: 'Nos rendez-vous', text: 'Les rendez-vous réguliers de l’église, jour par jour.' },
         ],
       },
       {
@@ -138,11 +134,11 @@ export const GUIDE_CHAPTERS: GuideChapter[] = [
       },
       {
         id: 'menu', title: 'Se déplacer dans l’application',
-        shots: [{ name: 'menu-mon-espace', caption: 'Le menu, partie « Mon espace »' }],
+        shots: [{ name: 'fidele-menu', caption: 'Le menu, partie « Mon espace »' }],
         steps: [
-          { title: 'La barre du bas', text: 'Accueil, Calendrier, Service, Alertes et Menu, toujours à portée de pouce. « Alertes » affiche le nombre de notifications non lues.' },
-          { title: 'Menu · Mon espace', text: 'Vos pages de fidèle : vie spirituelle, fiche, méditation, Vertumètre, RM, devoir, exercices, rendez-vous, contact, et ce guide.' },
-          { title: 'Mon profil et Déconnexion', text: 'En bas du menu, sous votre nom et votre fonction.' },
+          { title: 'La barre du bas', text: 'Accueil, Calendrier, Service, Alertes et Menu, toujours à portée de pouce.' },
+          { title: 'Le menu · Mon espace', text: 'Vos pages : vie spirituelle, fiche, méditation, Vertumètre, RM, devoir, exercices, rendez-vous, contact et guide.' },
+          { title: 'Mon profil et Déconnexion', text: 'En bas du menu, sous votre nom.' },
         ],
       },
       {
@@ -157,147 +153,282 @@ export const GUIDE_CHAPTERS: GuideChapter[] = [
   {
     id: 'fiss', part: 'tous', icon: 'fiss',
     title: 'Ma fiche de santé spirituelle (FISS)',
-    summary: 'Une fiche par mois, verrouillée après l’envoi.',
+    summary: 'Mon mois, votre repère, puis une fiche par mois, verrouillée après l’envoi.',
     sections: [
       {
-        id: 'fiss-remplir', title: 'Remplir sa fiche du mois',
+        id: 'mon-mois', title: 'Mon mois, votre repère',
         shots: [
-          { name: 'fiss-formulaire', caption: 'La fiche du mois à remplir' },
-          { name: 'fiss-garde', caption: 'Une fiche envoyée : verrouillée, avec son évolution' },
+          { name: 'fidele-mon-mois', caption: 'En début de mois : 0 sur 4' },
+          { name: 'fidele-mon-mois-3-sur-4', caption: 'Après la fiche, le Vertumètre et les résolutions : 3 sur 4' },
+        ],
+        steps: [
+          { title: 'Sur l’accueil', text: 'Mon mois montre ce qui est fait et ce qu’il reste à faire.' },
+          { title: 'L’anneau', text: 'Il se remplit à chaque étape terminée.' },
+          { title: 'Touchez une ligne', text: 'Elle ouvre directement la bonne page.' },
+        ],
+      },
+      {
+        id: 'fiss-remplir', title: 'Remplir votre fiche',
+        shots: [
+          { name: 'fidele-fiss-a-remplir', caption: 'La fiche du mois à remplir' },
+          { name: 'fidele-fiss-notes', caption: 'Vie spirituelle, sanctification, vie sociale' },
         ],
         steps: [
           { title: 'Une fiche par mois', text: 'À remplir dans le mois ; rappels dès le 8, puis les derniers jours.' },
-          { title: 'Ce qu’on y note', text: 'Méditation, prière et jeûne (vie spirituelle sur 60), sanctification du corps, de l’âme et de l’esprit, vie sociale et vie intérieure.' },
-          { title: 'Verrouillée après l’envoi', text: '« Enregistrer ma fiche » la verrouille. Une modification se demande (deux demandes au plus) ; l’évolution d’un mois à l’autre s’affiche.' },
+          { title: 'Ce qu’on y note', text: 'Vie spirituelle sur 60 (méditation, prière, jeûne), sanctification, vie sociale et vie intérieure.' },
+          { title: 'Gagnez du temps', text: '« Reprendre mes réponses » repart de votre fiche du mois passé : ajustez ce qui a changé.' },
         ],
-        privacy: 'Lue par votre patriarche, l’AP de votre tribu et les pasteurs. Le Garde ne la voit pas.',
         link: { to: '/ma-fiche', label: 'Ouvrir ma fiche' },
+      },
+      {
+        id: 'fiss-enregistrer', title: 'Enregistrer votre fiche',
+        shots: [
+          { name: 'fidele-fiss-vie-interieure', caption: 'La vie intérieure' },
+          { name: 'fidele-fiss-verrouillee', caption: 'Une fiche envoyée : verrouillée, avec son évolution' },
+        ],
+        steps: [
+          { title: 'La vie intérieure', text: 'Chaque question demande une réponse (« Aucune » ou « Non » si rien à signaler).' },
+          { title: 'Verrouillée après l’envoi', text: '« Enregistrer ma fiche » la verrouille. Une modification se demande à votre patriarche (deux demandes au plus).' },
+          { title: 'Votre évolution', text: 'D’un mois à l’autre, avec ce qui a changé.' },
+        ],
       },
     ],
   },
   {
     id: 'mois', part: 'tous', icon: 'target',
     title: 'Vertumètre, résolutions et devoir',
-    summary: 'Le questionnaire du mois, vos RM et le devoir publié par le pasteur.',
+    summary: 'Le questionnaire du mois, vos RM, le devoir publié par le pasteur et les rappels.',
     sections: [
       {
         id: 'vertumetre', title: 'Mon Vertumètre', module: 'vertumetre',
-        shots: [{ name: 'vertumetre', caption: 'Mon Vertumètre : étape 1 sur 3' }],
+        shots: [
+          { name: 'fidele-vertumetre-etape1', caption: 'Étape 1 sur 3' },
+          { name: 'fidele-vertumetre-confirmer', caption: 'Enregistrer, puis confirmer' },
+          { name: 'fidele-vertumetre-envoye', caption: 'Le Vertumètre enregistré et verrouillé' },
+        ],
         steps: [
-          { title: 'Questionnaire du mois en 3 étapes', text: 'Vie de prière et de jeûne, méditation de la Parole, fruit de l’Esprit et caractère.' },
-          { title: 'Dans le mois en cours', text: 'Rappels dès le 20. Verrouillé après l’envoi ; un mois passé ne se rattrape pas.' },
+          { title: 'Trois étapes', text: 'Prière et jeûne, méditation de la Parole, fruit de l’Esprit et caractère.' },
+          { title: 'Enregistrer et confirmer', text: 'Il est alors verrouillé ; une modification se demande à votre patriarche.' },
+          { title: 'Dans le mois en cours', text: 'Rappels dès le 20. Un mois passé ne se rattrape pas.' },
         ],
         link: { to: '/vertumetre', label: 'Ouvrir mon Vertumètre' },
       },
       {
-        id: 'rm', title: 'Mes RM (résolutions du mois)', module: 'resolutions',
-        shots: [{ name: 'mes-rm', caption: 'Mes RM, avec les ressources pour vous aider' }],
+        id: 'rm-bilan', title: 'Mes RM : le bilan du mois passé', module: 'resolutions',
+        shots: [
+          { name: 'fidele-rm-bilan', caption: 'Le bilan de chaque résolution' },
+          { name: 'fidele-rm-ressources', caption: 'Les ressources pour vous aider' },
+        ],
         steps: [
-          { title: 'Bilan du mois passé', text: 'Atteinte, en partie ou pas encore, pour chaque résolution.' },
-          { title: 'Résolutions du mois', text: 'Écrivez vos résolutions, avec des ressources par thème (méditation, prière, jeûne, culte). Rappels du 1er au 3.' },
+          { title: 'En début de mois', text: 'Rappels du 1er au 3, puis une relance du 8 au 12 si ce n’est pas fait.' },
+          { title: 'Le bilan', text: 'Pour chaque résolution : Atteinte, En partie ou Pas encore. Il aide vos responsables à vous encourager.' },
+          { title: 'Des ressources pour vous aider', text: 'Des vidéos par thème : méditation, prière, jeûne, culte.' },
+        ],
+      },
+      {
+        id: 'rm', title: 'Mes RM : les résolutions du mois', module: 'resolutions',
+        shots: [
+          { name: 'fidele-rm-saisie', caption: 'Écrire ou renouveler une résolution' },
+          { name: 'fidele-rm-enregistrees', caption: 'Les résolutions enregistrées' },
+        ],
+        steps: [
+          { title: 'Laissez-vous guider par votre fiche', text: 'Les points à fortifier sont signalés, rubrique par rubrique.' },
+          { title: '« Je renouvelle »', text: 'Reprenez une résolution du mois dernier, ou écrivez-en une nouvelle. Une seule suffit pour enregistrer.' },
+          { title: 'Ajustables', text: 'Vous pouvez les modifier jusqu’à la fin du mois ; le mois prochain, vous ferez le bilan.' },
         ],
         link: { to: '/mes-resolutions', label: 'Ouvrir mes RM' },
       },
       {
         id: 'devoir', title: 'Mon devoir (DS)', module: 'assignments',
+        shots: [
+          { name: 'fidele-devoir-video', caption: 'Le message, avec la barre de lecture' },
+          { name: 'fidele-devoir-resume', caption: 'Les étapes, le résumé et vos actions' },
+        ],
         steps: [
-          { title: 'Publié par le pasteur', text: 'Écouter le message, le résumer, noter ses actions, prier.' },
-          { title: 'Quand est-il « fait » ?', text: 'Quand le message est écouté en entier et le résumé envoyé.' },
+          { title: 'Publié par le pasteur', text: 'Vous êtes prévenu à la publication ; une relance arrive 3 jours après si le devoir n’est pas fait.' },
+          { title: 'Quatre étapes', text: 'Regardez ou écoutez le message, résumez-le, notez vos actions, priez.' },
+          { title: 'À votre rythme', text: 'La lecture reprend là où vous vous étiez arrêté. Vous pouvez enregistrer votre résumé avant la fin.' },
         ],
         link: { to: '/mon-devoir', label: 'Ouvrir mon devoir' },
       },
       {
-        id: 'mois-confidentialite', title: 'Qui lit ces fiches ?',
-        privacy: 'Votre Vertumètre, vos RM et votre devoir sont lus par votre patriarche, l’AP de votre tribu et les pasteurs, pas par le Garde.',
+        id: 'devoir-fait', title: 'Quand un devoir est-il « fait » ?', module: 'assignments',
+        shots: [
+          { name: 'fidele-devoir-resume-envoye', caption: '« Résumé envoyé · vidéo à terminer »' },
+          { name: 'fidele-devoir-fait', caption: 'Le devoir fait' },
+        ],
+        steps: [
+          { title: 'Résumé envoyé', text: '« Résumé envoyé · vidéo à terminer » : il reste à finir le message.' },
+          { title: 'Jusqu’au bout', text: 'Les passages avancés rapidement ne comptent pas.' },
+          { title: 'Fait', text: 'Message lu en entier et résumé envoyé : le devoir passe à « Fait ». Vous pouvez encore le modifier.' },
+        ],
+      },
+      {
+        id: 'rappels-mois', title: 'Les rappels du mois',
+        timeline: [
+          { when: 'Du 1er au 3', what: 'Rappel des RM : bilan et résolutions' },
+          { when: 'Du 8 au 12', what: 'Relance des RM, si ce n’est pas fait' },
+          { when: 'Du 8 au 14', what: 'Rappel de la fiche (FISS)' },
+          { when: 'Dès le 20', what: 'Rappel du Vertumètre' },
+          { when: 'Dernière semaine', what: 'Relance de la fiche' },
+          { when: '2 derniers jours', what: 'Relance du Vertumètre' },
+          { when: 'Fin du mois', what: 'La fiche et le Vertumètre du mois se ferment', tone: 'red' },
+        ],
+        tips: [
+          'Dès que c’est rempli, le rappel s’arrête.',
+          'Le devoir suit sa publication : prévenu le jour même, relance après 3 jours.',
+        ],
       },
     ],
   },
   {
     id: 'meditation', part: 'tous', icon: 'book',
-    title: 'Méditation et Ma vie spirituelle',
-    summary: 'Vos fiches de méditation, vos indicateurs, votre parcours et votre journal.',
+    title: 'Votre vie spirituelle',
+    summary: 'Votre méditation, votre parcours, votre journal et vos exercices.',
     sections: [
       {
         id: 'meditation-remplir', title: 'Méditation',
-        shots: [{ name: 'meditation-remplir', caption: '« Remplir ma fiche » de méditation' }],
-        steps: [
-          { title: 'Cinq rubriques', text: 'Verset, observation, rhéma reçu, action du jour, prière ; puis « Valider ». La fiche est datée du jour.' },
+        shots: [
+          { name: 'fidele-meditation-remplir', caption: '« Remplir ma fiche » de méditation' },
+          { name: 'fidele-meditation-liste', caption: 'Mes fiches de méditation' },
         ],
-        privacy: 'Lue par vous, votre patriarche et les pasteurs.',
+        steps: [
+          { title: 'Cinq rubriques', text: 'Verset, observation, rhéma reçu, action du jour, prière ; puis « Valider ».' },
+          { title: 'Datée du jour', text: 'Vos fiches restent dans « Mes fiches de méditation », les plus récentes en premier.' },
+        ],
         link: { to: '/meditation', label: 'Ouvrir Méditation' },
       },
       {
         id: 'vie-spirituelle', title: 'Ma vie spirituelle', module: 'spiritual',
         shots: [
-          { name: 'vie-spirituelle', caption: 'Vos indicateurs et votre parcours' },
-          { name: 'vie-spirituelle-journal', caption: 'Votre journal et vos notes' },
+          { name: 'fidele-vie-indicateurs', caption: 'Vos indicateurs' },
+          { name: 'fidele-vie-parcours', caption: 'Mon parcours' },
+          { name: 'fidele-vie-journal', caption: 'Votre journal et vos notes' },
         ],
         steps: [
           { title: 'Vos indicateurs', text: 'Fiche, notes, assiduité, parcours.' },
-          { title: 'Mon parcours', text: 'Les étapes franchies (baptême d’eau, membre engagé…).' },
+          { title: 'Mon parcours', text: 'Cochez les étapes que vous avez franchies.' },
           { title: 'Votre journal', text: 'Témoignages, sujets de prière, besoins. Les entrées de vos responsables y apparaissent aussi, avec leur nom.' },
         ],
         link: { to: '/ma-vie-spirituelle', label: 'Ouvrir Ma vie spirituelle' },
+      },
+      {
+        id: 'mes-exercices', title: 'Mes exercices', module: 'exercises',
+        shots: [
+          { name: 'fidele-exercices', caption: '« À faire » et « Terminés »' },
+          { name: 'fidele-exercice-detail', caption: 'Un exercice vidéo' },
+        ],
+        steps: [
+          { title: 'Proposés par vos responsables', text: 'Vidéos, lectures et méditations ; « À faire » puis « Terminés ».' },
+          { title: 'Une vidéo se regarde en entier', text: 'Les passages avancés rapidement ne comptent pas.' },
+          { title: 'Une date limite', text: 'Des rappels arrivent avant la fermeture ; ensuite, l’exercice n’accepte plus rien.' },
+        ],
+        link: { to: '/exercices', label: 'Ouvrir mes exercices' },
       },
     ],
   },
   {
     id: 'calendrier', part: 'tous', icon: 'calendar',
-    title: 'Calendrier, Service et rendez-vous',
-    summary: 'Ce qui est programmé, servir dans un département, voir le pasteur.',
+    title: 'La vie de l’église',
+    summary: 'Le calendrier, le service, le rendez-vous avec le pasteur et le contact.',
     sections: [
       {
-        id: 'calendrier-voir', title: 'Calendrier',
-        shots: [{ name: 'calendrier', caption: 'Le calendrier en liste' }],
+        id: 'calendrier-voir', title: 'Le calendrier',
+        shots: [
+          { name: 'fidele-calendrier', caption: 'Le calendrier en liste' },
+          { name: 'fidele-calendrier-aujourdhui', caption: 'Aujourd’hui et les jours qui suivent' },
+        ],
         steps: [
           { title: 'Tout ce qui est programmé', text: 'Cultes, événements, anniversaires et vos échéances.' },
-          { title: 'Votre agenda', text: '« Programmer » ajoute une entrée visible par vous seul.' },
+          { title: 'Votre agenda', text: '« Programmer » ajoute une entrée visible par vous.' },
           { title: 'Sur votre téléphone', text: 'Abonnement possible à Google, iPhone ou Outlook, depuis « Partager ».' },
         ],
         link: { to: '/calendrier', label: 'Ouvrir le calendrier' },
       },
       {
-        id: 'service', title: 'Service',
-        shots: [{ name: 'service', caption: 'Les services (départements) disponibles' }],
+        id: 'service', title: 'Servir dans un département',
+        shots: [
+          { name: 'fidele-service', caption: 'Les services disponibles' },
+          { name: 'fidele-service-demande', caption: 'Envoyer votre demande' },
+          { name: 'fidele-service-attente', caption: 'La demande en attente' },
+        ],
         steps: [
-          { title: 'Rejoindre un département', text: '« M’inscrire » : son responsable valide la demande.' },
+          { title: 'Choisir un service', text: 'Onglet Service : touchez « M’inscrire ».' },
+          { title: 'Envoyer votre demande', text: 'Elle part au responsable du service.' },
+          { title: 'En attente', text: 'Vous êtes prévenu dès qu’elle est validée ; vous recevez ensuite les annonces du service.' },
         ],
         link: { to: '/servir', label: 'Ouvrir Service' },
       },
       {
-        id: 'rendez-vous', title: 'Prendre rendez-vous', module: 'appointments',
-        shots: [{ name: 'rendez-vous', caption: 'Choisir un moment avec le pasteur' }],
-        steps: [
-          { title: 'Avec le pasteur', text: 'Après les cultes du mercredi et du dimanche ; créneau de 15 minutes, confirmé aussitôt.' },
+        id: 'rendez-vous', title: 'Prendre rendez-vous avec le pasteur', module: 'appointments',
+        shots: [
+          { name: 'fidele-rdv-quand', caption: 'Quand ?' },
+          { name: 'fidele-rdv-demande', caption: 'Votre demande' },
+          { name: 'fidele-rdv-confirme', caption: 'Le rendez-vous confirmé' },
         ],
-        privacy: 'Votre message est lu par le pasteur seulement.',
+        steps: [
+          { title: 'Quand ?', text: 'Après les cultes du mercredi et du dimanche ; 15 minutes.' },
+          { title: 'Votre demande', text: 'Priorité et message, lu par le pasteur seulement.' },
+          { title: 'Confirmé aussitôt', text: 'Présentez-vous au protocole après le culte. Vous pouvez annuler.' },
+        ],
         link: { to: '/rendez-vous', label: 'Prendre rendez-vous' },
+      },
+      {
+        id: 'contact', title: 'Nous contacter',
+        shots: [
+          { name: 'fidele-contact', caption: 'Nouvelle demande' },
+          { name: 'fidele-contact-reponse', caption: 'La réponse, dans « Mes demandes »' },
+        ],
+        steps: [
+          { title: 'Une demande à un responsable', text: 'Choisissez le motif, écrivez votre message, puis « Envoyer la demande ».' },
+          { title: 'La réponse', text: 'Elle arrive dans « Mes demandes », et vous êtes prévenu par notification.' },
+        ],
+        link: { to: '/contact', label: 'Nous contacter' },
       },
     ],
   },
   {
     id: 'profil', part: 'tous', icon: 'bell',
-    title: 'Mon profil et les alertes',
+    title: 'Mon profil et mes alertes',
     summary: 'Vos informations, vos notifications et leurs réglages.',
     sections: [
       {
-        id: 'mon-profil', title: 'Mon profil',
-        shots: [{ name: 'mon-profil', caption: 'Mon profil et ses quatre onglets' }],
+        id: 'mon-profil', title: 'Garder votre profil à jour',
+        shots: [
+          { name: 'fidele-profil', caption: 'La carte « Complétez votre profil »' },
+          { name: 'fidele-profil-famille', caption: 'L’onglet Famille' },
+        ],
         steps: [
           { title: 'Quatre onglets', text: 'Identité, Famille, Infos personnelles, Vie spirituelle.' },
           { title: 'Complétez votre profil', text: 'La carte indique ce qui manque : un profil complet aide vos responsables à vous accompagner.' },
+          { title: 'Changer de tribu', text: 'Une demande depuis Mon profil, validée par les responsables des deux tribus.' },
         ],
         link: { to: '/mon-profil', label: 'Ouvrir mon profil' },
       },
       {
-        id: 'alertes', title: 'Alertes',
-        shots: [{ name: 'notifications', caption: 'Notifications et réglages' }],
+        id: 'alertes', title: 'Vos notifications',
+        shots: [
+          { name: 'fidele-alertes-liste', caption: 'Vos notifications, triées par jour' },
+          { name: 'fidele-alertes-choix', caption: '« Choisir mes notifications »' },
+        ],
         steps: [
-          { title: 'Toutes vos notifications', text: 'Triées par jour (Toutes / Non lues, « Tout marquer lu »).' },
-          { title: 'Touchez-en une', text: 'Elle ouvre la bonne page et passe en « lue ».' },
-          { title: 'Choisir mes notifications', text: 'Par sujet, et aussi par courriel ou texto. Les messages essentiels restent toujours actifs.' },
+          { title: 'Toutes vos notifications', text: 'Triées par jour. Touchez-en une pour ouvrir la bonne page : elle passe en « lue ».' },
+          { title: 'Sur votre téléphone', text: '« Activer les notifications » pour être prévenu même quand l’application est fermée.' },
+          { title: 'Choisir mes notifications', text: 'Par sujet, et aussi par courriel. Les messages essentiels restent toujours actifs.' },
         ],
         link: { to: '/notifications', label: 'Ouvrir les alertes' },
+      },
+      {
+        id: 'responsabilites-fidele', title: 'Vos responsabilités, mois après mois',
+        checklist: [
+          { when: 'En début de mois', what: 'Faire le bilan et prendre vos résolutions (RM).' },
+          { when: 'Dans le mois', what: 'Remplir votre fiche de santé spirituelle (FISS).' },
+          { when: 'Avant la fin du mois', what: 'Remplir votre Vertumètre.' },
+          { when: 'À chaque devoir publié', what: 'Regarder le message, le résumer, noter vos actions, prier.' },
+          { when: 'Avant la date limite', what: 'Faire les exercices proposés par vos responsables.' },
+          { when: 'Au fil des jours', what: 'Noter vos méditations, garder votre profil et vos notifications à jour.' },
+        ],
+        tips: ['Sur l’accueil, « Mon mois » vous dit toujours ce qu’il reste à faire.'],
       },
     ],
   },
@@ -569,6 +700,10 @@ export const GUIDE_CHAPTERS: GuideChapter[] = [
 export const GUIDE_FAQ: GuideFaq[] = [
   { audience: 'tous', q: 'Le code SMS n’arrive pas', a: 'Vérifiez le numéro (un cellulaire), attendez 45 secondes et redemandez.' },
   { audience: 'tous', q: 'Je ne reçois pas les notifications', a: 'Touchez « Activer » ; sur iPhone, installez d’abord l’application.' },
+  { audience: 'tous', q: 'Je me suis trompé dans ma fiche', a: '« Demander une modification » : votre patriarche la rouvre (deux demandes au plus).' },
+  { audience: 'tous', q: 'Mon devoir reste « En cours »', a: 'Allez au bout du message et envoyez votre résumé : les deux sont nécessaires.' },
+  { audience: 'tous', q: 'Je n’ai pas de GEM', a: 'Un responsable vous y rattache après votre inscription ; demandez à votre patriarche.' },
+  { audience: 'tous', q: 'J’ai oublié mon Vertumètre', a: 'Remplissez-le avant la fin du mois : un mois passé ne se rattrape pas.' },
   { audience: 'garde', q: 'Un fidèle n’apparaît pas dans mon GEM', a: 'Demandez à votre patriarche de le rattacher à votre GEM.' },
   { audience: 'garde', q: 'Je ne vois pas la fiche (FISS) de mes fidèles', a: 'C’est normal : elle est confidentielle (patriarche, AP, pasteurs).' },
   { audience: 'garde', q: 'J’ai oublié d’envoyer mon rapport', a: 'Envoyez-le avant le samedi suivant ; après, la semaine reste « Non reçu ».' },

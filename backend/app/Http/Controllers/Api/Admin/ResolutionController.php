@@ -26,19 +26,38 @@ use Illuminate\Validation\ValidationException;
  */
 class ResolutionController extends Controller
 {
-    /** Qui a pris ses resolutions ce mois-ci, renouvellements et bilan du mois precedent. */
+    /** Membres par page dans le suivi du mois. */
+    private const PER_PAGE = 100;
+
+    /**
+     * Qui a pris ses resolutions ce mois-ci, renouvellements et bilan du mois precedent. Les totaux sont
+     * comptes par la base ; la liste (tous, prises ou pas encore) arrive par pages.
+     */
     public function index(Request $request): JsonResponse
     {
-        $data = $request->validate(['period' => ['nullable', 'date_format:Y-m']]);
+        $data = $request->validate([
+            'period' => ['nullable', 'date_format:Y-m'],
+            'filter' => ['nullable', 'in:all,taken,missing'],
+            'page' => ['nullable', 'integer', 'min:1'],
+        ]);
         $period = $data['period'] ?? now()->format('Y-m');
         $previous = Carbon::createFromFormat('Y-m-d', $period.'-01')->subMonthNoOverflow()->format('Y-m');
         $viewer = $request->user();
         $tribes = $viewer->fissTribeIds();
         abort_if($tribes === [], 403, 'Les résolutions des membres sont suivies par les pasteurs et les responsables de tribu.');
 
-        $members = Profile::where('is_completed', true)
-            ->when($tribes !== null, fn ($q) => $q->whereIn('tribe_id', $tribes ?: [0]))
-            ->with('tribe:id,name')->orderBy('last_name')->orderBy('first_name')->limit(2000)
+        $scope = Profile::where('is_completed', true)
+            ->when($tribes !== null, fn ($q) => $q->whereIn('tribe_id', $tribes ?: [0]));
+        $takenIds = MonthlyResolution::where('period', $period)->select('user_id');
+        $total = (clone $scope)->count();
+        $taken = (clone $scope)->whereIn('user_id', $takenIds)->count();
+        $filter = $data['filter'] ?? 'all';
+        $page = (int) ($data['page'] ?? 1);
+
+        $members = (clone $scope)
+            ->when($filter === 'taken', fn ($q) => $q->whereIn('user_id', $takenIds))
+            ->when($filter === 'missing', fn ($q) => $q->whereNotIn('user_id', $takenIds))
+            ->with('tribe:id,name')->orderBy('last_name')->orderBy('first_name')->orderBy('id')->forPage($page, self::PER_PAGE)
             ->get(['user_id', 'first_name', 'last_name', 'tribe_id', 'photo_path']);
         $rows = MonthlyResolution::whereIn('period', [$period, $previous])->whereIn('user_id', $members->pluck('user_id'))
             ->get()->groupBy('period');
@@ -69,8 +88,11 @@ class ResolutionController extends Controller
             'period' => $period,
             'period_label' => FissService::periodLabel($period),
             'members' => $list,
-            'taken' => $list->where('taken', true)->count(),
-            'total' => $list->count(),
+            'taken' => $taken,
+            'total' => $total,
+            'filter' => $filter,
+            'page' => $page,
+            'per_page' => self::PER_PAGE,
         ]);
     }
 

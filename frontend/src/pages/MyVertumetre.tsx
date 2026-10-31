@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { api, peek } from '../api/client'
+import { api, ApiError, peek } from '../api/client'
 import { AppLayout } from '../components/AppLayout'
 import { scrollPageTo } from '../utils/pageScroll'
 import { SkeletonCard } from '../components/Skeleton'
+import { LoadError } from '../components/LoadError'
 import { Icon } from '../components/Icon'
 import { VertumetreAnswers } from '../components/VertumetreAnswers'
 import { clearDraft, readDraft, useDraft } from '../utils/drafts'
@@ -114,7 +115,11 @@ export default function MyVertumetre() {
   const [asking, setAsking] = useState(false)
   const [reason, setReason] = useState('')
 
-  const load = useCallback(() => { api<VertumetreData>('/me/vertumetre').then(setData).catch(() => {}) }, [])
+  const [loadError, setLoadError] = useState('')
+  const load = useCallback(() => {
+    api<VertumetreData>('/me/vertumetre').then((d) => { setData(d); setLoadError('') })
+      .catch((err) => setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.'))
+  }, [])
   useEffect(() => { load() }, [load])
 
   // Mois choisi : celui de l'adresse, sinon le premier mois a remplir, sinon le mois en cours.
@@ -136,7 +141,13 @@ export default function MyVertumetre() {
   }, [period])
   useDraft(draftKey, answers, (v) => Object.values(v).every((x) => x === null || x === '' || (Array.isArray(x) && !x.length)))
 
-  if (!data || !period) return <AppLayout title="Mon Vertumètre"><div className="panel-grid"><SkeletonCard /></div></AppLayout>
+  if (!data || !period) {
+    return (
+      <AppLayout title="Mon Vertumètre">
+        {loadError ? <LoadError message={loadError} onRetry={() => { setLoadError(''); load() }} /> : <div className="panel-grid"><SkeletonCard /></div>}
+      </AppLayout>
+    )
+  }
 
   const sections = data.sections
   const section = sections[step]

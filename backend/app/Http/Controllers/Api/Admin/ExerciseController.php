@@ -25,6 +25,9 @@ use Illuminate\Validation\ValidationException;
 
 class ExerciseController extends Controller
 {
+    /** Droit qui permet de lire les reponses et le suivi des fideles. */
+    private const VIEW_RESPONSES = 'exercises.view_responses';
+
     public const TYPES = [
         'video' => 'Vidéo à regarder',
         'verset' => 'Verset à méditer',
@@ -133,7 +136,15 @@ class ExerciseController extends Controller
     /** Toute l'audience de l'exercice, ou seulement les membres que l'utilisateur suit ? */
     private static function seesEveryone(User $user, Exercise $exercise): bool
     {
-        return $user->hasPermission('members.view_all') || Audience::canManage($user, $exercise->created_by, $exercise->audienceList());
+        if ($user->isChurchWideFor(self::VIEW_RESPONSES) || (int) $exercise->created_by === $user->id) {
+            return true;
+        }
+        // Diffusion generale : elle permet de publier partout, pas de lire les reponses de toute l'eglise.
+        if ($user->canBroadcastAll()) {
+            return $user->holdsWithoutScope(self::VIEW_RESPONSES);
+        }
+
+        return Audience::canManage($user, $exercise->created_by, $exercise->audienceList());
     }
 
     /**
@@ -205,7 +216,7 @@ class ExerciseController extends Controller
     {
         $ids = array_diff(Audience::userIds($exercise->audienceList()), ExerciseProgress::doneUserIds($exercise), [(int) $exercise->created_by]);
         if (! self::seesEveryone($user, $exercise)) {
-            $ids = array_intersect($ids, MemberScope::visibleUserIds($user));
+            $ids = array_intersect($ids, MemberScope::visibleUserIds($user, self::VIEW_RESPONSES));
         }
 
         return array_values($ids);
@@ -215,7 +226,7 @@ class ExerciseController extends Controller
     public function member(Request $request, User $member): JsonResponse
     {
         $viewer = $request->user();
-        abort_unless($viewer->canViewMember($member), 403, 'Accès refusé.');
+        abort_unless($viewer->canViewMember($member, self::VIEW_RESPONSES), 403, 'Accès refusé.');
         $profile = $member->profile()->with('departments:id')->first();
         $tribes = array_filter([(int) $profile?->tribe_id]);
         $gems = array_filter([(int) $profile?->gem_id]);
@@ -361,7 +372,10 @@ class ExerciseController extends Controller
     public function responses(Request $request, Exercise $exercise): JsonResponse
     {
         $this->authorizeManage($request, $exercise);
-        $responses = $exercise->responses()->with('user.profile')->latest('completed_at')->get()
+        $user = $request->user();
+        $responses = $exercise->responses()->with('user.profile')->latest('completed_at')
+            ->when(! self::seesEveryone($user, $exercise), fn ($q) => $q->whereIn('user_id', MemberScope::visibleUserIds($user, self::VIEW_RESPONSES) ?: [0]))
+            ->get()
             ->map(fn ($r) => [
                 'user_id' => $r->user_id,
                 'name' => $r->user?->profile?->full_name ?: $r->user?->phone,
@@ -392,7 +406,7 @@ class ExerciseController extends Controller
         $ids = array_values(array_diff(array_unique(array_merge($ids, $views->keys()->all(), $responses->keys()->all())), [(int) $exercise->created_by]));
         // Exercice qui depasse la portee de l'utilisateur (AP, patriarche) : seulement les membres qu'il suit.
         if (! self::seesEveryone($user, $exercise)) {
-            $ids = array_values(array_intersect($ids, MemberScope::visibleUserIds($user)));
+            $ids = array_values(array_intersect($ids, MemberScope::visibleUserIds($user, self::VIEW_RESPONSES)));
         }
 
         $members = User::whereIn('id', $ids)->with('profile.tribe:id,name')->get(['id', 'phone', 'activity_status', 'activity_override']);

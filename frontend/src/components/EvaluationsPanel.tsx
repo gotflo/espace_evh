@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError } from '../api/client'
 import type { EvaluationItem } from '../types'
 import { ymd } from '../utils/events'
+import { LoadError } from './LoadError'
 
 /** Date du jour locale (toISOString donnait la date UTC : le lendemain en soiree). */
 function today() { return ymd(new Date()) }
@@ -12,6 +13,7 @@ export function EvaluationsPanel({ userId, canManage = true }: { userId: string;
   const [average, setAverage] = useState<number | null>(null)
   const [error, setError] = useState('')
   const [open, setOpen] = useState(false)
+  const [loadError, setLoadError] = useState('')
 
   const [type, setType] = useState('meditation_perso')
   const [title, setTitle] = useState('')
@@ -22,8 +24,8 @@ export function EvaluationsPanel({ userId, canManage = true }: { userId: string;
 
   const load = useCallback(() => {
     api<{ evaluations: EvaluationItem[]; average: number | null; types: { key: string; label: string }[] }>(`/admin/members/${userId}/evaluations`)
-      .then((r) => { setItems(r.evaluations); setAverage(r.average); setTypes(r.types) })
-      .catch(() => setItems([]))
+      .then((r) => { setItems(r.evaluations); setAverage(r.average); setTypes(r.types); setLoadError('') })
+      .catch((err) => setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.'))
   }, [userId])
   useEffect(() => { load() }, [load])
 
@@ -100,7 +102,7 @@ export function EvaluationsPanel({ userId, canManage = true }: { userId: string;
             {canManage && <button className="org-del" onClick={() => remove(e.id)} aria-label="Supprimer">×</button>}
           </div>
         ))}
-        {items.length === 0 && <p className="helper">Aucune note pour l'instant.</p>}
+        {items.length === 0 && (loadError ? <LoadError compact message={loadError} onRetry={() => { setLoadError(''); load() }} /> : <p className="helper">Aucune note pour l'instant.</p>)}
       </div>
     </section>
   )

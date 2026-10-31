@@ -191,7 +191,7 @@ export function ResourcesManager() {
                 <li key={r.id} className={`gr-res-row ${r.status === 'draft' ? 'is-draft' : ''}`}>
                   <a className="resource-card" href={r.url} target="_blank" rel="noopener noreferrer">
                     <span className={`resource-thumb ${r.youtube_id ? '' : 'link'}`}>
-                      {r.youtube_id ? <><img src={`https://i.ytimg.com/vi/${r.youtube_id}/mqdefault.jpg`} alt="" loading="lazy" /><Icon name="play" size={20} /></> : <Icon name="link" size={20} />}
+                      {r.youtube_id ? <><img src={`https://i.ytimg.com/vi/${r.youtube_id}/mqdefault.jpg`} alt="" loading="lazy" decoding="async" /><Icon name="play" size={20} /></> : <Icon name="link" size={20} />}
                     </span>
                     <span className="resource-text">
                       <strong>{r.title}</strong>

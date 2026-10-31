@@ -94,29 +94,56 @@ class WebPush
      */
     public function sendMany(iterable $subscriptions, array $payload, int $ttl = 86400, string $urgency = 'normal', bool $details = false): array
     {
-        $devices = [];
-        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $prepared = [];
-        $stats = ['sent' => 0, 'expired' => 0, 'failed' => 0];
-
+        $items = [];
         foreach ($subscriptions as $sub) {
+            $items[] = ['sub' => $sub, 'payload' => $payload, 'urgency' => $urgency];
+        }
+        $outcome = $this->sendBatch($items, $ttl);
+        $stats = ['sent' => 0, 'expired' => 0, 'failed' => 0];
+        foreach ($outcome['results'] as $result) {
+            $stats[$result]++;
+        }
+        if ($stats['failed'] > 0) {
+            Log::warning('Push : envois en echec', $stats);
+        }
+
+        return $details ? $stats + ['devices' => $outcome['devices']] : $stats;
+    }
+
+    /**
+     * Envoie des messages (differents ou non) a des appareils, dans un seul pool : les connexions au
+     * service push sont partagees et CONCURRENCY envois partent en meme temps, quel que soit le nombre de
+     * messages. Le resultat de chaque element (sent, expired ou failed) est rendu dans le meme ordre.
+     *
+     * @param  array<int, array{sub: PushSubscription, payload: array<string, mixed>, urgency: string}>  $items
+     * @return array{results: array<int, string>, devices: array<int, array<string, mixed>>}
+     */
+    public function sendBatch(array $items, int $ttl = 86400): array
+    {
+        $devices = [];
+        $results = [];
+        $prepared = [];
+
+        foreach ($items as $i => $item) {
+            $sub = $item['sub'];
             try {
-                $prepared[(string) $sub->id] = [
+                $prepared[(string) $i] = [
                     'sub' => $sub,
-                    'body' => $this->encrypt($json, $sub->public_key, $sub->auth_token),
+                    'urgency' => $item['urgency'],
+                    'body' => $this->encrypt(json_encode($item['payload'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $sub->public_key, $sub->auth_token),
                     'auth' => $this->vapidHeader($sub->endpoint),
                 ];
             } catch (\Throwable $e) {
-                $stats['failed']++;
+                $results[$i] = 'failed';
                 $devices[] = ['id' => $sub->id, 'status' => 0, 'error' => $e->getMessage()];
                 Log::warning('Push : abonnement illisible', ['subscription' => $sub->id, 'error' => $e->getMessage()]);
             }
         }
         if (! $prepared) {
-            return $stats;
+            return ['results' => $results, 'devices' => $devices];
         }
 
-        $send = fn (array $keys) => Http::pool(function (Pool $pool) use ($prepared, $keys, $ttl, $urgency) {
+        $send = fn (array $keys) => Http::pool(function (Pool $pool) use ($prepared, $keys, $ttl) {
             foreach ($keys as $key) {
                 $p = $prepared[$key];
                 $pool->as($key)->timeout(8)->connectTimeout(4)
@@ -124,13 +151,13 @@ class WebPush
                         'Authorization' => $p['auth'],
                         'Content-Encoding' => 'aes128gcm',
                         'TTL' => (string) $ttl,
-                        'Urgency' => $urgency,
+                        'Urgency' => $p['urgency'],
                     ])
                     ->withBody($p['body'], 'application/octet-stream')
                     ->post($p['sub']->endpoint);
             }
         }, self::CONCURRENCY);
-        $responses = $send(array_keys($prepared));
+        $responses = $send(array_map('strval', array_keys($prepared)));
 
         // Echec passager (delai, service sature 429/5xx) : une seule nouvelle tentative, apres une
         // courte pause. Les refus definitifs (400, 403, 404, 410...) ne sont pas renvoyes.
@@ -151,7 +178,7 @@ class WebPush
         foreach ($prepared as $key => $p) {
             $response = $responses[$key] ?? null;
             if (! $response instanceof Response) {
-                $stats['failed']++;
+                $results[(int) $key] = 'failed';
                 $devices[] = ['id' => $p['sub']->id, 'status' => 0, 'error' => $response instanceof \Throwable ? mb_substr($response->getMessage(), 0, 200) : 'sans réponse'];
 
                 continue;
@@ -160,26 +187,23 @@ class WebPush
             // 404 / 410 : l'abonnement n'existe plus (appli desinstallee, permission retiree...).
             if (in_array($response->status(), [404, 410], true)) {
                 $gone[] = $p['sub']->id;
+                $results[(int) $key] = 'expired';
             } elseif ($response->successful()) {
                 $ok[] = $p['sub']->id;
+                $results[(int) $key] = 'sent';
             } else {
-                $stats['failed']++;
+                $results[(int) $key] = 'failed';
                 Log::warning('Push : refuse par le service', ['status' => $response->status(), 'body' => mb_substr($response->body(), 0, 300)]);
             }
         }
         if ($gone) {
-            PushSubscription::whereIn('id', $gone)->delete();
+            PushSubscription::whereIn('id', array_unique($gone))->delete();
         }
         if ($ok) {
-            PushSubscription::whereIn('id', $ok)->update(['last_used_at' => now()]);
-        }
-        $stats['sent'] = count($ok);
-        $stats['expired'] = count($gone);
-        if ($stats['failed'] > 0) {
-            Log::warning('Push : envois en echec', $stats);
+            PushSubscription::whereIn('id', array_unique($ok))->update(['last_used_at' => now()]);
         }
 
-        return $details ? $stats + ['devices' => $devices] : $stats;
+        return ['results' => $results, 'devices' => $devices];
     }
 
     /** Chiffre le message pour l'appareil (aes128gcm, un seul enregistrement). */

@@ -34,6 +34,9 @@ class AssignmentController extends Controller
     /** Taille maximale d'un fichier audio depose (Ko). */
     public const AUDIO_MAX_KB = 40960;
 
+    /** Membres par page dans le suivi d'un devoir. */
+    private const PER_PAGE = 100;
+
     private const AUDIO_TYPES = 'audio/mpeg,audio/mp3,audio/mp4,audio/x-m4a,audio/m4a,audio/aac,audio/x-aac,audio/wav,audio/x-wav,audio/wave,audio/ogg,audio/webm';
 
     public function index(Request $request): JsonResponse
@@ -59,21 +62,23 @@ class AssignmentController extends Controller
 
         $assignments = Assignment::with('creator.profile:id,user_id,first_name,last_name')
             ->orderByDesc('published_at')->orderByDesc('id')->limit(100)->get();
-        // Deux lectures groupees (et non deux par devoir) : resumes envoyes et lectures terminees.
+        // Deux comptes groupes par la base (et non des dizaines de milliers de lignes chargees) : resumes
+        // envoyes, et resumes envoyes dont la lecture est terminee.
         $ids = $assignments->pluck('id');
         $responded = AssignmentResponse::whereIn('assignment_id', $ids)->whereIn('user_id', $memberIds)
-            ->get(['assignment_id', 'user_id'])->groupBy('assignment_id');
-        $completed = AssignmentView::whereIn('assignment_id', $ids)->whereIn('user_id', (clone $members)->select('user_id'))
-            ->whereNotNull('completed_at')->get(['assignment_id', 'user_id'])->groupBy('assignment_id');
+            ->toBase()->selectRaw('assignment_id, count(*) as total')->groupBy('assignment_id')->pluck('total', 'assignment_id');
+        $completed = AssignmentResponse::query()->whereIn('assignment_responses.assignment_id', $ids)->whereIn('assignment_responses.user_id', (clone $members)->select('user_id'))
+            ->join('assignment_views as v', fn ($j) => $j->on('v.assignment_id', '=', 'assignment_responses.assignment_id')->on('v.user_id', '=', 'assignment_responses.user_id'))
+            ->whereNotNull('v.completed_at')
+            ->toBase()->selectRaw('assignment_responses.assignment_id as assignment_id, count(*) as total')->groupBy('assignment_responses.assignment_id')->pluck('total', 'assignment_id');
 
         return response()->json([
             'assignments' => $assignments->map(function (Assignment $a) use ($responded, $completed, $total) {
-                $resp = ($responded[$a->id] ?? collect())->pluck('user_id');
-                $done = $a->isTrackable() ? $resp->intersect(($completed[$a->id] ?? collect())->pluck('user_id')) : $resp;
+                $responses = (int) ($responded[$a->id] ?? 0);
 
                 return $this->present($a) + [
-                    'responses_count' => $resp->count(),
-                    'done_count' => $done->count(),
+                    'responses_count' => $responses,
+                    'done_count' => $a->isTrackable() ? (int) ($completed[$a->id] ?? 0) : $responses,
                     'members_count' => $total,
                 ];
             })->values(),
@@ -155,27 +160,48 @@ class AssignmentController extends Controller
     /**
      * Reponses d'un devoir (membres dont le responsable voit les FISS) avec le suivi de lecture, comme
      * pour les exercices video : pourcentage lu, avances rapides, vitesse ; et ceux qui ne l'ont pas fait.
+     * Les totaux sont comptes par la base ; les deux listes arrivent par pages (view + page pour la suite).
      */
     public function responses(Request $request, Assignment $assignment): JsonResponse
     {
-        $members = $this->scopedMembers($request->user())->with('tribe:id,name')
-            ->orderBy('last_name')->orderBy('first_name')->limit(2000)->get(['user_id', 'first_name', 'last_name', 'tribe_id', 'photo_path']);
-        $responses = AssignmentResponse::where('assignment_id', $assignment->id)
-            ->whereIn('user_id', $members->pluck('user_id'))->get()->keyBy('user_id');
+        $data = $request->validate([
+            'view' => ['nullable', 'in:done,missing'],
+            'page' => ['nullable', 'integer', 'min:1'],
+        ]);
+        $page = (int) ($data['page'] ?? 1);
+        $view = $data['view'] ?? null;
+        $scope = $this->scopedMembers($request->user());
+        $answered = AssignmentResponse::where('assignment_id', $assignment->id)->select('user_id');
+        $responsesTotal = (clone $scope)->whereIn('user_id', $answered)->count();
+        $missingTotal = (clone $scope)->whereNotIn('user_id', $answered)->count();
+
+        $columns = ['user_id', 'first_name', 'last_name', 'tribe_id', 'photo_path'];
+        // Resumes : les plus recents d'abord.
+        $answers = $view === 'missing' ? collect() : AssignmentResponse::where('assignment_id', $assignment->id)
+            ->whereIn('user_id', (clone $scope)->select('user_id'))->orderByDesc('submitted_at')->orderBy('id')
+            ->forPage($page, self::PER_PAGE)->get();
+        $answering = $answers->isEmpty() ? collect() : (clone $scope)->with('tribe:id,name')->whereIn('user_id', $answers->pluck('user_id'))->get($columns)->keyBy('user_id');
+        $waiting = $view === 'done' ? collect() : (clone $scope)->with('tribe:id,name')->whereNotIn('user_id', $answered)
+            ->orderBy('last_name')->orderBy('first_name')->orderBy('id')->forPage($page, self::PER_PAGE)->get($columns);
+
         $views = AssignmentView::where('assignment_id', $assignment->id)
-            ->whereIn('user_id', $members->pluck('user_id'))->get()->keyBy('user_id');
-        $base = fn (Profile $p) => ['user_id' => $p->user_id, 'name' => $p->full_name, 'tribe' => $p->tribe?->name, 'photo_url' => $p->photo_url]
+            ->whereIn('user_id', $answers->pluck('user_id')->merge($waiting->pluck('user_id')))->get()->keyBy('user_id');
+        $base = fn (Profile $p, ?AssignmentResponse $response) => ['user_id' => $p->user_id, 'name' => $p->full_name, 'tribe' => $p->tribe?->name, 'photo_url' => $p->photo_url]
             + AssignmentProgress::tracking($assignment, $views->get($p->user_id))
-            + ['status' => AssignmentProgress::status($assignment, $views->get($p->user_id), $responses->get($p->user_id))];
+            + ['status' => AssignmentProgress::status($assignment, $views->get($p->user_id), $response)];
 
         return response()->json([
             'assignment' => $this->present($assignment) + ['trackable' => $assignment->isTrackable()],
-            'responses' => $members->filter(fn ($p) => isset($responses[$p->user_id]))->map(fn (Profile $p) => $base($p) + [
-                'summary' => $responses[$p->user_id]->summary,
-                'actions' => $responses[$p->user_id]->actions,
-                'submitted_at' => $responses[$p->user_id]->submitted_at?->toIso8601String(),
-            ])->sortByDesc('submitted_at')->values(),
-            'missing' => $members->reject(fn ($p) => isset($responses[$p->user_id]))->map($base)->values(),
+            'responses' => $answers->filter(fn (AssignmentResponse $r) => $answering->has($r->user_id))->map(fn (AssignmentResponse $r) => $base($answering[$r->user_id], $r) + [
+                'summary' => $r->summary,
+                'actions' => $r->actions,
+                'submitted_at' => $r->submitted_at?->toIso8601String(),
+            ])->values(),
+            'missing' => $waiting->map(fn (Profile $p) => $base($p, null))->values(),
+            'responses_total' => $responsesTotal,
+            'missing_total' => $missingTotal,
+            'page' => $page,
+            'per_page' => self::PER_PAGE,
         ]);
     }
 

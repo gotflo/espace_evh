@@ -8,7 +8,7 @@ export function ExerciseRow({ ex }: { ex: MyExercise }) {
   return (
     <Link to={`/exercices/${ex.id}`} className={`exercise-row ${ex.completed ? 'is-done' : ''} ${ex.is_closed ? 'is-closed' : ''}`}>
       {ex.video
-        ? <img className="exercise-thumb" src={ex.video.thumbnail} alt="" loading="lazy" />
+        ? <img className="exercise-thumb" src={ex.video.thumbnail} alt="" loading="lazy" decoding="async" />
         : <span className="exercise-thumb exercise-thumb-icon"><Icon name="book" size={22} /></span>}
       <span className="exercise-row-main">
         <strong>{ex.title}</strong>

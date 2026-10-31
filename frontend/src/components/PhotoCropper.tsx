@@ -152,13 +152,6 @@ export function PhotoCropper({ file, onCancel, onDone }: { file: File; onCancel:
     }
   }
 
-  // Echap ferme la fenetre.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onCancel])
-
   const scale = base * view.z
   return (
     <ModalLayer className="modal-overlay" onClick={onCancel}>

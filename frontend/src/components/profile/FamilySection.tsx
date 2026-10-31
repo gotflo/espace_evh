@@ -3,6 +3,7 @@ import { api } from '../../api/client'
 import type { FamilyOverview, FamilyPerson } from '../../types'
 import { Icon } from '../Icon'
 import { useDirty } from '../../utils/dirty'
+import { useLatestRequest } from '../../utils/latestRequest'
 import { MARITAL_LABEL } from '../../utils/french'
 
 const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
@@ -12,18 +13,25 @@ const MARITAL = Object.entries(MARITAL_LABEL)
 function PersonSearch({ onPick, placeholder, excludeMarried }: { onPick: (p: FamilyPerson) => void; placeholder: string; excludeMarried?: boolean }) {
   const [q, setQ] = useState('')
   const [results, setResults] = useState<FamilyPerson[] | null>(null)
+  const [failed, setFailed] = useState(false)
+  const { begin } = useLatestRequest()
 
   useEffect(() => {
-    if (q.trim().length < 2) { setResults(null); return }
+    const isLatest = begin()
+    setFailed(false)
+    if (q.trim().length < 3) { setResults(null); return }
     const t = window.setTimeout(() => {
-      api<{ results: FamilyPerson[] }>(`/me/family/search?q=${encodeURIComponent(q.trim())}`).then((r) => setResults(r.results)).catch(() => setResults([]))
+      api<{ results: FamilyPerson[] }>(`/me/family/search?q=${encodeURIComponent(q.trim())}`)
+        .then((r) => { if (isLatest()) setResults(r.results) })
+        .catch(() => { if (isLatest()) { setResults(null); setFailed(true) } })
     }, 300)
     return () => window.clearTimeout(t)
-  }, [q])
+  }, [q, begin])
 
   return (
     <div className="person-search">
       <input className="input" type="search" aria-label={placeholder} value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} />
+      {failed && <p className="helper">Recherche impossible pour le moment. Vérifiez votre réseau puis réessayez.</p>}
       {results && (
         <ul className="person-results">
           {results.map((p) => {
@@ -31,7 +39,7 @@ function PersonSearch({ onPick, placeholder, excludeMarried }: { onPick: (p: Fam
             return (
               <li key={p.user_id}>
                 <button type="button" disabled={blocked} onClick={() => { onPick(p); setQ(''); setResults(null) }}>
-                  {p.photo_url ? <img src={p.photo_url} alt="" /> : <span className="mini-avatar">{p.full_name[0]}</span>}
+                  {p.photo_url ? <img src={p.photo_url} alt="" width={34} height={34} loading="lazy" decoding="async" /> : <span className="mini-avatar">{p.full_name[0]}</span>}
                   <span className="person-text">
                     <strong>{p.full_name}</strong>
                     <small>
@@ -169,7 +177,7 @@ export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, on
             <label>Conjoint(e)</label>
             {spouse ? (
               <div className="spouse-card">
-                {spouse.photo_url ? <img src={spouse.photo_url} alt="" /> : <span className="mini-avatar">{(spouse.name ?? '?')[0]}</span>}
+                {spouse.photo_url ? <img src={spouse.photo_url} alt="" width={34} height={34} loading="lazy" decoding="async" /> : <span className="mini-avatar">{(spouse.name ?? '?')[0]}</span>}
                 <div className="person-text">
                   <strong>{spouse.name}</strong>
                   <small>{spouse.tribe ? `Tribu ${spouse.tribe} · ` : ''}{spouse.status === 'confirmed' ? 'Lien confirmé ✓' : spouse.status === 'pending' ? 'En attente de sa confirmation' : 'Non confirmé'}</small>

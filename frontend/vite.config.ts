@@ -53,7 +53,7 @@ export default defineConfig({
         // Les librairies changent rarement : on les isole pour que le
         // navigateur les garde en cache entre deux mises a jour de l'app.
         manualChunks: {
-          react: ['react', 'react-dom', 'react-router-dom'],
+          react: ['react', 'react-dom', 'react-dom/client', 'react-router-dom'],
           phone: ['libphonenumber-js'],
         },
       },

@@ -44,7 +44,21 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('member-requests', fn (Request $r) => Limit::perMinute(10)->by('member-requests:'.($r->user()?->id ?: $r->ip())));
         // Lecteur video : un signal toutes les ~15 s (marge pour pauses, reprises, onglets multiples).
         RateLimiter::for('video-progress', fn (Request $r) => Limit::perMinute(40)->by('video-progress:'.($r->user()?->id ?: $r->ip())));
-        RateLimiter::for('member-search', fn (Request $r) => Limit::perMinute(60)->by('member-search:'.($r->user()?->id ?: $r->ip())));
+        // Recherche de membres : assez pour l'usage normal, pas pour parcourir tout l'annuaire.
+        RateLimiter::for('member-search', fn (Request $r) => [
+            Limit::perMinute(60)->by('member-search:'.($r->user()?->id ?: $r->ip())),
+            Limit::perHour(400)->by('member-search-h:'.($r->user()?->id ?: $r->ip())),
+        ]);
+        // Demande de code : une adresse peut servir a toute l'eglise (Wi-Fi du dimanche), mais pas a vider le plafond de SMS.
+        RateLimiter::for('otp-request', fn (Request $r) => [
+            Limit::perMinute(20)->by('otp-request:'.$r->ip()),
+            Limit::perHour(60)->by('otp-request-h:'.$r->ip()),
+        ]);
+        // Publications avec fichier joint (annonces, evenements, devoirs) : pas de remplissage du disque en rafale.
+        RateLimiter::for('publish', fn (Request $r) => [
+            Limit::perMinute(20)->by('publish:'.($r->user()?->id ?: $r->ip())),
+            Limit::perHour(200)->by('publish-h:'.($r->user()?->id ?: $r->ip())),
+        ]);
         // Actions d'un membre qui prevennent d'autres personnes (famille, services, demandes) ou qui
         // ajoutent des donnees (agenda, journal) : pas de rafale, ni de notifications en boucle.
         RateLimiter::for('member-writes', fn (Request $r) => [

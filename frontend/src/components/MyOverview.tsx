@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, peek } from '../api/client'
+import { api, ApiError, peek } from '../api/client'
 import { usePulse } from '../pulse'
+import { LoadError } from './LoadError'
 import type { MyOverviewData } from '../types'import { ModalLayer } from './ModalLayer'
 
 
@@ -50,9 +51,14 @@ export function MyOverview() {
   const navigate = useNavigate()
   const [d, setD] = useState<MyOverviewData | null>(() => peek<MyOverviewData>('/me/overview') ?? null)
   const [sheet, setSheet] = useState<'attendance' | 'rehearsal' | null>(null)
-  const load = useCallback(() => { api<MyOverviewData>('/me/overview').then(setD).catch(() => {}) }, [])
+  const [loadError, setLoadError] = useState('')
+  const load = useCallback(() => {
+    api<MyOverviewData>('/me/overview').then((r) => { setD(r); setLoadError('') })
+      .catch((err) => setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.'))
+  }, [])
   useEffect(() => { load() }, [load])
-  usePulse(['attendance', 'fiss', 'events'], load)
+  usePulse('mine', load)
+  if (!d && loadError) return <LoadError compact message={loadError} onRetry={() => { setLoadError(''); load() }} />
   if (!d) return <section className="gstat-grid">{[0, 1, 2, 3].map((i) => <div key={i} className="skeleton skeleton-tile" />)}</section>
 
   const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })

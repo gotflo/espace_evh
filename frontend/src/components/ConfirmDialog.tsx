@@ -25,7 +25,7 @@ export function ConfirmDialog({ title, text, confirmLabel, danger = false, reaso
   }
 
   return (
-    <ModalLayer className="modal-overlay" onClick={onClose}>
+    <ModalLayer className="modal-overlay" onClick={busy ? undefined : onClose}>
       <div className="modal-box confirm-dialog" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <h3>{title}</h3>
         {text && <p className="helper">{text}</p>}
@@ -36,7 +36,7 @@ export function ConfirmDialog({ title, text, confirmLabel, danger = false, reaso
           </div>
         )}
         <div className="row-actions mt">
-          <button className="btn btn-ghost small" onClick={onClose}>Retour</button>
+          <button className="btn btn-ghost small" disabled={busy} onClick={onClose}>Retour</button>
           <button className={`btn small ${danger ? 'btn-danger' : 'btn-primary'}`} disabled={busy || !ok} onClick={confirm}>
             {busy ? <span className="spinner" /> : confirmLabel}
           </button>

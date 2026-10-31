@@ -79,7 +79,7 @@ use Illuminate\Support\Facades\Route;
 // adresse IP ou d'un meme compte partageaient un seul compteur (une limite de 8 comptait aussi les autres appels).
 // Par adresse : assez large pour le Wi-Fi de l'eglise (une seule adresse pour tous le dimanche). La fraude
 // est arretee ailleurs : 45 s entre deux codes et verrouillage par numero, pays acceptes, plafond global de SMS.
-Route::post('/auth/request-otp', [AuthController::class, 'requestOtp'])->middleware('throttle:20,1,otp-request');
+Route::post('/auth/request-otp', [AuthController::class, 'requestOtp'])->middleware('throttle:otp-request');
 Route::post('/auth/verify-otp', [AuthController::class, 'verifyOtp'])->middleware('throttle:30,1,otp-verify');
 // Compte de gestion principal (sans code SMS) : le numero suffit sur un appareil de confiance ; un nouvel
 // appareil s'autorise une fois avec le code genere sur le serveur. Essais limites (adresse + verrouillage).
@@ -212,7 +212,7 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
     // Prendre rendez-vous avec le pasteur.
     Route::get('/me/appointments', [MyAppointmentController::class, 'index'])->middleware('module:appointments');
     Route::post('/me/appointments', [MyAppointmentController::class, 'store'])->middleware('throttle:member-requests')->middleware('module:appointments');
-    Route::post('/me/appointments/{appointment}/cancel', [MyAppointmentController::class, 'cancel'])->middleware('module:appointments');
+    Route::post('/me/appointments/{appointment}/cancel', [MyAppointmentController::class, 'cancel'])->middleware(['module:appointments', 'throttle:member-writes']);
     Route::delete('/me/vertumetre/edit-requests/{editRequest}', [MyVertumetreController::class, 'cancelRequest'])->middleware('module:vertumetre');
 
     // --- Mes RM (Résolutions du Mois) et Mon devoir (DS) ---
@@ -447,8 +447,8 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
         Route::delete('/service-schedule/{event}', [ServiceScheduleController::class, 'destroy'])->middleware('permission:schedule.delete');
 
         // Mon devoir (DS) : publier, modifier (POST pour le fichier audio), retirer.
-        Route::post('/assignments', [AssignmentController::class, 'store'])->middleware('permission:assignments.publish');
-        Route::post('/assignments/{assignment}', [AssignmentController::class, 'update'])->whereNumber('assignment')->middleware('permission:assignments.publish');
+        Route::post('/assignments', [AssignmentController::class, 'store'])->middleware(['permission:assignments.publish', 'throttle:publish']);
+        Route::post('/assignments/{assignment}', [AssignmentController::class, 'update'])->whereNumber('assignment')->middleware(['permission:assignments.publish', 'throttle:publish']);
         Route::delete('/assignments/{assignment}', [AssignmentController::class, 'destroy'])->whereNumber('assignment')->middleware('permission:assignments.delete');
 
         // Ressources et liens video (themes des RM : meditation, priere, jeune, culte).
@@ -460,14 +460,14 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
         Route::post('/content/video-preview', [ExerciseController::class, 'contentVideoPreview'])->middleware('throttle:member-search');
 
         Route::get('/announcements', [AnnouncementController::class, 'index'])->middleware('permission:announcements.publish');
-        Route::post('/announcements', [AnnouncementController::class, 'store'])->middleware('permission:announcements.publish');
+        Route::post('/announcements', [AnnouncementController::class, 'store'])->middleware(['permission:announcements.publish', 'throttle:publish']);
         Route::delete('/announcements/{announcement}', [AnnouncementController::class, 'destroy'])->middleware('permission:announcements.delete');
 
         // Evenements de l'eglise
         Route::middleware('permission:events.manage')->group(function () {
             Route::get('/events', [EventController::class, 'index']);
-            Route::post('/events', [EventController::class, 'store']);
-            Route::put('/events/{event}', [EventController::class, 'update']);
+            Route::post('/events', [EventController::class, 'store'])->middleware('throttle:publish');
+            Route::put('/events/{event}', [EventController::class, 'update'])->middleware('throttle:publish');
         });
         Route::delete('/events/{event}', [EventController::class, 'destroy'])->middleware('permission:events.delete');
         Route::get('/events/{event}/participants', [EventController::class, 'participants'])->middleware('permission:events.participants');

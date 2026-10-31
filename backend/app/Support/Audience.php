@@ -19,6 +19,9 @@ use Illuminate\Validation\ValidationException;
  */
 class Audience
 {
+    /** Options deja calculees, par utilisateur (la duree de la requete). */
+    private static ?\WeakMap $optionsCache = null;
+
     public const TYPES = ['church', 'tribe', 'gem', 'department'];
 
     /**
@@ -27,6 +30,13 @@ class Audience
      * @return array{church: bool, tribes: array<int, array{id: int, name: string}>, gems: array<int, array{id: int, name: string, tribe_id: int}>, departments: array<int, array{id: int, name: string}>}
      */
     public static function options(User $author): array
+    {
+        self::$optionsCache ??= new \WeakMap;
+
+        return self::$optionsCache[$author] ??= self::buildOptions($author);
+    }
+
+    private static function buildOptions(User $author): array
     {
         $all = $author->canBroadcastAll();
         $pick = fn ($query, array $ids) => $all ? $query : $query->whereIn('id', $ids ?: [0]);

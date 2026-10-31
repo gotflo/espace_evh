@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { api, peek } from '../api/client'
+import { api, ApiError, peek } from '../api/client'
 import { Link } from 'react-router-dom'
 import { AppLayout } from '../components/AppLayout'
 import { SkeletonCard } from '../components/Skeleton'
+import { LoadError } from '../components/LoadError'
 import { Icon } from '../components/Icon'
 import { clearDraft, readDraft, useDraft } from '../utils/drafts'
 import { usePulse } from '../pulse'
@@ -108,7 +109,7 @@ function Resources({ groups, theme, onTheme }: { groups: ResolutionsData['resour
             {r.youtube_id ? (
               // Video : sur sa propre page (lecture confortable sur telephone, reprise et suivi).
               <Link className="resource-card" to={`/mes-resolutions/ressource/${r.id}`}>
-                <span className="resource-thumb"><img src={`https://i.ytimg.com/vi/${r.youtube_id}/mqdefault.jpg`} alt="" loading="lazy" /><Icon name="play" size={22} /></span>
+                <span className="resource-thumb"><img src={`https://i.ytimg.com/vi/${r.youtube_id}/mqdefault.jpg`} alt="" loading="lazy" decoding="async" /><Icon name="play" size={22} /></span>
                 <span className="resource-text"><strong>{r.title}</strong><small>par {r.author}</small>{r.note && <em>{r.note}</em>}
                   {watchOf(r).percent > 0 && (
                     <span className="res-watch"><span className="watch-bar" aria-hidden><span style={{ width: `${watchOf(r).percent}%` }} className={watchOf(r).completed ? 'done' : ''} /></span>{watchOf(r).completed ? 'Regardée' : `${watchOf(r).percent} %`}</span>
@@ -145,6 +146,7 @@ export default function MyResolutions() {
   // Onglet des ressources ouvert (lien « Ressources » d'une rubrique : celui de son theme).
   const [resTheme, setResTheme] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [loadError, setLoadError] = useState('')
 
   const keys = useMemo(() => (data ? Object.keys(data.fields) as ResolutionKey[] : []), [data])
   const draftKey = data ? `rm:${data.period}` : null
@@ -154,10 +156,11 @@ export default function MyResolutions() {
   const load = useCallback((reset = true) => {
     api<ResolutionsData>('/me/resolutions').then((d) => {
       setData(d)
+      setLoadError('')
       if (!reset) return
       setTexts(initialTexts(d))
       setEditing(!d.current)
-    }).catch(() => {})
+    }).catch((err) => setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.'))
   }, [])
   useEffect(() => { load(!peek('/me/resolutions')) }, [load])
   usePulse('resolutions', () => { if (!editing) load() })
@@ -165,7 +168,11 @@ export default function MyResolutions() {
   useDraft(editing ? draftKey : null, texts, (v) => !v || Object.values(v).every((t) => !t.trim()))
 
   if (!data || !texts) {
-    return <AppLayout title="Mes résolutions du mois"><div className="panel-grid"><SkeletonCard /><SkeletonCard /></div></AppLayout>
+    return (
+      <AppLayout title="Mes résolutions du mois">
+        {loadError ? <LoadError message={loadError} onRetry={() => { setLoadError(''); load(true) }} /> : <div className="panel-grid"><SkeletonCard /><SkeletonCard /></div>}
+      </AppLayout>
+    )
   }
 
   const prev = data.previous

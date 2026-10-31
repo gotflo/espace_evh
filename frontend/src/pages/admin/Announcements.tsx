@@ -141,7 +141,7 @@ export default function Announcements() {
                 {canDelete && <button className="org-del" onClick={() => remove(a.id)} aria-label="Supprimer">×</button>}
               </div>
               {a.title && <h4 className="feed-title">{a.title}</h4>}
-              {a.image_url && <img className="feed-image" src={a.image_url} alt={a.title ?? 'Annonce'} loading="lazy" />}
+              {a.image_url && <img className="feed-image" src={a.image_url} alt={a.title ?? 'Annonce'} loading="lazy" decoding="async" />}
             </article>
           ))}
           {items.length === 0 && <p className="helper">Aucune annonce. Cliquez sur "Nouvelle annonce".</p>}

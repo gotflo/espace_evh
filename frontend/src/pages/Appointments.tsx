@@ -3,9 +3,11 @@ import { api, ApiError, peek } from '../api/client'
 import { AppLayout } from '../components/AppLayout'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Icon } from '../components/Icon'
+import { LoadError } from '../components/LoadError'
 import { SkeletonCard } from '../components/Skeleton'
 import { usePulse } from '../pulse'
 import { clearDraft, readDraft, useDraft } from '../utils/drafts'
+import { useLatestRequest } from '../utils/latestRequest'
 import type { AppointmentItem, AppointmentSession, AppointmentUrgency, MyAppointmentsData } from '../types'
 import { scrollPageTo } from '../utils/pageScroll'
 
@@ -110,6 +112,8 @@ export default function Appointments() {
   const [busy, setBusy] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [gone, setGone] = useState('')
+  const [loadError, setLoadError] = useState('')
+  const { begin } = useLatestRequest()
   // Quatre dates d'abord (les deux prochaines semaines) : la suite sur demande.
   const [more, setMore] = useState(false)
 
@@ -120,9 +124,12 @@ export default function Appointments() {
   }
 
   const load = useCallback(() => {
+    const isLatest = begin()
     api<MyAppointmentsData>(hostId ? `/me/appointments?host=${hostId}` : '/me/appointments')
-      .then((d) => { setGone(''); setData(d); if (!hostId && d.host_id) setHostId(d.host_id) })
+      .then((d) => { if (!isLatest()) return; setGone(''); setLoadError(''); setData(d); if (!hostId && d.host_id) setHostId(d.host_id) })
       .catch((err) => {
+        if (!isLatest()) return
+        setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
         // Ce pasteur ne recoit plus de rendez-vous (404) : ses creneaux disparaissent (plus de
         // reservation impossible a confirmer) et le message du serveur est affiche.
         if (err instanceof ApiError && err.status === 404) {
@@ -131,7 +138,7 @@ export default function Appointments() {
           setData((d) => (d ? { ...d, sessions: [], accepting: false } : d))
         }
       })
-  }, [hostId])
+  }, [hostId, begin])
   useEffect(() => { load() }, [load])
   usePulse('appointments', load)
   useEffect(() => { if (draftKey) setMessage(readDraft<string>(draftKey) ?? '') }, [draftKey])
@@ -174,7 +181,7 @@ export default function Appointments() {
 
   return (
     <AppLayout title="Prendre rendez-vous avec le pasteur" subtitle="Après les cultes du mercredi et du dimanche">
-      {!data ? <SkeletonCard /> : data.hosts.length === 0 ? (
+      {!data ? (loadError ? <LoadError message={loadError} onRetry={() => { setLoadError(''); load() }} /> : <SkeletonCard />) : data.hosts.length === 0 ? (
         <div className="empty-state"><Icon name="calendar" size={28} /><h3>Pas encore de rendez-vous</h3><p>Les rendez-vous avec le pasteur seront bientôt proposés ici.</p></div>
       ) : (
         <div className="appt-page">
@@ -183,7 +190,7 @@ export default function Appointments() {
               {data.hosts.map((h) => (
                 <button key={h.id} type="button" role="radio" aria-checked={h.id === hostId} className={`appt-host ${h.id === hostId ? 'on' : ''}`}
                   onClick={() => { setHostId(h.id); setChoice(null) }}>
-                  {h.photo_url ? <img src={h.photo_url} alt="" /> : <span className="mini-avatar">{h.name.charAt(0)}</span>}
+                  {h.photo_url ? <img src={h.photo_url} alt="" width={32} height={32} loading="lazy" decoding="async" /> : <span className="mini-avatar">{h.name.charAt(0)}</span>}
                   <span>{h.name}</span>
                 </button>
               ))}

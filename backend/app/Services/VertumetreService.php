@@ -56,7 +56,7 @@ class VertumetreService
         $clean = VertumetreCatalog::validate($answers);
 
         return DB::transaction(function () use ($member, $form, $clean, $request) {
-            [$old, $new] = Audit::diff($form->answers ?? [], $clean);
+            [$old, $new] = Audit::diff(VertumetreCatalog::forJournal($form->answers ?? []), VertumetreCatalog::forJournal($clean));
             $form->forceFill(['answers' => $clean, 'locked_at' => now(), 'edit_count' => $form->edit_count + 1])->save();
             Audit::log('vertumetre.modified', $form, $member->id, $old, $new, ['edit_request_id' => $request->id, 'edit_number' => $form->edit_count]);
             Audit::log('vertumetre.locked', $form, $member->id, [], ['locked_at' => $form->locked_at->toIso8601String()]);

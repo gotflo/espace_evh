@@ -29,7 +29,7 @@ class FamilyService
     public static function search(User $me, string $q): Collection
     {
         $q = trim($q);
-        if (mb_strlen($q) < 2) {
+        if (mb_strlen($q) < 3) {
             return collect();
         }
         $terms = array_filter(preg_split('/\s+/', mb_strtolower($q)));

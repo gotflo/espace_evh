@@ -325,3 +325,24 @@ html.app-shell #root > .app { height: 100%; min-height: 0; overflow-x: hidden; o
 .appearance-item-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.35rem; }
 .appearance-item-actions .btn { width: 100%; min-width: 0; padding-left: 0.4rem; padding-right: 0.4rem; font-size: 0.86rem; white-space: normal; line-height: 1.2; }
 .framer-warning { margin-top: 0.7rem; color: #8a5a00; background: #fff6dc; border-radius: 10px; padding: 0.5rem 0.75rem; overflow-wrap: anywhere; }
+
+/* Fenetres : le focus entre dans la boite a l'ouverture (ModalLayer), sans cadre autour d'elle. */
+.modal-box:focus { outline: none; }
+
+/* iPhone : Safari zoome sur tout champ de moins de 16 px quand on le touche. */
+@media (max-width: 860px) {
+  .ms-search input, .cal-view, .cal-month-input, .appt-actions .select, .inline-field .input { font-size: 16px; }
+}
+
+/* Cibles tactiles : zone active d'au moins 44 px, sans changer le dessin (element invisible centre sur le bouton). */
+@media (pointer: coarse) {
+  .reh-status, .org-del, .ms-chip button, .stepper-btn, .cropper-zoom-btn, .btn-link { position: relative; }
+  .reh-status::after, .org-del::after, .ms-chip button::after, .stepper-btn::after, .cropper-zoom-btn::after, .btn-link::after {
+    content: ''; position: absolute; left: 50%; top: 50%; width: 100%; height: 100%; min-width: 44px; min-height: 44px; transform: translate(-50%, -50%);
+  }
+  /* Fleches du calendrier : 44 px de large (sans fond propre), la hauteur vient de la zone invisible : leur cadre gris ne change pas de hauteur. */
+  .cal-btn.icon { position: relative; min-width: 44px; justify-content: center; }
+  .cal-btn.icon::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%); }
+  /* Boutons repartis sur deux lignes : leurs zones ne se recouvrent pas. */
+  .ms-trigger, .reh-status-btns { row-gap: 20px; }
+}

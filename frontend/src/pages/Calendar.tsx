@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, ApiError, peek } from '../api/client'
 import { AppLayout } from '../components/AppLayout'
@@ -7,6 +7,7 @@ import { usePulse } from '../pulse'
 import type { CalendarData, CalendarItem, EventOccurrence } from '../types'
 import { CAT_LABEL, hhmm, longDay, optimisticRsvp, parseYmd, rsvpOccurrence, timeRange, ymd } from '../utils/events'
 import { Icon } from '../components/Icon'
+import { useLatestRequest } from '../utils/latestRequest'
 import { ModalLayer } from '../components/ModalLayer'
 
 type View = 'month' | 'week' | 'list'
@@ -118,6 +119,9 @@ export default function Calendar() {
   const [copied, setCopied] = useState('')
   const monthInput = useRef<HTMLInputElement>(null)
   const shareRef = useRef<HTMLDivElement>(null)
+  const { begin } = useLatestRequest()
+  // Jour qui doit recevoir le focus apres un deplacement au clavier (une fois affiche).
+  const focusDay = useRef<string | null>(null)
 
   const { from, to } = useMemo(() => rangeFor(view, cursor), [view, cursor])
   const fromS = ymd(from)
@@ -125,11 +129,12 @@ export default function Calendar() {
   const today = ymd(new Date())
 
   const load = useCallback(() => {
+    const isLatest = begin()
     api<CalendarData>(`/calendar?from=${fromS}&to=${toS}`)
-      .then((r) => { setData(r); setError('') })
-      .catch((e) => setError(e instanceof ApiError ? e.firstMessage : 'Impossible de charger le calendrier.'))
-      .finally(() => setLoading(false))
-  }, [fromS, toS])
+      .then((r) => { if (!isLatest()) return; setData(r); setError('') })
+      .catch((e) => { if (isLatest()) setError(e instanceof ApiError ? e.firstMessage : 'Impossible de charger le calendrier.') })
+      .finally(() => { if (isLatest()) setLoading(false) })
+  }, [fromS, toS, begin])
 
   // Periode deja vue : affichee tout de suite (mise a jour en silence) ; sinon petit indicateur.
   useLayoutEffect(() => {
@@ -137,7 +142,7 @@ export default function Calendar() {
     if (known) setData(known); else setLoading(true)
     load()
   }, [load, fromS, toS])
-  usePulse(['events', 'exercises'], load)
+  usePulse(['events', 'exercises', 'mine'], load)
 
   // L'URL reflete la vue : lien partageable, retour arriere, liens des notifications.
   useEffect(() => {
@@ -180,6 +185,12 @@ export default function Calendar() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [move, modal, editor, selectedDay])
+
+  useEffect(() => {
+    if (!focusDay.current) return
+    const cell = document.querySelector<HTMLElement>(`[data-day="${focusDay.current}"]`)
+    if (cell) { focusDay.current = null; cell.focus() }
+  }, [selectedDay, fromS, toS])
 
   /** Elements par jour (les evenements de plusieurs jours apparaissent chaque jour). */
   const byDay = useMemo(() => {
@@ -252,16 +263,34 @@ export default function Calendar() {
     setModal(i)
   }
 
+  // Grille au clavier : Tab entre sur le jour choisi, les fleches changent de jour (la periode suit), Entree ou
+  // Espace le choisissent. Les boutons a l'interieur du jour gardent leurs touches.
+  const tabDay = selectedDay >= fromS && selectedDay <= toS ? selectedDay : fromS
+  function onDayKey(e: ReactKeyboardEvent, key: string) {
+    if (e.target !== e.currentTarget) return
+    const step = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : e.key === 'ArrowUp' ? -7 : e.key === 'ArrowDown' ? 7 : 0
+    if (!step && e.key !== 'Enter' && e.key !== ' ') return
+    e.preventDefault()
+    e.stopPropagation() // pas de changement de mois par le raccourci general des fleches
+    if (!step) { setSelectedDay(key); return }
+    const next = addDays(parseYmd(key), step)
+    const nextKey = ymd(next)
+    focusDay.current = nextKey
+    setSelectedDay(nextKey)
+    if (nextKey < fromS || nextKey > toS) setCursor(next)
+  }
+
   function dayCell(d: Date) {
     const key = ymd(d)
     const items = byDay.get(key) ?? []
     const outside = view === 'month' && d.getMonth() !== cursor.getMonth()
     const max = details ? 3 : 4
     return (
-      <div key={key}
+      <div key={key} data-day={key}
         className={`cal-cell ${outside ? 'outside' : ''} ${key === today ? 'is-today' : ''} ${key === selectedDay ? 'is-selected' : ''} ${key < today ? 'is-past' : ''}`}
         onClick={() => setSelectedDay(key)} onDoubleClick={() => setEditor({ date: key })}
-        role="gridcell" aria-label={longDay(key)}>
+        onKeyDown={(e) => onDayKey(e, key)} tabIndex={key === tabDay ? 0 : -1}
+        role="gridcell" aria-label={longDay(key)} aria-selected={key === selectedDay}>
         <span className="cal-num">{String(d.getDate()).padStart(2, '0')}</span>
         <button className="cal-add" aria-label={`Programmer le ${longDay(key)}`} title="Programmer ce jour"
           onClick={(e) => { e.stopPropagation(); setSelectedDay(key); setEditor({ date: key }) }}>+</button>

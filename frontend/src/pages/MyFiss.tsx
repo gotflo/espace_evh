@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { clearDraft, readDraft, useDraft } from '../utils/drafts'
-import { api, peek } from '../api/client'
+import { api, ApiError, peek } from '../api/client'
 import { toast } from '../toast'
 import { usePulse } from '../pulse'
 import { useAuth } from '../auth/AuthContext'
 import { AppLayout } from '../components/AppLayout'
 import { scrollPageTo } from '../utils/pageScroll'
 import { SkeletonCard } from '../components/Skeleton'
+import { LoadError } from '../components/LoadError'
 import { FissEvolution } from '../components/FissEvolution'
 import { FissDetail } from '../components/FissDetail'
 import type { FissData, FissForm, FissIndex, InnerLifeKey, InnerLifeQuestion } from '../types'
@@ -23,6 +24,8 @@ const EMPTY: FissForm = {
   addiction: null, addiction_victory: null, companions: null, inner_wound: null, difficult_situations: null, discouragement: null,
 }
 const FIELDS = Object.keys(EMPTY) as (keyof FissForm)[]
+/** Brouillon de la nouvelle fiche, propre a son mois : celui d'octobre ne revient pas en novembre. */
+const newDraftKey = (period: string) => `fiss:new:${period}`
 
 function fmtDate(iso?: string | null): string {
   return iso ? new Date(iso).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
@@ -149,8 +152,9 @@ export default function MyFiss() {
   const [data, setData] = useState<FissData | null>(() => peek<FissData>('/me/fiss') ?? null)
   const [form, setForm] = useState<FissForm>(() => {
     const known = peek<FissData>('/me/fiss')
-    return known && !known.current ? (readDraft<FissForm>('fiss:new') ?? EMPTY) : EMPTY
+    return known && !known.current ? (readDraft<FissForm>(newDraftKey(known.period)) ?? EMPTY) : EMPTY
   })
+  const [loadError, setLoadError] = useState('')
   // null = nouvelle fiche du mois ; sinon fiche existante deverrouillee en cours de modification.
   const [editing, setEditing] = useState<FissForm | null>(null)
   const [busy, setBusy] = useState(false)
@@ -162,18 +166,19 @@ export default function MyFiss() {
   const load = useCallback((reset = true) => {
     api<FissData>('/me/fiss').then((d) => {
       setData(d)
+      setLoadError('')
       if (!reset) return
       setEditing(null)
-      setForm(d.current ? { ...EMPTY } : (readDraft<FissForm>('fiss:new') ?? EMPTY))
-    }).catch(() => {})
+      setForm(d.current ? { ...EMPTY } : (readDraft<FissForm>(newDraftKey(d.period)) ?? EMPTY))
+    }).catch((err) => setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.'))
   }, [])
   useEffect(() => { load(!peek('/me/fiss')) }, [load])
   // Deverrouillage accorde, fiche validee... : mise a jour en silence, sans toucher a la saisie en cours.
-  usePulse(['fiss', 'validations'], () => load(false))
+  usePulse('mine', () => load(false))
 
   const set = <K extends keyof FissForm>(k: K, v: FissForm[K]) => setForm((f) => ({ ...f, [k]: v }))
   // Brouillon de la fiche en cours de saisie (jamais perdue si l'envoi echoue).
-  const draftKey = editing?.id ? `fiss:${editing.id}` : data && !data.current ? 'fiss:new' : null
+  const draftKey = editing?.id ? `fiss:${editing.id}` : data && !data.current ? newDraftKey(data.period) : null
   useDraft(draftKey, form, (v) => FIELDS.every((k) => v[k] === null || v[k] === undefined || v[k] === ''))
 
   const vieSpi = useMemo(() => (form.meditation ?? 0) + (form.priere ?? 0) + (form.jeune ?? 0), [form])
@@ -190,7 +195,7 @@ export default function MyFiss() {
   function cancelEdit() {
     if (editing?.id) clearDraft(`fiss:${editing.id}`)
     setEditing(null)
-    setForm(data && !data.current ? (readDraft<FissForm>('fiss:new') ?? EMPTY) : { ...EMPTY })
+    setForm(data && !data.current ? (readDraft<FissForm>(newDraftKey(data.period)) ?? EMPTY) : { ...EMPTY })
   }
 
   async function save() {
@@ -218,7 +223,13 @@ export default function MyFiss() {
     try { await api(`/me/fiss/edit-requests/${id}`, { method: 'DELETE' }); load() } catch { /* toast */ }
   }
 
-  if (!data) return <AppLayout title="Fiche de santé spirituelle"><div className="panel-grid"><SkeletonCard /><SkeletonCard /></div></AppLayout>
+  if (!data) {
+    return (
+      <AppLayout title="Fiche de santé spirituelle">
+        {loadError ? <LoadError message={loadError} onRetry={() => { setLoadError(''); load(true) }} /> : <div className="panel-grid"><SkeletonCard /><SkeletonCard /></div>}
+      </AppLayout>
+    )
+  }
 
   // Bouton actif seulement si toutes les questions affichees ont une reponse, vie interieure comprise
   // (seul le commentaire est facultatif) et, pour une fiche deverrouillee, si quelque chose a change.

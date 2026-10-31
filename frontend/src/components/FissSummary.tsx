@@ -24,7 +24,7 @@ export function FissSummary() {
 
   const load = useCallback(() => { api<FissData>('/me/fiss').then(setD).catch(() => {}) }, [])
   useEffect(() => { load() }, [load])
-  usePulse(['fiss', 'validations'], load)
+  usePulse('mine', load)
 
   if (!d || !d.filled || !d.current) return null
   const f = d.current

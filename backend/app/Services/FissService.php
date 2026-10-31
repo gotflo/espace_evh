@@ -205,7 +205,17 @@ class FissService
     /** @return array<string, mixed> */
     public static function values(SpiritualHealthForm $form): array
     {
-        return collect(SpiritualHealthForm::FIELDS)->mapWithKeys(fn ($f) => [$f => $form->{$f}])->all();
+        return collect(SpiritualHealthForm::FIELDS)->mapWithKeys(fn ($f) => [$f => self::forJournal($f, $form->{$f})])->all();
+    }
+
+    /** Le journal note qu'un texte confidentiel a change (empreinte), jamais son contenu. */
+    private static function forJournal(string $field, mixed $value): mixed
+    {
+        if (! in_array($field, [...SpiritualHealthForm::INNER_LIFE, 'comment'], true) || ! filled($value)) {
+            return $value;
+        }
+
+        return 'texte #'.substr(hash_hmac('sha256', (string) $value, (string) config('app.key')), 0, 10);
     }
 
     public static function periodLabel(string $period): string

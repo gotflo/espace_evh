@@ -12,9 +12,10 @@ use App\Models\Tribe;
 use App\Models\User;
 use App\Support\Like;
 use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Rapports et statistiques (tribu, « mes tribus » ou toute l'eglise).
@@ -34,7 +35,7 @@ class ReportService
     /** Portees de rapport accessibles : toute l'eglise (autorite), ses tribus, et « mes tribus ». */
     public static function options(User $user): array
     {
-        $all = $user->hasPermission('members.view_all');
+        $all = $user->isChurchWideFor('reports.view');
         $tribes = Tribe::when(! $all, fn ($q) => $q->whereIn('id', $user->scopeTribeIds() ?: [0]))
             ->orderBy('name')->get(['id', 'name']);
 
@@ -72,13 +73,26 @@ class ReportService
         abort(403, 'Cette tribu ne fait pas partie de votre périmètre.');
     }
 
+    /** Statut effectif (voir User::activityStatus) calcule par la base : 1 si actif, un membre sans compte n'est pas actif. */
+    private const ACTIVE_SQL = "case when u.id is null then 0 when u.activity_override = 'active' then 1 when u.activity_override = 'inactive' then 0 when u.activity_status is null or u.activity_status = '' or u.activity_status = 'active' then 1 else 0 end";
+
     /** Membres (profils completes) de la portee. */
-    public static function members(?array $tribeIds): Collection
+    private static function members(?array $tribeIds): Builder
     {
-        return Profile::where('is_completed', true)
-            ->when($tribeIds !== null, fn ($q) => $q->whereIn('tribe_id', $tribeIds ?: [0]))
-            ->with(['user:id,phone,last_login_at,last_seen_at,activity_status,activity_override,activity_changed_at', 'tribe:id,name', 'gem:id,name'])
-            ->get();
+        return Profile::query()->where('profiles.is_completed', true)
+            ->when($tribeIds !== null, fn ($q) => $q->whereIn('profiles.tribe_id', $tribeIds ?: [0]));
+    }
+
+    /** Lignes d'un membre pour les listes du rapport : ordre stable, colonnes utiles seulement. */
+    private static function listed(?array $tribeIds, string $statusSql): Builder
+    {
+        return self::members($tribeIds)
+            ->leftJoin('users as u', 'u.id', '=', 'profiles.user_id')
+            ->whereRaw($statusSql)
+            ->with('tribe:id,name')
+            ->when($tribeIds !== null, fn ($q) => $q->orderBy('profiles.tribe_id'))
+            ->orderBy('profiles.id')
+            ->select(['profiles.id', 'profiles.user_id', 'profiles.first_name', 'profiles.last_name', 'profiles.tribe_id', 'profiles.created_at', 'u.activity_changed_at as activity_changed_at']);
     }
 
     /** Rapport complet (mis en cache 10 minutes). */
@@ -112,14 +126,14 @@ class ReportService
         }
     }
 
+    /**
+     * Tout est agrege par la base (par mois et par tribu) : aucune fiche, aucun membre n'est garde en memoire.
+     * Seul le score d'une fiche reste calcule ici, une ligne a la fois (memes regles que l'ecran de la fiche).
+     */
     private static function compute(array $scope, int $months): array
     {
-        $members = self::members($scope['tribe_ids']);
-        $ids = $members->pluck('user_id')->map(fn ($id) => (int) $id)->all();
-        // Statut de chaque membre calcule une fois.
-        $statusOf = $members->mapWithKeys(fn (Profile $p) => [$p->user_id => $p->user ? $p->user->activityStatus() : 'inactive'])->all();
-        $status = fn (Profile $p) => $statusOf[$p->user_id] ?? 'inactive';
-        $active = $members->filter(fn ($p) => $status($p) === 'active');
+        $tribeIds = $scope['tribe_ids'];
+        $memberIds = fn () => self::members($tribeIds)->select('profiles.user_id');
 
         $end = now()->endOfMonth();
         $start = now()->startOfMonth()->subMonths($months - 1);
@@ -128,59 +142,92 @@ class ReportService
             $periods[] = $m->format('Y-m');
         }
 
-        // Lignes brutes (sans construire un objet par fiche : plusieurs milliers sur 12 mois).
-        $forms = SpiritualHealthForm::whereIn('user_id', $ids ?: [0])->whereIn('period', $periods)->toBase()
-            ->get(['user_id', 'period', 'meditation', 'priere', 'jeune', 'sanctification_corps', 'sanctification_ame',
-                'sanctification_esprit', 'situation_financiere', 'situation_familiale', 'situation_conjugale']);
-        $evaluations = Evaluation::whereIn('user_id', $ids ?: [0])
-            ->whereBetween('evaluated_on', [$start->toDateString(), $end->toDateString()])->toBase()->get(['user_id', 'score', 'evaluated_on']);
-        $attendance = Attendance::whereIn('member_user_id', $ids ?: [0])->where('kind', 'culte')
-            ->whereBetween('attended_on', [$start->toDateString(), $end->toDateString()])
-            ->toBase()->get(['member_user_id', 'attended_on', 'event', 'status']);
-        $participations = EventParticipation::whereIn('user_id', $ids ?: [0])->where('response', 'present')
-            ->whereBetween('occurs_on', [$start->toDateString(), $end->toDateString()])->toBase()->get(['occurs_on']);
-        $eventsQuery = Event::where('is_personal', false)->when($scope['tribe_ids'] !== null, fn ($q) => $q->where(fn ($w) => $w
-            ->whereHas('scopes', fn ($s) => $s->where('scope_type', 'church'))
-            ->orWhereHas('scopes', fn ($s) => $s->where('scope_type', 'tribe')->whereIn('scope_id', $scope['tribe_ids'] ?: [0]))));
-        $occurrences = CalendarService::occurrences($eventsQuery, $start->copy(), $end->copy());
+        // Membres : effectifs, actifs et completion, par tribu ; arrivees par mois.
+        $byTribe = self::members($tribeIds)->leftJoin('users as u', 'u.id', '=', 'profiles.user_id')->toBase()
+            ->selectRaw('profiles.tribe_id as tribe_id, count(*) as members, sum('.self::ACTIVE_SQL.') as active, sum(profiles.completion) as completion_sum, count(profiles.completion) as completion_count, sum(case when profiles.completion is null or profiles.completion < 100 then 1 else 0 end) as incomplete')
+            ->groupBy('profiles.tribe_id')->get();
+        $memberCount = (int) $byTribe->sum('members');
+        $activeCount = (int) $byTribe->sum('active');
+        $completionCount = (int) $byTribe->sum('completion_count');
+        $completionSum = (int) $byTribe->sum('completion_sum');
+        $incomplete = (int) $byTribe->sum('incomplete');
+        $byTribe = $byTribe->filter(fn ($t) => $t->tribe_id !== null)->keyBy('tribe_id');
 
-        // Une seule passe sur les donnees (et non une par mois) : le calcul reste rapide
-        // meme pour 500 membres sur 12 mois.
-        $joined = array_count_values($members->map(fn ($p) => $p->created_at ? $p->created_at->format('Y-m') : '9999-99')->all());
+        $joined = [];
+        foreach (self::members($tribeIds)->toBase()->selectRaw('substr(profiles.created_at, 1, 7) as month, count(*) as total')->groupBy('month')->get() as $row) {
+            $joined[$row->month ?? '9999-99'] = (int) $row->total;
+        }
         ksort($joined);
-        // Scores calcules une seule fois par fiche, ranges par mois puis par membre.
+
+        // Fiches : une seule passe, un score par fiche, additionne par mois ; par tribu pour le mois et le mois precedent.
+        $currentPeriod = now()->format('Y-m');
+        $previousPeriod = now()->subMonthNoOverflow()->format('Y-m');
         $formsByPeriod = [];
-        foreach ($forms as $f) {
-            $formsByPeriod[$f->period][(int) $f->user_id] = [
-                'spiritual' => SpiritualHealthForm::spiritualScoreOf($f),
-                'social' => SpiritualHealthForm::socialScoreOf($f),
-            ];
+        $tribeForms = [];
+        $forms = DB::table('spiritual_health_forms as f')->join('profiles', 'profiles.user_id', '=', 'f.user_id')
+            ->where('profiles.is_completed', true)
+            ->when($tribeIds !== null, fn ($q) => $q->whereIn('profiles.tribe_id', $tribeIds ?: [0]))
+            ->whereIn('f.period', $periods)
+            ->select(['f.period', 'profiles.tribe_id', 'f.meditation', 'f.priere', 'f.jeune', 'f.sanctification_corps', 'f.sanctification_ame',
+                'f.sanctification_esprit', 'f.situation_financiere', 'f.situation_familiale', 'f.situation_conjugale']);
+        foreach ($forms->cursor() as $f) {
+            $spiritual = SpiritualHealthForm::spiritualScoreOf($f);
+            $social = SpiritualHealthForm::socialScoreOf($f);
+            $month = &$formsByPeriod[$f->period];
+            $month ??= ['count' => 0, 'spiritual_sum' => 0.0, 'spiritual_count' => 0, 'social_sum' => 0.0, 'social_count' => 0];
+            $month['count']++;
+            if ($spiritual !== null) {
+                $month['spiritual_sum'] += $spiritual;
+                $month['spiritual_count']++;
+            }
+            if ($social !== null) {
+                $month['social_sum'] += $social;
+                $month['social_count']++;
+            }
+            unset($month);
+            if ($f->tribe_id !== null && ($f->period === $currentPeriod || $f->period === $previousPeriod)) {
+                $tribe = &$tribeForms[$f->tribe_id][$f->period];
+                $tribe ??= ['count' => 0, 'spiritual_sum' => 0.0, 'spiritual_count' => 0];
+                $tribe['count']++;
+                if ($spiritual !== null) {
+                    $tribe['spiritual_sum'] += $spiritual;
+                    $tribe['spiritual_count']++;
+                }
+                unset($tribe);
+            }
         }
-        $month = fn ($date) => substr((string) ($date instanceof \DateTimeInterface ? $date->format('Y-m-d') : $date), 0, 10);
+
         $evalByMonth = [];
-        foreach ($evaluations as $e) {
-            $evalByMonth[substr($month($e->evaluated_on), 0, 7)][] = (float) $e->score;
+        foreach (Evaluation::whereIn('user_id', $memberIds())->whereBetween('evaluated_on', [$start->toDateString(), $end->toDateString()])->toBase()
+            ->selectRaw('substr(evaluated_on, 1, 7) as month, sum(score) as total, count(*) as notes')->groupBy('month')->get() as $row) {
+            $evalByMonth[$row->month] = ['sum' => (float) $row->total, 'count' => (int) $row->notes];
         }
+        // Une ligne par session (jour + evenement) avec son nombre de presents.
         $attByMonth = [];
-        foreach ($attendance as $a) {
-            $day = $month($a->attended_on);
-            $key = substr($day, 0, 7);
-            $attByMonth[$key]['sessions'][$day.'|'.$a->event] = true;
-            $attByMonth[$key]['present'] = ($attByMonth[$key]['present'] ?? 0) + ($a->status === 'present' ? 1 : 0);
+        foreach (Attendance::whereIn('member_user_id', $memberIds())->where('kind', 'culte')->whereBetween('attended_on', [$start->toDateString(), $end->toDateString()])->toBase()
+            ->selectRaw("attended_on, event, sum(case when status = 'present' then 1 else 0 end) as present")->groupBy('attended_on', 'event')->get() as $row) {
+            $key = substr((string) $row->attended_on, 0, 7);
+            $attByMonth[$key]['sessions'] = ($attByMonth[$key]['sessions'] ?? 0) + 1;
+            $attByMonth[$key]['present'] = ($attByMonth[$key]['present'] ?? 0) + (int) $row->present;
         }
-        $partByMonth = array_count_values($participations->map(fn ($p) => substr($month($p->occurs_on), 0, 7))->all());
+        $partByMonth = [];
+        foreach (EventParticipation::whereIn('user_id', $memberIds())->where('response', 'present')->whereBetween('occurs_on', [$start->toDateString(), $end->toDateString()])->toBase()
+            ->selectRaw('substr(occurs_on, 1, 7) as month, count(*) as total')->groupBy('month')->get() as $row) {
+            $partByMonth[$row->month] = (int) $row->total;
+        }
+        $eventsQuery = Event::where('is_personal', false)->when($tribeIds !== null, fn ($q) => $q->where(fn ($w) => $w
+            ->whereHas('scopes', fn ($s) => $s->where('scope_type', 'church'))
+            ->orWhereHas('scopes', fn ($s) => $s->where('scope_type', 'tribe')->whereIn('scope_id', $tribeIds ?: [0]))));
+        $occurrences = CalendarService::occurrences($eventsQuery, $start->copy(), $end->copy());
         $eventsByMonth = array_count_values($occurrences->map(fn ($o) => $o['start']->format('Y-m'))->all());
-        $activeCount = $active->count();
 
         $monthly = [];
         foreach ($periods as $period) {
             $mStart = Carbon::createFromFormat('Y-m-d', $period.'-01')->startOfDay();
             $eligible = array_sum(array_filter($joined, fn ($n, $m) => $m <= $period, ARRAY_FILTER_USE_BOTH));
-            $mForms = $formsByPeriod[$period] ?? [];
-            $spiritual = collect(array_column($mForms, 'spiritual'))->filter(fn ($v) => $v !== null);
-            $social = collect(array_column($mForms, 'social'))->filter(fn ($v) => $v !== null);
-            $mEval = $evalByMonth[$period] ?? [];
-            $sessions = count($attByMonth[$period]['sessions'] ?? []);
+            $mForms = $formsByPeriod[$period] ?? ['count' => 0, 'spiritual_sum' => 0.0, 'spiritual_count' => 0, 'social_sum' => 0.0, 'social_count' => 0];
+            $mEval = $evalByMonth[$period] ?? null;
+            $sessions = $attByMonth[$period]['sessions'] ?? 0;
             $present = $attByMonth[$period]['present'] ?? 0;
             $denominator = $sessions * max(1, $activeCount);
 
@@ -189,11 +236,11 @@ class ReportService
                 'label' => ucfirst($mStart->locale('fr')->isoFormat('MMM YY')),
                 'members' => $eligible,
                 'new_members' => $joined[$period] ?? 0,
-                'fiss_filled' => count($mForms),
-                'fiss_rate' => $eligible ? round(count($mForms) / $eligible * 100, 1) : null,
-                'spiritual_score' => $spiritual->count() ? round($spiritual->avg(), 1) : null,
-                'social_score' => $social->count() ? round($social->avg(), 1) : null,
-                'vertumetre' => $mEval ? round(array_sum($mEval) / count($mEval), 1) : null,
+                'fiss_filled' => $mForms['count'],
+                'fiss_rate' => $eligible ? round($mForms['count'] / $eligible * 100, 1) : null,
+                'spiritual_score' => $mForms['spiritual_count'] ? round($mForms['spiritual_sum'] / $mForms['spiritual_count'], 1) : null,
+                'social_score' => $mForms['social_count'] ? round($mForms['social_sum'] / $mForms['social_count'], 1) : null,
+                'vertumetre' => $mEval ? round($mEval['sum'] / $mEval['count'], 1) : null,
                 'attendance_sessions' => $sessions,
                 'attendance_present' => $present,
                 'attendance_rate' => $sessions ? min(100, round($present / $denominator * 100, 1)) : null,
@@ -203,62 +250,62 @@ class ReportService
         }
 
         $current = end($monthly);
-        $currentPeriod = now()->format('Y-m');
-        $filledNow = array_keys($formsByPeriod[$currentPeriod] ?? []);
         $row = fn (Profile $p) => ['user_id' => $p->user_id, 'name' => $p->full_name, 'tribe' => $p->tribe?->name];
+        // Membres actifs sans fiche ce mois-ci : la base les compte et ne renvoie que ceux de la liste.
+        $missingFiss = fn () => self::listed($tribeIds, self::ACTIVE_SQL.' = 1')
+            ->whereNotIn('profiles.user_id', SpiritualHealthForm::where('period', $currentPeriod)->select('user_id'));
+        $evalNotes = array_sum(array_column($evalByMonth, 'count'));
 
         $report = [
             'scope' => ['key' => $scope['key'], 'label' => $scope['label']],
             'generated_at' => now()->toIso8601String(),
             'period' => ['from' => $start->toDateString(), 'to' => $end->toDateString(), 'months' => $months],
             'kpis' => [
-                'members' => $members->count(),
-                'active' => $active->count(),
-                'inactive' => $members->count() - $active->count(),
+                'members' => $memberCount,
+                'active' => $activeCount,
+                'inactive' => $memberCount - $activeCount,
                 'new_members' => array_sum(array_column($monthly, 'new_members')),
-                'profile_completion_avg' => $members->count() ? (int) round($members->avg('completion')) : null,
-                'incomplete_profiles' => $members->where('completion', '<', 100)->count(),
+                'profile_completion_avg' => $memberCount ? ($completionCount ? (int) round($completionSum / $completionCount) : 0) : null,
+                'incomplete_profiles' => $incomplete,
                 'fiss_rate' => $current['fiss_rate'],
-                'fiss_missing' => $active->reject(fn ($p) => in_array((int) $p->user_id, $filledNow, true))->count(),
+                'fiss_missing' => $missingFiss()->count(),
                 'spiritual_score' => self::latest($monthly, 'spiritual_score'),
                 'social_score' => self::latest($monthly, 'social_score'),
-                'vertumetre' => $evaluations->count() ? round((float) $evaluations->avg('score'), 1) : null,
+                'vertumetre' => $evalNotes ? round(array_sum(array_column($evalByMonth, 'sum')) / $evalNotes, 1) : null,
                 'attendance_rate' => self::average($monthly, 'attendance_rate'),
                 'events' => array_sum(array_column($monthly, 'events')),
                 'participations' => array_sum(array_column($monthly, 'participations')),
             ],
             'monthly' => $monthly,
-            'missing_fiss' => $active->reject(fn ($p) => in_array((int) $p->user_id, $filledNow, true))->take(100)->map($row)->values()->all(),
-            'inactive_members' => $members->filter(fn ($p) => $status($p) === 'inactive')->take(100)
-                ->map(fn ($p) => $row($p) + ['since' => $p->user?->activity_changed_at?->toDateString()])->values()->all(),
-            'new_members_list' => $members->filter(fn ($p) => $p->created_at && $p->created_at->gte($start))
-                ->sortByDesc('created_at')->take(50)->map(fn ($p) => $row($p) + ['date' => $p->created_at->toDateString()])->values()->all(),
+            'missing_fiss' => $missingFiss()->limit(100)->get()->map($row)->values()->all(),
+            'inactive_members' => self::listed($tribeIds, self::ACTIVE_SQL.' = 0')->limit(100)->get()
+                ->map(fn ($p) => $row($p) + ['since' => $p->activity_changed_at ? Carbon::parse($p->activity_changed_at)->toDateString() : null])->values()->all(),
+            'new_members_list' => self::listed($tribeIds, '1 = 1')->reorder()->where('profiles.created_at', '>=', $start)
+                ->orderByDesc('profiles.created_at')->orderBy('profiles.id')->limit(50)->get()
+                ->map(fn ($p) => $row($p) + ['date' => $p->created_at->toDateString()])->values()->all(),
             'tribes' => [],
         ];
 
         // Comparaison par tribu (vue eglise ou « mes tribus »).
-        if ($scope['tribe_ids'] === null || count($scope['tribe_ids']) > 1) {
-            $tribes = Tribe::when($scope['tribe_ids'] !== null, fn ($q) => $q->whereIn('id', $scope['tribe_ids']))->orderBy('name')->get(['id', 'name']);
+        if ($tribeIds === null || count($tribeIds) > 1) {
+            $tribes = Tribe::when($tribeIds !== null, fn ($q) => $q->whereIn('id', $tribeIds))->orderBy('name')->get(['id', 'name']);
             foreach ($tribes as $tribe) {
-                $tm = $members->where('tribe_id', $tribe->id);
-                $tIds = $tm->pluck('user_id')->map(fn ($id) => (int) $id)->all();
-                $tribeMembers = array_flip($tIds);
-                $tForms = collect(array_intersect_key($formsByPeriod[$currentPeriod] ?? [], $tribeMembers));
-                $tPrevForms = collect(array_intersect_key($formsByPeriod[now()->subMonthNoOverflow()->format('Y-m')] ?? [], $tribeMembers));
-                $scores = $tForms->pluck('spiritual')->filter(fn ($v) => $v !== null);
-                $prevScores = $tPrevForms->pluck('spiritual')->filter(fn ($v) => $v !== null);
-                $tActive = $tm->filter(fn ($p) => $status($p) === 'active')->count();
+                $t = $byTribe->get($tribe->id);
+                $count = (int) ($t->members ?? 0);
+                $active = (int) ($t->active ?? 0);
+                $tForms = $tribeForms[$tribe->id][$currentPeriod] ?? ['count' => 0, 'spiritual_sum' => 0.0, 'spiritual_count' => 0];
+                $tPrev = $tribeForms[$tribe->id][$previousPeriod] ?? ['count' => 0, 'spiritual_sum' => 0.0, 'spiritual_count' => 0];
                 $report['tribes'][] = [
                     'id' => $tribe->id,
                     'name' => $tribe->name,
-                    'members' => $tm->count(),
-                    'active' => $tActive,
-                    'inactive' => $tm->count() - $tActive,
-                    'fiss_rate' => $tm->count() ? round($tForms->count() / $tm->count() * 100, 1) : null,
-                    'spiritual_score' => $scores->count() ? round($scores->avg(), 1) : null,
-                    'spiritual_score_previous' => $prevScores->count() ? round($prevScores->avg(), 1) : null,
-                    'fiss_count' => $scores->count(),
-                    'completion_avg' => $tm->count() ? (int) round($tm->avg('completion')) : null,
+                    'members' => $count,
+                    'active' => $active,
+                    'inactive' => $count - $active,
+                    'fiss_rate' => $count ? round($tForms['count'] / $count * 100, 1) : null,
+                    'spiritual_score' => $tForms['spiritual_count'] ? round($tForms['spiritual_sum'] / $tForms['spiritual_count'], 1) : null,
+                    'spiritual_score_previous' => $tPrev['spiritual_count'] ? round($tPrev['spiritual_sum'] / $tPrev['spiritual_count'], 1) : null,
+                    'fiss_count' => $tForms['spiritual_count'],
+                    'completion_avg' => $count ? ((int) ($t->completion_count ?? 0) ? (int) round((int) $t->completion_sum / (int) $t->completion_count) : 0) : null,
                 ];
             }
         }

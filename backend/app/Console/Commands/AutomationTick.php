@@ -49,6 +49,8 @@ use Illuminate\Support\Facades\DB;
  * toutes les minutes sans jamais renvoyer deux fois le meme message ; un envoi en echec
  * libere sa cle et sera retente au passage suivant. Heures en fuseau APP_TIMEZONE.
  * Lancee par le cron Laravel (schedule:run) et, en secours, par l'activite de l'application.
+ * Les push sont seulement ecrits dans la boite d'envoi pendant les etapes : ils partent tous
+ * ensuite, par lots (etape push-outbox, puis app:push-outbox chaque minute).
  */
 class AutomationTick extends Command
 {
@@ -58,6 +60,9 @@ class AutomationTick extends Command
     protected $signature = 'app:tick {--only= : activity | event-reminders | service-digest | birthdays | weddings | tasks | fiss | vertumetre | profiles | email-invites | monthly-report | leader-reports | gem-reports | resolutions | assignments | appointments | followups | service-joins | rm-renew | absences | tribe-changes | push-outbox | send-outbox | prune}';
 
     protected $description = 'Activité des membres, rappels, anniversaires, FISS, profils, relances et nettoyage.';
+
+    /** Envois en erreur pendant ce passage (une etape concernee sera rejouee au passage suivant). */
+    private int $failures = 0;
 
     public function handle(): int
     {
@@ -103,7 +108,7 @@ class AutomationTick extends Command
         $results = [];
 
         // Responsables charges une seule fois pour tout le passage (et non a chaque notification).
-        Recipients::remember(function () use ($steps, $only, &$results) {
+        $run = function () use ($steps, $only, &$results) {
             foreach ($steps as $name => $step) {
                 if ($only && $only !== $name) {
                     continue;
@@ -128,7 +133,8 @@ class AutomationTick extends Command
                     $this->error("{$name} : ".$e->getMessage());
                 }
             }
-        });
+        };
+        Notifier::outboxOnly(fn () => Recipients::remember($run));
 
         // Trace du dernier passage complet (verifiee par /api/health).
         if (! $only) {
@@ -199,7 +205,7 @@ class AutomationTick extends Command
         $period = $now->format('Y-m');
         $previous = $now->copy()->subMonthNoOverflow()->format('Y-m');
 
-        return $this->sendOnce("rm-renew:{$period}", function () use ($period, $previous) {
+        return $this->claimOnce("rm-renew:{$period}", function () use ($period, $previous) {
             $renewed = [];
             MonthlyResolution::where('period', $previous)
                 ->whereNotIn('user_id', MonthlyResolution::where('period', $period)->select('user_id'))
@@ -228,20 +234,92 @@ class AutomationTick extends Command
         });
     }
 
-    /** Envoi protege : une seule fois par cle ; en cas d'echec, la cle est liberee (nouvel essai). */
+    /**
+     * Notification protegee : une seule fois par cle. La cle et les notifications sont validees ensemble :
+     * erreur ou processus coupe, rien n'est enregistre et tout repart au passage suivant ; jamais de cloche
+     * en double, jamais de cle prise pour un envoi qui n'a pas eu lieu.
+     */
     private function sendOnce(string $key, callable $send): int
+    {
+        $claimed = false;
+        try {
+            return (int) DB::transaction(function () use ($key, $send, &$claimed) {
+                if (! Notifier::once($key)) {
+                    return 0;
+                }
+                $claimed = true;
+
+                return $send();
+            });
+        } catch (\Throwable $e) {
+            $this->failures++;
+            report($e);
+            // Annulee avec la transaction ; si l'annulation elle-meme a echoue, la cle ne reste pas prise.
+            if ($claimed) {
+                rescue(fn () => Notifier::release($key), report: false);
+            }
+
+            return 0;
+        }
+    }
+
+    /**
+     * Travail long, deja protege ligne par ligne (trop gros pour une seule transaction) : une seule fois
+     * par cle ; en cas d'echec, la cle est liberee et chaque ligne deja faite n'est pas refaite.
+     */
+    private function claimOnce(string $key, callable $work): int
     {
         if (! Notifier::once($key)) {
             return 0;
         }
         try {
-            return (int) $send();
+            return (int) $work();
         } catch (\Throwable $e) {
+            $this->failures++;
             Notifier::release($key);
             report($e);
 
             return 0;
         }
+    }
+
+    /**
+     * Courriels et textos d'un rappel : leur cle n'est posee que lorsque toute la mise en file a abouti.
+     * Erreur ou processus coupe : la mise en file reprend au passage suivant (chaque message a sa propre cle
+     * anti-doublon), sans jamais faire repartir la notification, qui a sa propre cle.
+     */
+    private function queueMailsOnce(string $key, callable $queue): void
+    {
+        if (Notifier::alreadyDone($key)) {
+            return;
+        }
+        try {
+            $queue();
+            Notifier::once($key);
+        } catch (\Throwable $e) {
+            $this->failures++;
+            report($e);
+        }
+    }
+
+    /**
+     * Etape rejouee pour rien la plupart du temps (tout est deja parti, chaque destinataire a sa cle) :
+     * une fois faite sans erreur, elle n'est recalculee qu'a l'heure suivante. Un cache perdu ne coute qu'un
+     * recalcul, et un cas nouveau (profil complete, evenement ajoute...) part au plus tard dans l'heure.
+     */
+    private function settled(string $step, callable $work): int
+    {
+        $key = 'automation:settled:'.$step.':'.now()->format('YmdH');
+        if (Cache::has($key)) {
+            return 0;
+        }
+        $failures = $this->failures;
+        $count = (int) $work();
+        if ($failures === $this->failures) {
+            Cache::put($key, true, now()->addHour());
+        }
+
+        return $count;
     }
 
     /** Statuts actif / inactif recalcules une fois par jour (et traces dans le journal d'audit). */
@@ -400,19 +478,17 @@ class AutomationTick extends Command
         foreach (LeaderReportService::pending($period) as $scope) {
             $what = ($scope['kind'] === 'tribe' ? 'tribu ' : 'département ').$scope['scope_name'];
             foreach ($scope['user_ids'] as $userId) {
-                $sent += $this->sendOnce("leader-report:{$period}:{$scope['kind']}:{$scope['scope_id']}:{$userId}:{$stage}",
-                    function () use ($userId, $late, $month, $what, $scope, $period, $stage) {
-                        $count = Notifier::send([$userId], 'leader_report',
-                            ($late ? 'Rappel : rapport' : 'Rapport').' '.French::de($month).' à remplir',
-                            ucfirst($what).' · un questionnaire guidé, quelques minutes suffisent.',
-                            "/admin/rapports-mensuels?remplir={$scope['kind']}:{$scope['scope_id']}&mois={$period}",
-                            ['period' => $period, 'kind' => $scope['kind'], 'scope_id' => $scope['scope_id']], $late ? 'high' : 'normal');
-                        if ($leader = User::with('profile')->find($userId)) {
-                            MemberMessages::reportReminder($leader, $period, $stage, $scope['kind'], $scope['scope_id'], $scope['scope_name']);
-                        }
-
-                        return $count;
-                    });
+                $key = "leader-report:{$period}:{$scope['kind']}:{$scope['scope_id']}:{$userId}:{$stage}";
+                $sent += $this->sendOnce($key, fn () => Notifier::send([$userId], 'leader_report',
+                    ($late ? 'Rappel : rapport' : 'Rapport').' '.French::de($month).' à remplir',
+                    ucfirst($what).' · un questionnaire guidé, quelques minutes suffisent.',
+                    "/admin/rapports-mensuels?remplir={$scope['kind']}:{$scope['scope_id']}&mois={$period}",
+                    ['period' => $period, 'kind' => $scope['kind'], 'scope_id' => $scope['scope_id']], $late ? 'high' : 'normal'));
+                $this->queueMailsOnce('mail:'.$key, function () use ($userId, $period, $stage, $scope) {
+                    if ($leader = User::with('profile')->find($userId)) {
+                        MemberMessages::reportReminder($leader, $period, $stage, $scope['kind'], $scope['scope_id'], $scope['scope_name']);
+                    }
+                });
             }
         }
 
@@ -478,6 +554,12 @@ class AutomationTick extends Command
         if ($now->hour < PlatformSettings::int('reminders.digest_hour')) {
             return 0;
         }
+
+        return $this->settled('service-digest', fn () => $this->sendServiceDigest($now));
+    }
+
+    private function sendServiceDigest(Carbon $now): int
+    {
         $day = $now->copy()->addDay()->startOfDay();
         $date = $day->toDateString();
         $occurrences = CalendarService::occurrences(
@@ -533,6 +615,12 @@ class AutomationTick extends Command
         if ($now->hour < 7) {
             return 0;
         }
+
+        return $this->settled('birthdays', fn () => $this->sendBirthdays($now));
+    }
+
+    private function sendBirthdays(Carbon $now): int
+    {
         $today = $now->toDateString();
         $people = collect(CalendarService::birthdays($now->copy()->startOfDay(), $now->copy()->endOfDay()))->flatMap(fn ($b) => $b['people']);
         if ($people->isEmpty()) {
@@ -576,6 +664,12 @@ class AutomationTick extends Command
         if ($now->hour < 8) {
             return 0;
         }
+
+        return $this->settled('weddings', fn () => $this->sendWeddings($now));
+    }
+
+    private function sendWeddings(Carbon $now): int
+    {
         $today = $now->toDateString();
         $sent = 0;
         $byLeader = [];
@@ -760,41 +854,46 @@ class AutomationTick extends Command
         };
         $period = $now->format('Y-m');
         if ($type && $now->hour >= 10) {
-            $sent += $this->sendOnce("fiss:{$period}:{$type}", function () use ($period, $type, $now, $daysLeft) {
-                $filled = SpiritualHealthForm::where('period', $period)->pluck('user_id');
-                $missing = User::whereHas('profile', fn ($p) => $p->where('is_completed', true))
-                    ->where(fn ($q) => ActivityService::whereEffective($q))->whereNotIn('id', $filled)->pluck('id');
+            $missing = fn () => User::whereHas('profile', fn ($p) => $p->where('is_completed', true))
+                ->where(fn ($q) => ActivityService::whereEffective($q))
+                ->whereNotIn('id', SpiritualHealthForm::where('period', $period)->select('user_id'))->pluck('id');
+            $sent += $this->sendOnce("fiss:{$period}:{$type}", function () use ($missing, $period, $type, $now, $daysLeft) {
                 $month = French::de($now->locale('fr')->isoFormat('MMMM'));
 
-                $count = Notifier::send($missing, 'fiss', $type === 'last' ? 'Rappel : votre fiche '.$month.' à remplir' : 'Votre fiche '.$month.' vous attend',
+                return Notifier::send($missing(), 'fiss', $type === 'last' ? 'Rappel : votre fiche '.$month.' à remplir' : 'Votre fiche '.$month.' vous attend',
                     $type === 'last'
                         ? 'Il reste '.max(0, $daysLeft).' jour(s) avant la fin du mois. Merci de remplir votre fiche de santé spirituelle.'
                         : 'Prenez quelques minutes pour remplir votre fiche de santé spirituelle '.$month.'.',
                     '/ma-fiche', ['period' => $period], $type === 'last' ? 'high' : 'normal');
-                MemberMessages::fissReminders($period, $type, $missing, $daysLeft);
-
-                return $count;
             });
+            $this->queueMailsOnce("mail:fiss:{$period}:{$type}", fn () => MemberMessages::fissReminders($period, $type, $missing(), $daysLeft));
         }
 
         // Patriarches : membres sans fiche le mois precedent.
         if ($now->day <= 5 && $now->hour >= 9) {
-            $previous = $now->copy()->startOfMonth()->subMonth();
-            $prevPeriod = $previous->format('Y-m');
-            $filled = SpiritualHealthForm::where('period', $prevPeriod)->pluck('user_id')->all();
-            $missing = Profile::where('is_completed', true)->where('created_at', '<=', $previous->copy()->endOfMonth())
-                ->whereNotIn('user_id', $filled ?: [0])
-                ->whereHas('user', fn ($u) => ActivityService::whereEffective($u))
-                ->get(['user_id', 'first_name', 'last_name', 'tribe_id']);
-            $month = $previous->locale('fr')->isoFormat('MMMM YYYY');
-            foreach ($missing->groupBy(fn ($p) => (int) $p->tribe_id) as $tribeId => $list) {
-                foreach (Recipients::tribeLeadersFor($tribeId ?: null, 'fiss.review') as $leaderId) {
-                    $names = $list->pluck('full_name')->all();
-                    $sent += $this->sendOnce("fiss-missing:{$prevPeriod}:{$leaderId}:{$tribeId}", fn () => Notifier::send([$leaderId], 'fiss',
-                        count($names)." membre(s) sans FISS en {$month}",
-                        CalendarService::joinNames(array_slice($names, 0, 8)).(count($names) > 8 ? '…' : '').' · Un encouragement peut les aider.',
-                        '/admin/rapports', ['period' => $prevPeriod, 'tribe_id' => $tribeId], 'high'));
-                }
+            $sent += $this->settled('fiss-missing', fn () => $this->sendFissMissing($now));
+        }
+
+        return $sent;
+    }
+
+    private function sendFissMissing(Carbon $now): int
+    {
+        $sent = 0;
+        $previous = $now->copy()->startOfMonth()->subMonth();
+        $prevPeriod = $previous->format('Y-m');
+        $missing = Profile::where('is_completed', true)->where('created_at', '<=', $previous->copy()->endOfMonth())
+            ->whereNotIn('user_id', SpiritualHealthForm::where('period', $prevPeriod)->select('user_id'))
+            ->whereHas('user', fn ($u) => ActivityService::whereEffective($u))
+            ->get(['user_id', 'first_name', 'last_name', 'tribe_id']);
+        $month = $previous->locale('fr')->isoFormat('MMMM YYYY');
+        foreach ($missing->groupBy(fn ($p) => (int) $p->tribe_id) as $tribeId => $list) {
+            foreach (Recipients::tribeLeadersFor($tribeId ?: null, 'fiss.review') as $leaderId) {
+                $names = $list->pluck('full_name')->all();
+                $sent += $this->sendOnce("fiss-missing:{$prevPeriod}:{$leaderId}:{$tribeId}", fn () => Notifier::send([$leaderId], 'fiss',
+                    count($names)." membre(s) sans FISS en {$month}",
+                    CalendarService::joinNames(array_slice($names, 0, 8)).(count($names) > 8 ? '…' : '').' · Un encouragement peut les aider.',
+                    '/admin/rapports', ['period' => $prevPeriod, 'tribe_id' => $tribeId], 'high'));
             }
         }
 
@@ -849,26 +948,35 @@ class AutomationTick extends Command
         if ($now->hour < 11 || $now->hour >= 19) {
             return 0;
         }
+
+        return $this->settled('email-invites', fn () => $this->sendEmailInvites($now));
+    }
+
+    private function sendEmailInvites(Carbon $now): int
+    {
         $sent = 0;
         User::where(fn ($q) => ActivityService::whereEffective($q))
             ->whereHas('profile', fn ($p) => $p->where('is_completed', true)->where(fn ($q) => $q->whereNull('email')->orWhere('email', '')))
+            // Une ecriture validee par lot : le suivi sur le compte et la notification restent lies.
             ->select(['id', 'notification_prefs'])->chunkById(200, function ($users) use ($now, &$sent) {
-                foreach ($users as $user) {
-                    $prefs = is_array($user->notification_prefs) ? $user->notification_prefs : [];
-                    $invites = array_values((array) ($prefs['email_invites'] ?? []));
-                    $due = count($invites) === 0
-                        || (count($invites) === 1 && Carbon::parse($invites[0])->lte($now->copy()->subDays(21)));
-                    if (! $due) {
-                        continue;
+                DB::transaction(function () use ($users, $now, &$sent) {
+                    foreach ($users as $user) {
+                        $prefs = is_array($user->notification_prefs) ? $user->notification_prefs : [];
+                        $invites = array_values((array) ($prefs['email_invites'] ?? []));
+                        $due = count($invites) === 0
+                            || (count($invites) === 1 && Carbon::parse($invites[0])->lte($now->copy()->subDays(21)));
+                        if (! $due) {
+                            continue;
+                        }
+                        $first = count($invites) === 0;
+                        $prefs['email_invites'] = array_merge($invites, [$now->toDateString()]);
+                        $user->forceFill(['notification_prefs' => $prefs])->save();
+                        $sent += Notifier::send([$user->id], 'profile',
+                            $first ? 'Recevez vos rappels par courriel' : 'Votre adresse courriel nous manque',
+                            'Ajoutez votre adresse en un instant : votre devoir, vos rappels de fiche et les messages importants arriveront aussi dans votre boîte courriel.',
+                            '/tableau-de-bord?courriel=1');
                     }
-                    $first = count($invites) === 0;
-                    $prefs['email_invites'] = array_merge($invites, [$now->toDateString()]);
-                    $user->forceFill(['notification_prefs' => $prefs])->save();
-                    $sent += Notifier::send([$user->id], 'profile',
-                        $first ? 'Recevez vos rappels par courriel' : 'Votre adresse courriel nous manque',
-                        'Ajoutez votre adresse en un instant : votre devoir, vos rappels de fiche et les messages importants arriveront aussi dans votre boîte courriel.',
-                        '/tableau-de-bord?courriel=1');
-                }
+                });
             });
 
         return $sent;
@@ -885,6 +993,12 @@ class AutomationTick extends Command
         if ($now->hour < 10) {
             return 0;
         }
+
+        return $this->settled('profiles', fn () => $this->sendProfileReminders($now));
+    }
+
+    private function sendProfileReminders(Carbon $now): int
+    {
         $slot = $now->format('o').'-'.intdiv((int) $now->format('W'), 2);
         $sent = 0;
         Profile::where('is_completed', true)->where('completion', '<', 100)
@@ -925,6 +1039,12 @@ class AutomationTick extends Command
         if ($now->hour < 9) {
             return 0;
         }
+
+        return $this->settled('followups', fn () => $this->sendFollowUps($now));
+    }
+
+    private function sendFollowUps(Carbon $now): int
+    {
         $sent = 0;
 
         // Arrivee = validation du compte par le pasteur (nouveaux comptes), sinon inscription.
@@ -990,7 +1110,7 @@ class AutomationTick extends Command
             return 0;
         }
 
-        return $this->sendOnce('absences:'.$now->toDateString(), function () use ($now) {
+        return $this->claimOnce('absences:'.$now->toDateString(), function () use ($now) {
             $lastSeen = 'COALESCE(last_seen_at, last_login_at)';
             $authorities = Recipients::withPermission('members.view_all');
             $byLeader = [];
@@ -1004,25 +1124,28 @@ class AutomationTick extends Command
                 ->where(fn ($q) => $q->whereNull('approval_decided_at')->orWhere('approval_decided_at', '<', $now->copy()->subDays(7)))
                 ->whereNotIn('id', $authorities ?: [0])
                 ->with('profile.tribe')->chunkById(100, function ($users) use ($now, &$byLeader, &$sent) {
-                    foreach ($users as $user) {
-                        $seen = collect([$user->last_seen_at, $user->last_login_at])->filter()->max();
-                        // Reserve l'envoi (une seule fois par absence, meme si deux passages se croisent).
-                        if (User::where('id', $user->id)->where(fn ($q) => $q->whereNull('absence_notified_at')->orWhere('absence_notified_at', '<', $seen))
-                            ->update(['absence_notified_at' => $now]) !== 1) {
-                            continue;
-                        }
-                        $days = (int) $seen->copy()->startOfDay()->diffInDays($now->copy()->startOfDay());
-                        MemberMessages::absence($user, $days, WelcomeBackService::for($user, $seen));
-                        $sent += Notifier::send([$user->id], 'system', 'Votre espace vous attend',
-                            'Votre dernière visite remonte à '.$days.' jours. Venez voir ce qui vous attend.', '/tableau-de-bord');
-                        if ($user->profile?->tribe_id) {
-                            foreach (Recipients::tribeRoleHolders((int) $user->profile->tribe_id, ['patriarche', 'assistant_pasteur']) as $leaderId) {
-                                if ($leaderId !== $user->id) {
-                                    $byLeader[$leaderId][] = $user->profile->full_name ?: $user->phone;
+                    // Une ecriture validee par lot (et non plusieurs par membre).
+                    DB::transaction(function () use ($users, $now, &$byLeader, &$sent) {
+                        foreach ($users as $user) {
+                            $seen = collect([$user->last_seen_at, $user->last_login_at])->filter()->max();
+                            // Reserve l'envoi (une seule fois par absence, meme si deux passages se croisent).
+                            if (User::where('id', $user->id)->where(fn ($q) => $q->whereNull('absence_notified_at')->orWhere('absence_notified_at', '<', $seen))
+                                ->update(['absence_notified_at' => $now]) !== 1) {
+                                continue;
+                            }
+                            $days = (int) $seen->copy()->startOfDay()->diffInDays($now->copy()->startOfDay());
+                            MemberMessages::absence($user, $days, WelcomeBackService::for($user, $seen));
+                            $sent += Notifier::send([$user->id], 'system', 'Votre espace vous attend',
+                                'Votre dernière visite remonte à '.$days.' jours. Venez voir ce qui vous attend.', '/tableau-de-bord');
+                            if ($user->profile?->tribe_id) {
+                                foreach (Recipients::tribeRoleHolders((int) $user->profile->tribe_id, ['patriarche', 'assistant_pasteur']) as $leaderId) {
+                                    if ($leaderId !== $user->id) {
+                                        $byLeader[$leaderId][] = $user->profile->full_name ?: $user->phone;
+                                    }
                                 }
                             }
                         }
-                    }
+                    });
                 });
             // Delai reel des reglages (et non « une semaine » ecrit en dur).
             $after = PlatformSettings::int('absences.after_days');

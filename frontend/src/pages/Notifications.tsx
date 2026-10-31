@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ApiError, peek } from '../api/client'
 import { toast } from '../toast'
 import { addDays, ymd } from '../utils/events'
+import { useLatestRequest } from '../utils/latestRequest'
 import { AppLayout } from '../components/AppLayout'
 import { PushSettings } from '../components/PushSettings'
 import { NotificationPrefs } from '../components/NotificationPrefs'
 import { SkeletonCard } from '../components/Skeleton'
+import { LoadError } from '../components/LoadError'
 import { usePulse } from '../pulse'
 import { getUnread, NOTIF_ICON, setUnread, timeAgo, useUnreadCount } from '../notifications'
 import type { AppNotification, NotificationPage } from '../types'
@@ -26,6 +28,13 @@ function bucket(iso: string | null): string {
   return 'Plus ancien'
 }
 
+/** Relecture apres « Afficher plus » : seules les nouveautes s'ajoutent en tete, le reste de la liste ne bouge pas. */
+function mergeHead(list: AppNotification[] | null, fresh: AppNotification[]): AppNotification[] {
+  const known = new Set((list ?? []).map((n) => n.id))
+  const updated = new Map(fresh.map((n) => [n.id, n]))
+  return [...fresh.filter((n) => !known.has(n.id)), ...(list ?? []).map((n) => updated.get(n.id) ?? n)]
+}
+
 export default function Notifications() {
   const navigate = useNavigate()
   const unread = useUnreadCount()
@@ -33,28 +42,55 @@ export default function Notifications() {
   const [items, setItems] = useState<AppNotification[] | null>(() => peek<NotificationPage>('/me/notifications?limit=30')?.notifications ?? null)
   const [hasMore, setHasMore] = useState(() => peek<NotificationPage>('/me/notifications?limit=30')?.has_more ?? false)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  // Une seule lecture de la tete de liste compte (la derniere) ; changer de filtre perime aussi la suite demandee.
+  const { begin: beginRead } = useLatestRequest()
+  const { begin: beginList, follow: followList } = useLatestRequest()
+  // Suite deja chargee (« Afficher plus ») : le pouls ne remet plus la liste aux 30 premieres.
+  const extended = useRef(false)
 
   const load = useCallback(() => {
+    const isLatest = beginRead()
     api<NotificationPage>(`/me/notifications?limit=30${filter === 'unread' ? '&unread=1' : ''}`)
-      .then((r) => { setItems(r.notifications); setHasMore(r.has_more); setUnread(r.unread) })
-      .catch(() => setItems([]))
-  }, [filter])
+      .then((r) => {
+        if (!isLatest()) return
+        setLoadError('')
+        setUnread(r.unread)
+        if (extended.current) { setItems((prev) => mergeHead(prev, r.notifications)); return }
+        setItems(r.notifications)
+        setHasMore(r.has_more)
+      })
+      // Derniere liste connue gardee ; sans liste, le message et « Réessayer » (jamais « Aucune notification »).
+      .catch((err) => { if (isLatest()) setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.') })
+  }, [filter, beginRead])
 
   // Liste deja vue : affichee tout de suite, la mise a jour se fait en silence.
   useEffect(() => {
     const known = peek<NotificationPage>(`/me/notifications?limit=30${filter === 'unread' ? '&unread=1' : ''}`)
+    beginList()
+    extended.current = false
+    setLoadError('')
     setItems(known?.notifications ?? null)
-    if (known) setHasMore(known.has_more)
+    setHasMore(known?.has_more ?? false)
     load()
-  }, [load, filter])
+  }, [load, filter, beginList])
   usePulse('unread', load)
 
   async function more() {
     if (!items?.length) return
+    const stillThisList = followList()
     setLoadingMore(true)
     try {
       const r = await api<NotificationPage>(`/me/notifications?limit=30&before=${items[items.length - 1].id}${filter === 'unread' ? '&unread=1' : ''}`)
-      setItems([...items, ...r.notifications]); setHasMore(r.has_more)
+      if (!stillThisList()) return
+      extended.current = true
+      setItems((prev) => {
+        const known = new Set((prev ?? []).map((n) => n.id))
+        return [...(prev ?? []), ...r.notifications.filter((n) => !known.has(n.id))]
+      })
+      setHasMore(r.has_more)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.firstMessage : 'Erreur.')
     } finally { setLoadingMore(false) }
   }
 
@@ -87,12 +123,13 @@ export default function Notifications() {
     setItems((prev) => prev?.map((x) => ({ ...x, read: true })) ?? null)
     setUnread(0)
     await api('/me/notifications/read-all', { method: 'POST', toast: 'Tout est marqué comme lu.' }).catch(() => {})
-    if (filter === 'unread') load()
+    if (filter === 'unread') { extended.current = false; load() }
   }
 
   async function clearRead() {
     if (!confirm('Retirer toutes les notifications déjà lues ?')) return
     await api('/me/notifications/clear-read', { method: 'DELETE' }).catch(() => {})
+    extended.current = false
     load()
   }
 
@@ -121,7 +158,8 @@ export default function Notifications() {
           </div>
 
           {items === null ? (
-            <div className="notif-list"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>
+            loadError ? <LoadError message={loadError} onRetry={() => { setLoadError(''); load() }} />
+              : <div className="notif-list"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>
           ) : items.length === 0 ? (
             <div className="empty-state">
               <Icon name="bell" size={28} />

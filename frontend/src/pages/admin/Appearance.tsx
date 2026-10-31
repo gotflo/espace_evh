@@ -95,7 +95,7 @@ export default function Appearance() {
   const thumb = (img: Img, ratio: number, label: string) => (
     <figure className="appearance-thumb" style={{ width: `min(100%, ${Math.round(ratio * 110)}px)` }}>
       <div className="framer-frame" style={{ aspectRatio: String(ratio), cursor: 'default' }}>
-        <img src={img.small} alt="" loading="lazy" style={{ objectPosition: `${img.x}% ${img.y}%` }} />
+        <img src={img.small} alt="" loading="lazy" decoding="async" style={{ objectPosition: `${img.x}% ${img.y}%` }} />
       </div>
       <figcaption>{label}</figcaption>
     </figure>

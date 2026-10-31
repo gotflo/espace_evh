@@ -107,7 +107,7 @@ class LeaderReportService
             return false;
         }
 
-        return $user->hasPermission('members.view_all')
+        return $user->isChurchWideFor('reports.view')
             || ($report->kind === 'tribe' && in_array($report->scope_id, $user->scopeTribeIds(), true));
     }
 
@@ -121,7 +121,7 @@ class LeaderReportService
         if (! self::canReview($user)) {
             return [];
         }
-        $all = $user->hasPermission('members.view_all');
+        $all = $user->isChurchWideFor('reports.view');
         $scopes = [];
 
         $tribes = Tribe::when(! $all, fn ($q) => $q->whereIn('id', $user->scopeTribeIds() ?: [0]))->orderBy('name')->get(['id', 'name']);

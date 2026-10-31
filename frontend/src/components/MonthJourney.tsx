@@ -16,7 +16,7 @@ export function MonthJourney() {
   const [data, setData] = useState<MyMonthData | null>(() => peek<MyMonthData>('/me/month') ?? null)
   const load = useCallback(() => { api<MyMonthData>('/me/month', { toast: false }).then(setData).catch(() => setData(null)) }, [])
   useEffect(() => { load() }, [load])
-  usePulse(['fiss', 'resolutions', 'assignments', 'appointments'], load)
+  usePulse(['mine', 'resolutions', 'assignments'], load)
 
   if (!data) return null
   const appt = data.appointment

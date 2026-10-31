@@ -286,6 +286,9 @@ class RoleController extends Controller
         $leadsDepartment = DepartmentLeadership::isLeaderRole($role, $scopeKind);
         if ($leadsDepartment) {
             DepartmentLeadership::assertCanLead(Department::findOrFail($scopeId), $user->id);
+            if ($refusal = DepartmentLeadership::protocolRefusal($actor, Department::findOrFail($scopeId))) {
+                abort(403, $refusal);
+            }
         }
 
         $duplicate = DB::table('role_user')->where([
@@ -318,7 +321,7 @@ class RoleController extends Controller
         }
         // Le role de responsable de departement le nomme aussitot responsable dans Organisation.
         if ($leadsDepartment) {
-            DepartmentLeadership::appoint(Department::findOrFail($scopeId), $user->id);
+            DepartmentLeadership::appoint(Department::findOrFail($scopeId), $user->id, $actor->id);
         }
 
         return response()->json(['message' => 'Rôle attribué.']);
@@ -342,6 +345,10 @@ class RoleController extends Controller
         if ($revoked?->key === User::SUPER_ADMIN && $user->id === $request->user()->id) {
             abort(403, 'Vous ne pouvez pas retirer votre propre rôle de super administrateur.');
         }
+
+        // Le role de protocole d'un responsable suit sa responsabilite : il se retire avec elle.
+        abort_if(DepartmentLeadership::isProtocolLeadership($revoked, $row->scope_kind), 422,
+            'Ce rôle suit la responsabilité du département Protocole : retirez le responsable dans Organisation.');
 
         DB::table('role_user')->where('id', $assignment)->delete();
         Audit::log('role.revoked', $user, $user->id, ['role' => $revoked?->key, 'scope_kind' => $row->scope_kind, 'scope_id' => $row->scope_id]);

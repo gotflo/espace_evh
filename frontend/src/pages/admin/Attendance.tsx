@@ -6,6 +6,7 @@ import { AppLayout } from '../../components/AppLayout'
 import type { AttendanceMember, AttendanceStatus, Department, RosterData } from '../../types'
 import { ymd } from '../../utils/events'
 import { confirmDiscard, useDirty } from '../../utils/dirty'
+import { useLatestRequest } from '../../utils/latestRequest'
 import { LoadError } from '../../components/LoadError'
 
 // Date locale (et non UTC : le soir, toISOString donnerait deja le lendemain), calculee a chaque
@@ -46,18 +47,24 @@ export default function Attendance() {
   const [comebacks, setComebacks] = useState<AttendanceMember[]>([])
   const sheet = useDirty(members.map((m) => [m.user_id, m.present, m.status]))
   const resetSheet = sheet.reset
+  const { begin: beginSheet } = useLatestRequest()
+  const { begin: beginSearch } = useLatestRequest()
 
+  // La feuille affichee est toujours celle de la date et du departement choisis : une reponse en retard
+  // (autre date) ne la remplace jamais, sinon on enregistrerait les presences d'un autre jour.
   const load = useCallback(() => {
+    const isLatest = beginSheet()
     setLoading(true); setLoadError('')
     api<RosterData>(`/admin/attendance?date=${date}&event=${encodeURIComponent(event)}&kind=${kind}${scopeQuery}`)
       .then((r) => {
+        if (!isLatest()) return
         setMembers(r.members.map((m) => ({ ...m, status: m.status ?? (kind === 'repetition' ? 'absent' : null) })))
         setHidden(r.inactive_hidden ?? 0)
         resetSheet()
       })
-      .catch((err) => { setMembers([]); resetSheet(); setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.') })
-      .finally(() => setLoading(false))
-  }, [date, event, kind, scopeQuery, resetSheet])
+      .catch((err) => { if (!isLatest()) return; setMembers([]); resetSheet(); setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.') })
+      .finally(() => { if (isLatest()) setLoading(false) })
+  }, [date, event, kind, scopeQuery, resetSheet, beginSheet])
   useEffect(() => { load() }, [load])
 
   // Autre date, evenement, type ou departement : une feuille cochee mais non enregistree n'est
@@ -67,14 +74,15 @@ export default function Attendance() {
   // Recherche : filtre la feuille ET retrouve un fidele inactif qui revient (masque par defaut).
   useEffect(() => {
     const q = query.trim()
+    const isLatest = beginSearch()
     if (q.length < 2 || hidden === 0) { setComebacks([]); return }
     const timer = window.setTimeout(() => {
       api<{ matches: AttendanceMember[] }>(`/admin/attendance?date=${date}&event=${encodeURIComponent(event)}&kind=${kind}${scopeQuery}&q=${encodeURIComponent(q)}`)
-        .then((r) => setComebacks(r.matches.filter((m) => !members.some((x) => x.user_id === m.user_id))))
-        .catch(() => setComebacks([]))
+        .then((r) => { if (isLatest()) setComebacks(r.matches.filter((m) => !members.some((x) => x.user_id === m.user_id))) })
+        .catch(() => { if (isLatest()) setComebacks([]) })
     }, 300)
     return () => window.clearTimeout(timer)
-  }, [query, hidden, date, event, kind, scopeQuery, members])
+  }, [query, hidden, date, event, kind, scopeQuery, members, beginSearch])
 
   function addBack(m: AttendanceMember) {
     setMembers((ms) => [{ ...m, present: true, status: 'present' }, ...ms])
@@ -154,8 +162,8 @@ export default function Attendance() {
           </p>
           {canRecord && kind === 'culte' && members.length > 0 && (
             <div className="attendance-quick">
-              <button className="btn-link" onClick={() => setAll(true)}>Tout présent</button>
-              <button className="btn-link" onClick={() => setAll(false)}>Tout absent</button>
+              <button className="btn-link" disabled={loading} onClick={() => setAll(true)}>Tout présent</button>
+              <button className="btn-link" disabled={loading} onClick={() => setAll(false)}>Tout absent</button>
             </div>
           )}
         </div>
@@ -186,7 +194,7 @@ export default function Attendance() {
             kind === 'repetition' ? (
               <div key={m.user_id} className="attendance-row reh-row">
                 {m.photo_url
-                  ? <img className="member-avatar" src={m.photo_url} alt="" />
+                  ? <img className="member-avatar" src={m.photo_url} alt="" width={42} height={42} loading="lazy" decoding="async" />
                   : <span className="member-avatar">{(m.full_name[0] ?? '?').toUpperCase()}</span>}
                 <span className="member-main">
                   <span className="member-name">{m.full_name}</span>
@@ -194,7 +202,7 @@ export default function Attendance() {
                 </span>
                 <span className="reh-status-btns">
                   {REH_STATUS.map((s) => (
-                    <button key={s.key} type="button" disabled={!canRecord}
+                    <button key={s.key} type="button" disabled={!canRecord || loading}
                       className={`reh-status reh-${s.key} ${m.status === s.key ? 'on' : ''}`}
                       onClick={() => canRecord && setStatus(m.user_id, s.key)}>{s.label}</button>
                   ))}
@@ -202,10 +210,10 @@ export default function Attendance() {
               </div>
             ) : (
               <button key={m.user_id} className={`attendance-row ${m.present ? 'present' : ''}`}
-                disabled={!canRecord} onClick={() => canRecord && toggle(m.user_id)}>
+                disabled={!canRecord || loading} onClick={() => canRecord && toggle(m.user_id)}>
                 <span className={`check-box ${m.present ? 'on' : ''}`}>{m.present ? '✓' : ''}</span>
                 {m.photo_url
-                  ? <img className="member-avatar" src={m.photo_url} alt="" />
+                  ? <img className="member-avatar" src={m.photo_url} alt="" width={42} height={42} loading="lazy" decoding="async" />
                   : <span className="member-avatar">{(m.full_name[0] ?? '?').toUpperCase()}</span>}
                 <span className="member-main">
                   <span className="member-name">{m.full_name}</span>
@@ -220,7 +228,7 @@ export default function Attendance() {
         </div>
 
         {canRecord && members.length > 0 && (
-          <button className="btn btn-primary mt" disabled={saving || !sheet.dirty} onClick={save}>
+          <button className="btn btn-primary mt" disabled={saving || loading || !sheet.dirty} onClick={save}>
             {saving ? <span className="spinner" /> : 'Enregistrer la session'}
           </button>
         )}

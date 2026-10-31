@@ -1,3 +1,5 @@
+import { hasUnsavedInput } from './dirty'
+
 const RELOAD_KEY = 'evh_reloaded_at'
 
 /** Fichier de code introuvable : une nouvelle version a ete mise en ligne depuis l'ouverture de l'app. */
@@ -6,8 +8,9 @@ export function isStaleBuildError(error: unknown): boolean {
   return /dynamically imported module|Importing a module script failed|ChunkLoadError|Loading chunk|preload/i.test(msg)
 }
 
-/** Recharge la page une seule fois par minute (evite toute boucle de rechargement). */
+/** Recharge la page une seule fois par minute (evite toute boucle de rechargement), jamais sur une saisie en cours. */
 export function reloadOnce(): boolean {
+  if (hasUnsavedInput()) return false
   try {
     const last = Number(sessionStorage.getItem(RELOAD_KEY) || 0)
     if (Date.now() - last < 60000) return false

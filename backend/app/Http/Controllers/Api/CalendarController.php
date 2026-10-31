@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class CalendarController extends Controller
@@ -121,31 +122,45 @@ class CalendarController extends Controller
             array_push($lines, ...$this->vevent($e, $host));
         }
 
-        // Anniversaires : evenements annuels d'une journee.
-        foreach (CalendarService::birthdays(now()->startOfDay(), now()->addYear()->subDay()->endOfDay()) as $b) {
-            $date = Carbon::parse($b['date']);
-            foreach ($b['people'] as $person) {
-                array_push($lines,
-                    'BEGIN:VEVENT',
-                    'UID:birthday-'.$person['user_id'].'@'.$host,
-                    'DTSTAMP:'.$stamp,
-                    'DTSTART;VALUE=DATE:'.$date->format('Ymd'),
-                    'DTEND;VALUE=DATE:'.$date->copy()->addDay()->format('Ymd'),
-                    'RRULE:FREQ=YEARLY',
-                    'SUMMARY:'.$this->escape('Anniversaire de '.$person['name']),
-                    'TRANSP:TRANSPARENT',
-                    'END:VEVENT',
-                );
-            }
-        }
-
-        $lines[] = 'END:VCALENDAR';
-        $body = implode("\r\n", array_map(fn ($l) => $this->fold($l), $lines))."\r\n";
+        $body = implode("\r\n", array_map(fn ($l) => $this->fold($l), $lines))."\r\n"
+            .$this->birthdaysBlock($host, $stamp)
+            ."END:VCALENDAR\r\n";
 
         return response($body, 200, [
             'Content-Type' => 'text/calendar; charset=utf-8',
             'Content-Disposition' => 'inline; filename="vases-dhonneur.ics"',
         ]);
+    }
+
+    /**
+     * Anniversaires : evenements annuels d'une journee, les memes pour tout le monde. Le bloc (plusieurs
+     * milliers de lignes) est garde 24 h : les agendas interrogent le flux chaque heure, membre par membre.
+     */
+    private function birthdaysBlock(string $host, string $stamp): string
+    {
+        return Cache::remember('ical:birthdays:'.now()->toDateString(), 86400, function () use ($host, $stamp) {
+            $block = '';
+            foreach (CalendarService::birthdays(now()->startOfDay(), now()->addYear()->subDay()->endOfDay()) as $b) {
+                $date = Carbon::parse($b['date']);
+                foreach ($b['people'] as $person) {
+                    foreach ([
+                        'BEGIN:VEVENT',
+                        'UID:birthday-'.$person['user_id'].'@'.$host,
+                        'DTSTAMP:'.$stamp,
+                        'DTSTART;VALUE=DATE:'.$date->format('Ymd'),
+                        'DTEND;VALUE=DATE:'.$date->copy()->addDay()->format('Ymd'),
+                        'RRULE:FREQ=YEARLY',
+                        'SUMMARY:'.$this->escape('Anniversaire de '.$person['name']),
+                        'TRANSP:TRANSPARENT',
+                        'END:VEVENT',
+                    ] as $line) {
+                        $block .= $this->fold($line)."\r\n";
+                    }
+                }
+            }
+
+            return $block;
+        });
     }
 
     /** @return array<int, string> */

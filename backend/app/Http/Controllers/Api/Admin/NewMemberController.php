@@ -70,9 +70,16 @@ class NewMemberController extends Controller
     /** Inscriptions recentes visibles par ce responsable, les plus recentes d'abord. */
     public static function recentQuery(User $viewer): Builder
     {
+        $since = now()->subDays(PlatformSettings::int('new_members.window_days'))->startOfDay()->toDateTimeString();
+        // Arrivee calculee impossible a chercher par index : on part de ceux qui peuvent etre arrives depuis
+        // (quelques dizaines), trouves par les index des deux dates, au lieu de parcourir toute l'eglise.
+        $candidates = Profile::where('created_at', '>=', $since)->pluck('user_id')
+            ->merge(User::where('approval_status', User::APPROVED)->where('approval_decided_at', '>=', $since)->pluck('id'))->unique()->values();
+
         return MemberScope::manageableProfiles(Profile::query(), $viewer)
             ->select('profiles.*')->selectRaw(self::ARRIVAL.' as arrived_at')
-            ->whereRaw(self::ARRIVAL.' >= ?', [now()->subDays(PlatformSettings::int('new_members.window_days'))->startOfDay()->toDateTimeString()])
+            ->whereIn('profiles.user_id', $candidates)
+            ->whereRaw(self::ARRIVAL.' >= ?', [$since])
             ->where('profiles.user_id', '!=', $viewer->id)
             ->with(['tribe:id,name', 'welcomer.profile:id,user_id,first_name,last_name', 'user:id,phone'])
             ->orderByRaw(self::ARRIVAL.' desc');
@@ -81,8 +88,9 @@ class NewMemberController extends Controller
     /** @return array{to_welcome: int, recent: int} */
     public static function counts(User $viewer): array
     {
-        $recent = self::recentQuery($viewer)->count();
-        $toWelcome = self::recentQuery($viewer)->whereNull('welcomed_at')->count();
+        $query = self::recentQuery($viewer);
+        $recent = (clone $query)->count();
+        $toWelcome = $query->whereNull('welcomed_at')->count();
 
         return ['to_welcome' => $toWelcome, 'recent' => $recent];
     }

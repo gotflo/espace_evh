@@ -175,7 +175,7 @@
 }
 .cal-share { position: relative; }
 .cal-share-menu {
-  position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: 290px; background: #fff;
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: min(290px, calc(100vw - 32px)); background: #fff;
   border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); box-shadow: 0 18px 40px rgba(16, 40, 36, 0.16); padding: 0.4rem;
 }
 .cal-share-item {
@@ -202,6 +202,7 @@
   border-right: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle);
 }
 .cal-grid .cal-cell:nth-child(7n + 7) { border-right: none; }
+.cal-cell:focus-visible { outline: 2px solid #0d8f8a; outline-offset: -2px; }
 .cal-grid.week .cal-cell { min-height: 360px; }
 .cal-cell.outside { background: #f3f4f4; }
 .cal-cell.outside .cal-num { color: var(--text-soft); }
@@ -276,6 +277,10 @@
 @media (max-width: 700px) {
   .cal-toolbar { gap: 0.6rem; padding: 0.6rem; }
   .cal-actions .cal-btn span { display: none; }
+  /* Menu Partager : ancre sur toute la barre d'actions (le bouton n'est pas au bord droit) : jamais coupe a gauche. */
+  .cal-actions { position: relative; }
+  .cal-share { position: static; }
+  .cal-share-menu { max-width: 100%; }
   .cal-head .full { display: none; }
   .cal-head .short { display: inline; }
   .cal-head { font-size: 0.74rem; padding: 0.5rem 0; }

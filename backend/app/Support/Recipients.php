@@ -49,6 +49,31 @@ class Recipients
             ->with('roles.permissions', 'ledDepartments:id')->get();
     }
 
+    /**
+     * Responsables qui peuvent suivre CE membre (autorites, ou portee sur son GEM, sa tribu, ses departements, lui-meme).
+     * Une requete au lieu de charger tous les responsables de l'eglise, a chaque demande ou inscription.
+     */
+    private static function staffFor(User $member): Collection
+    {
+        if (self::$batchStaff) {
+            return self::$batchStaff;
+        }
+        self::prepare($member);
+        $profile = $member->profile;
+        $departmentIds = $profile ? $profile->departments->pluck('id')->all() : [];
+
+        return User::exceptPlatformManagers()->where(fn ($q) => $q
+            ->whereHas('roles', fn ($r) => $r->where('key', 'super_admin'))
+            ->orWhereHas('roles.permissions', fn ($p) => $p->where('key', 'members.view_all'))
+            ->orWhereHas('roles', fn ($r) => $r->where(fn ($s) => $s
+                ->where(fn ($x) => $x->where('role_user.scope_kind', 'member')->where('role_user.scope_id', $member->id))
+                ->orWhere(fn ($x) => $x->where('role_user.scope_kind', 'gem')->where('role_user.scope_id', $profile?->gem_id ?: 0))
+                ->orWhere(fn ($x) => $x->where('role_user.scope_kind', 'tribe')->where('role_user.scope_id', $profile?->tribe_id ?: 0))
+                ->orWhere(fn ($x) => $x->where('role_user.scope_kind', 'department')->whereIn('role_user.scope_id', $departmentIds ?: [0]))))
+            ->orWhereHas('ledDepartments', fn ($d) => $d->whereIn('departments.id', $departmentIds ?: [0])))
+            ->with('roles.permissions', 'ledDepartments:id')->get();
+    }
+
     /** Profil et departements du membre charges une fois (et non pour chaque responsable teste). */
     private static function prepare(User $member): User
     {
@@ -72,7 +97,7 @@ class Recipients
     {
         self::prepare($member);
 
-        return self::staff()
+        return self::staffFor($member)
             ->filter(fn (User $u) => $u->id !== $member->id
                 && ! $u->hasPermission('members.view_all')
                 && $u->canManageMember($member))
@@ -88,7 +113,7 @@ class Recipients
     {
         self::prepare($member);
 
-        return self::staff()
+        return self::staffFor($member)
             ->filter(fn (User $u) => $u->id !== $member->id
                 && $u->canManageMember($member, $permission))
             ->pluck('id')->values()->all();
@@ -99,7 +124,7 @@ class Recipients
     {
         self::prepare($member);
 
-        return self::staff()
+        return self::staffFor($member)
             ->filter(fn (User $u) => $u->id !== $member->id && $u->canManageMember($member))
             ->pluck('id')->values()->all();
     }

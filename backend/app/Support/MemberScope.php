@@ -23,12 +23,11 @@ class MemberScope
         $table = $query->getModel()->getTable();
         // Inscription inachevee (tribu non choisie...) : la personne n'apparait chez aucun responsable.
         $query->where("{$table}.is_completed", true);
-        if ($user->hasPermission('members.view_all')) {
-            return $query;
-        }
-
         if ($permission && ! $user->hasPermission($permission)) {
             return $query->whereRaw('1 = 0');
+        }
+        if ($user->isChurchWideFor($permission)) {
+            return $query;
         }
         ['tribe' => $tribeIds, 'department' => $deptIds, 'gem' => $gemIds, 'member' => $memberIds] = $user->scopesFor($permission);
 
@@ -74,9 +73,9 @@ class MemberScope
     }
 
     /** L'utilisateur a-t-il une portee restreinte (n'est pas une autorite pastorale) ? */
-    public static function isScoped(User $user): bool
+    public static function isScoped(User $user, ?string $permission = null): bool
     {
-        return ! $user->hasPermission('members.view_all');
+        return ! $user->isChurchWideFor($permission);
     }
 
     /**

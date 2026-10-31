@@ -6,6 +6,7 @@ use App\Models\Department;
 use App\Models\Profile;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\Notifier;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -14,6 +15,8 @@ use Illuminate\Support\Facades\DB;
  *   le nomme responsable dans Organisation (et l'ajoute au departement s'il n'en est pas membre).
  * - Nommer un responsable dans Organisation lui attribue ce role sur le departement.
  * Retirer l'un retire l'autre (meme logique que le Garde et son GEM).
+ * Le role « Equipe du protocole » suit de la meme facon les responsables du departement Protocole : ils le recoivent
+ * sur ce departement et le perdent en cessant d'en etre responsables (une attribution a la main, sans portee, reste).
  */
 class DepartmentLeadership
 {
@@ -22,6 +25,11 @@ class DepartmentLeadership
 
     /** Responsables au plus par departement. */
     public const MAX = 5;
+
+    /** Departement du protocole (slug stable) et role que ses responsables recoivent. */
+    public const PROTOCOL_DEPARTMENT = 'protocole';
+
+    public const PROTOCOL_ROLE = 'protocole';
 
     public static function isLeaderRole(?Role $role, ?string $scopeKind): bool
     {
@@ -41,7 +49,7 @@ class DepartmentLeadership
     }
 
     /** Role attribue : le membre devient responsable dans Organisation (et membre du departement). */
-    public static function appoint(Department $department, int $userId): void
+    public static function appoint(Department $department, int $userId, ?int $actorId = null): void
     {
         $profileId = Profile::where('user_id', $userId)->value('id');
         if ($profileId && ! $department->members()->whereKey($profileId)->exists()) {
@@ -51,6 +59,7 @@ class DepartmentLeadership
         $before = self::leaderIds($department);
         if (! in_array($userId, $before, true)) {
             $department->leaders()->attach($userId);
+            self::syncProtocolRole($department, $before, [...$before, $userId], $actorId);
             Audit::log('department.leaders_updated', $department, null, ['leaders' => $before], ['leaders' => self::leaderIds($department)], ['via' => 'role']);
         }
     }
@@ -61,6 +70,7 @@ class DepartmentLeadership
         $before = self::leaderIds($department);
         if (in_array($userId, $before, true)) {
             $department->leaders()->detach($userId);
+            self::syncProtocolRole($department, $before, array_values(array_diff($before, [$userId])), null);
             Audit::log('department.leaders_updated', $department, null, ['leaders' => $before], ['leaders' => self::leaderIds($department)], ['via' => 'role']);
         }
     }
@@ -74,6 +84,7 @@ class DepartmentLeadership
      */
     public static function syncRole(Department $department, array $before, array $after, int $actorId): void
     {
+        self::syncProtocolRole($department, $before, $after, $actorId);
         $role = Role::where('key', self::ROLE)->first();
         if (! $role) {
             return;
@@ -107,9 +118,62 @@ class DepartmentLeadership
         self::syncRole($department, $before, self::leaderIds($department), $actorId ?? $userId);
     }
 
+    /** Le role de protocole, si ce departement est celui du protocole. */
+    private static function protocolRole(Department $department): ?Role
+    {
+        return $department->slug === self::PROTOCOL_DEPARTMENT ? Role::where('key', self::PROTOCOL_ROLE)->first() : null;
+    }
+
+    /** Attribution faite par la responsabilite du departement (et non a la main) : elle ne se retire pas seule. */
+    public static function isProtocolLeadership(?Role $role, ?string $scopeKind): bool
+    {
+        return $role?->key === self::PROTOCOL_ROLE && $scopeKind === 'department';
+    }
+
+    /**
+     * Nommer un responsable du Protocole confie aussi ce role : memes regles que pour l'attribuer (RoleGrants),
+     * sinon la nomination permettrait d'obtenir un acces que l'on n'a pas.
+     */
+    public static function protocolRefusal(User $actor, Department $department): ?string
+    {
+        $role = self::protocolRole($department);
+
+        return $role ? RoleGrants::assignRefusal($actor, $role) : null;
+    }
+
+    /**
+     * Les responsables du Protocole viennent de changer : le role suit.
+     *
+     * @param  array<int>  $before
+     * @param  array<int>  $after
+     */
+    public static function syncProtocolRole(Department $department, array $before, array $after, ?int $actorId): void
+    {
+        $role = self::protocolRole($department);
+        if (! $role) {
+            return;
+        }
+        $scope = ['role_id' => $role->id, 'scope_kind' => 'department', 'scope_id' => $department->id];
+        foreach (array_diff($after, $before) as $userId) {
+            if (! DB::table('role_user')->where($scope + ['user_id' => $userId])->exists()) {
+                DB::table('role_user')->insert($scope + ['user_id' => $userId, 'assigned_by' => $actorId, 'created_at' => now(), 'updated_at' => now()]);
+                Audit::log('role.assigned', User::find($userId), $userId, [], ['role' => $role->key, 'scope_kind' => 'department', 'scope_id' => $department->id]);
+                Notifier::send([$userId], 'role', 'Nouvelle fonction : '.$role->name, 'Responsable du protocole, vous organisez aussi les rendez-vous avec le pasteur.', '/tableau-de-bord');
+            }
+        }
+        foreach (array_diff($before, $after) as $userId) {
+            if (DB::table('role_user')->where($scope + ['user_id' => $userId])->delete()) {
+                Audit::log('role.revoked', User::find($userId), $userId, ['role' => $role->key, 'scope_kind' => 'department', 'scope_id' => $department->id]);
+            }
+        }
+    }
+
     /** Departement supprime : ses attributions du role disparaissent avec lui. */
     public static function forget(Department $department): void
     {
+        if ($protocol = self::protocolRole($department)) {
+            DB::table('role_user')->where('role_id', $protocol->id)->where('scope_kind', 'department')->where('scope_id', $department->id)->delete();
+        }
         $roleId = Role::where('key', self::ROLE)->value('id');
         if ($roleId) {
             DB::table('role_user')->where('role_id', $roleId)->where('scope_kind', 'department')->where('scope_id', $department->id)->delete();

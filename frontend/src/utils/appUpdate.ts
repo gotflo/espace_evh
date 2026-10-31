@@ -1,7 +1,9 @@
 // Mise a jour automatique de l'application ouverte : apres une mise en ligne, un onglet (ou l'application
 // installee) deja ouvert garde l'ancienne version en memoire. On compare regulierement le fichier
 // principal annonce par index.html a celui qui tourne ; s'il a change, la nouvelle version est chargee
-// au prochain changement de page, ou au retour dans l'application (jamais pendant une saisie).
+// au prochain changement de page, ou au retour dans l'application (jamais pendant une saisie, ni tant qu'un
+// formulaire modifie n'est pas enregistre).
+import { hasUnsavedInput } from './dirty'
 
 const CHECK_MS = 5 * 60 * 1000
 const MAIN = /\/assets\/index-[\w-]+\.js/
@@ -32,13 +34,20 @@ async function check(): Promise<void> {
 
 /** Nouvelle version en attente : chargee maintenant (appele a chaque changement de page). */
 export function applyPendingUpdate(): void {
-  if (pending && !typing()) window.location.reload()
+  if (pending && !typing() && !hasUnsavedInput()) window.location.reload()
 }
+
+// Version bien demarree : le service worker en fait sa page hors-ligne et retire les fichiers des anciennes versions.
+const ANNOUNCE_AFTER_MS = 20000
 
 let started = false
 export function startAppUpdates(): void {
-  if (started || !running()) return
+  const main = running()
+  if (started || !main) return
   started = true
+  window.setTimeout(() => {
+    navigator.serviceWorker?.ready.then((reg) => reg.active?.postMessage({ type: 'evh-build-started', main })).catch(() => {})
+  }, ANNOUNCE_AFTER_MS)
   window.setInterval(() => { if (document.visibilityState === 'visible') void check() }, CHECK_MS)
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return

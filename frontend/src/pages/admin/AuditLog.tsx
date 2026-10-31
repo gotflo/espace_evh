@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../../api/client'
+import { api, ApiError } from '../../api/client'
+import { toast } from '../../toast'
 import { AppLayout } from '../../components/AppLayout'
 import type { AuditEntry } from '../../types'
 import { Icon } from '../../components/Icon'
+import { LoadError } from '../../components/LoadError'
+import { useLatestRequest } from '../../utils/latestRequest'
 
 interface AuditResponse { logs: AuditEntry[]; has_more: boolean; actions: { key: string; label: string }[]; can_view_details?: boolean }
 
@@ -75,6 +78,8 @@ export default function AuditLog() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [open, setOpen] = useState<number | null>(null)
   const [details, setDetails] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const { begin, follow } = useLatestRequest()
 
   const query = useCallback((before?: number) => {
     const p = new URLSearchParams()
@@ -85,16 +90,24 @@ export default function AuditLog() {
     return api<AuditResponse>(`/admin/audit?${p.toString()}`)
   }, [group, from, to])
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    const isLatest = begin()
     setLogs(null)
-    query().then((r) => { setLogs(r.logs); setHasMore(r.has_more); setDetails(r.can_view_details !== false) }).catch(() => setLogs([]))
-  }, [query])
+    setLoadError('')
+    setHasMore(false)
+    query()
+      .then((r) => { if (!isLatest()) return; setLogs(r.logs); setHasMore(r.has_more); setDetails(r.can_view_details !== false) })
+      .catch((err) => { if (isLatest()) setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.') })
+  }, [query, begin])
+  useEffect(() => { load() }, [load])
 
   function more() {
     if (!logs?.length) return
+    const stillThisList = follow()
     setLoadingMore(true)
     query(logs[logs.length - 1].id)
-      .then((r) => { setLogs([...logs, ...r.logs]); setHasMore(r.has_more) })
+      .then((r) => { if (!stillThisList()) return; setLogs([...logs, ...r.logs]); setHasMore(r.has_more) })
+      .catch(() => toast.error('Impossible d’afficher la suite. Vérifiez votre réseau puis réessayez.')) // le bouton reste : nouvel essai possible
       .finally(() => setLoadingMore(false))
   }
 
@@ -110,7 +123,7 @@ export default function AuditLog() {
       </div>
 
       {logs === null ? (
-        <div className="audit-list">{[0, 1, 2, 3, 4].map((i) => <div key={i} className="skeleton skeleton-row" />)}</div>
+        loadError ? <LoadError message={loadError} onRetry={load} /> : <div className="audit-list">{[0, 1, 2, 3, 4].map((i) => <div key={i} className="skeleton skeleton-row" />)}</div>
       ) : logs.length === 0 ? (
         <div className="empty-state compact"><Icon name="audit" size={28} /><p>Aucune action enregistrée pour ces critères.</p></div>
       ) : (

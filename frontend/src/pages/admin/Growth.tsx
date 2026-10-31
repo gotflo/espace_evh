@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, ApiError, peek } from '../../api/client'
+import { toast } from '../../toast'
 import { useAuth } from '../../auth/AuthContext'
 import { AppLayout } from '../../components/AppLayout'
 import { SkeletonCard } from '../../components/Skeleton'
@@ -140,6 +141,9 @@ interface ResponsesData {
   assignment: Assignment & { trackable: boolean }
   responses: ({ user_id: number; name: string; tribe: string | null; photo_url: string | null; summary: string; actions: string; submitted_at: string | null } & Tracked)[]
   missing: ({ user_id: number; name: string; tribe: string | null; photo_url: string | null } & Tracked)[]
+  responses_total: number
+  missing_total: number
+  per_page: number
 }
 
 /** Lecture : pourcentage, avances rapides, vitesse. */
@@ -158,7 +162,20 @@ function TrackLine({ t, audio }: { t: Tracked; audio: boolean }) {
 function Responses({ id, onClose }: { id: number; onClose: () => void }) {
   const [data, setData] = useState<ResponsesData | null>(null)
   const [view, setView] = useState<'done' | 'missing'>('done')
+  const [pages, setPages] = useState({ done: 1, missing: 1 })
+  const [loadingMore, setLoadingMore] = useState(false)
   useEffect(() => { api<ResponsesData>(`/admin/assignments/${id}/responses`).then(setData).catch(() => onClose()) }, [id, onClose])
+
+  // Page suivante de la liste affichee, ajoutee a la suite de ce qui est deja la.
+  async function more() {
+    setLoadingMore(true)
+    try {
+      const page = pages[view] + 1
+      const r = await api<ResponsesData>(`/admin/assignments/${id}/responses?view=${view}&page=${page}`)
+      setData((d) => d && (view === 'done' ? { ...d, responses: [...d.responses, ...r.responses] } : { ...d, missing: [...d.missing, ...r.missing] }))
+      setPages((p) => ({ ...p, [view]: page }))
+    } catch { toast.error('Impossible d’afficher la suite. Vérifiez votre réseau puis réessayez.') } finally { setLoadingMore(false) }
+  }
 
   return (
     <ModalLayer className="modal-overlay" onMouseDown={onClose}>
@@ -170,8 +187,8 @@ function Responses({ id, onClose }: { id: number; onClose: () => void }) {
         {!data ? <span className="spinner" /> : (
           <>
             <div className="seg">
-              <button className={view === 'done' ? 'on' : ''} onClick={() => setView('done')}>Résumés ({data.responses.length})</button>
-              <button className={view === 'missing' ? 'on' : ''} onClick={() => setView('missing')}>Pas encore ({data.missing.length})</button>
+              <button className={view === 'done' ? 'on' : ''} onClick={() => setView('done')}>Résumés ({data.responses_total})</button>
+              <button className={view === 'missing' ? 'on' : ''} onClick={() => setView('missing')}>Pas encore ({data.missing_total})</button>
             </div>
             {view === 'done' ? (
               data.responses.length === 0 ? <p className="helper">Personne n'a encore répondu.</p> : data.responses.map((r) => (
@@ -204,6 +221,9 @@ function Responses({ id, onClose }: { id: number; onClose: () => void }) {
                 ))}
                 {data.missing.length === 0 && <p className="helper">Tout le monde a fait ce devoir.</p>}
               </ul>
+            )}
+            {(view === 'done' ? data.responses.length < data.responses_total : data.missing.length < data.missing_total) && (
+              <div className="center mt"><button className="btn btn-ghost" disabled={loadingMore} onClick={() => void more()}>{loadingMore ? <span className="spinner" /> : 'Voir plus'}</button></div>
             )}
           </>
         )}
@@ -282,7 +302,7 @@ function AssignmentsTab() {
 // ---------------------------------------------------------------- Suivi des RM
 
 interface RmMember { user_id: number; name: string; tribe: string | null; photo_url: string | null; taken: boolean; count: number; renewed: number; previous: { count: number; achieved: number; reviewed: boolean } | null }
-interface RmData { period: string; period_label: string; members: RmMember[]; taken: number; total: number }
+interface RmData { period: string; period_label: string; members: RmMember[]; taken: number; total: number; per_page: number }
 
 function ResolutionsTab() {
   const now = new Date()
@@ -291,17 +311,31 @@ function ResolutionsTab() {
   const [filter, setFilter] = useState<'all' | 'taken' | 'missing'>('all')
   const [data, setData] = useState<RmData | null>(() => peek<RmData>(`/admin/resolutions?period=${thisMonth}`) ?? null)
   const [error, setError] = useState('')
+  const [page, setPage] = useState(1)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const path = `/admin/resolutions?period=${period}${filter === 'all' ? '' : `&filter=${filter}`}`
   const load = useCallback(() => {
     setError('')
-    api<RmData>(`/admin/resolutions?period=${period}`).then(setData)
+    setPage(1)
+    api<RmData>(path).then(setData)
       .catch((err) => { setData(null); setError(err instanceof ApiError ? err.firstMessage : 'Erreur.') })
-  }, [period])
+  }, [path])
   useEffect(() => { load() }, [load])
   usePulse('resolutions', load)
+  async function more() {
+    setLoadingMore(true)
+    try {
+      const r = await api<RmData>(`${path}&page=${page + 1}`)
+      setData((d) => d && { ...d, members: [...d.members, ...r.members] })
+      setPage(page + 1)
+    } catch { toast.error('Impossible d’afficher la suite. Vérifiez votre réseau puis réessayez.') } finally { setLoadingMore(false) }
+  }
 
   // Echec de lecture : message et « Réessayer » (et non un squelette sans fin).
   if (!data) return error ? <LoadError message={error} onRetry={load} /> : <SkeletonCard />
-  const list = data.members.filter((m) => filter === 'all' || (filter === 'taken' ? m.taken : !m.taken))
+  // Cible de la liste affichee : elle vient du serveur, page par page.
+  const list = data.members
+  const expected = filter === 'all' ? data.total : filter === 'taken' ? data.taken : data.total - data.taken
   const pct = data.total ? Math.round((data.taken / data.total) * 100) : 0
 
   return (
@@ -335,6 +369,9 @@ function ResolutionsTab() {
         ))}
         {list.length === 0 && <p className="helper">Aucun membre dans cette liste.</p>}
       </ul>
+      {list.length < expected && (
+        <div className="center mt"><button className="btn btn-ghost" disabled={loadingMore} onClick={() => void more()}>{loadingMore ? <span className="spinner" /> : `Voir plus (${list.length} sur ${expected})`}</button></div>
+      )}
     </section>
   )
 }
@@ -342,7 +379,7 @@ function ResolutionsTab() {
 // ---------------------------------------------------------------- Suivi du Vertumetre
 
 interface VtMember { user_id: number; name: string; tribe: string | null; photo_url: string | null; filled: boolean }
-interface VtData { period: string; period_label: string; members: VtMember[]; filled: number; total: number }
+interface VtData { period: string; period_label: string; members: VtMember[]; filled: number; total: number; per_page: number }
 
 function VertumetreTab() {
   const now = new Date()
@@ -351,15 +388,28 @@ function VertumetreTab() {
   const [filter, setFilter] = useState<'all' | 'filled' | 'missing'>('all')
   const [data, setData] = useState<VtData | null>(null)
   const [error, setError] = useState('')
+  const [page, setPage] = useState(1)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const path = `/admin/vertumetre?period=${period}${filter === 'all' ? '' : `&filter=${filter}`}`
   const load = useCallback(() => {
     setError('')
-    api<VtData>(`/admin/vertumetre?period=${period}`).then(setData)
+    setPage(1)
+    api<VtData>(path).then(setData)
       .catch((err) => { setData(null); setError(err instanceof ApiError ? err.firstMessage : 'Erreur.') })
-  }, [period])
+  }, [path])
   useEffect(() => { load() }, [load])
+  async function more() {
+    setLoadingMore(true)
+    try {
+      const r = await api<VtData>(`${path}&page=${page + 1}`)
+      setData((d) => d && { ...d, members: [...d.members, ...r.members] })
+      setPage(page + 1)
+    } catch { toast.error('Impossible d’afficher la suite. Vérifiez votre réseau puis réessayez.') } finally { setLoadingMore(false) }
+  }
 
   if (!data) return error ? <LoadError message={error} onRetry={load} /> : <SkeletonCard />
-  const list = data.members.filter((m) => filter === 'all' || (filter === 'filled' ? m.filled : !m.filled))
+  const list = data.members
+  const expected = filter === 'all' ? data.total : filter === 'filled' ? data.filled : data.total - data.filled
   const pct = data.total ? Math.round((data.filled / data.total) * 100) : 0
 
   return (
@@ -386,6 +436,9 @@ function VertumetreTab() {
         ))}
         {list.length === 0 && <p className="helper">Aucun membre dans cette liste.</p>}
       </ul>
+      {list.length < expected && (
+        <div className="center mt"><button className="btn btn-ghost" disabled={loadingMore} onClick={() => void more()}>{loadingMore ? <span className="spinner" /> : `Voir plus (${list.length} sur ${expected})`}</button></div>
+      )}
     </section>
   )
 }

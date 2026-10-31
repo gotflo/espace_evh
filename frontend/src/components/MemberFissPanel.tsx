@@ -1,17 +1,34 @@
-import { useEffect, useState } from 'react'
-import { api } from '../api/client'
+import { useCallback, useEffect, useState } from 'react'
+import { api, ApiError } from '../api/client'
 import { FissDetail } from './FissDetail'
 import { FissEvolution } from './FissEvolution'
+import { LoadError } from './LoadError'
 import { compareFiss, TREND_ARROW, TREND_LABEL } from '../utils/fiss'
 import type { FissForm } from '../types'
 
 export function MemberFissPanel({ userId }: { userId: string }) {
   const [forms, setForms] = useState<FissForm[] | null>(null)
 
-  useEffect(() => {
-    api<{ forms: FissForm[] }>(`/admin/members/${userId}/fiss`).then((r) => setForms(r.forms)).catch(() => setForms([]))
-  }, [userId])
+  const [loadError, setLoadError] = useState('')
 
+  const load = useCallback(() => {
+    setLoadError('')
+    api<{ forms: FissForm[] }>(`/admin/members/${userId}/fiss`).then((r) => setForms(r.forms)).catch((err) => {
+      // Fiches reservees a d'autres responsables : le bloc reste simplement absent.
+      if (err instanceof ApiError && err.status === 403) setForms([])
+      else setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
+    })
+  }, [userId])
+  useEffect(() => { load() }, [load])
+
+  if (!forms && loadError) {
+    return (
+      <section className="panel mt">
+        <div className="panel-head"><h3>Fiches de santé spirituelle (FISS)</h3></div>
+        <LoadError compact message={loadError} onRetry={load} />
+      </section>
+    )
+  }
   if (!forms || forms.length === 0) return null
 
   return (

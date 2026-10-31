@@ -9,6 +9,8 @@ import { deadlineLabel } from '../../utils/exercises'
 import { localIso } from '../../utils/events'
 import { isYouTubeLink, useYouTubePreview } from '../../utils/youtubePreview'
 import { Icon } from '../../components/Icon'
+import { LoadError } from '../../components/LoadError'
+import { useLatestRequest } from '../../utils/latestRequest'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { toast } from '../../toast'
 import { usePulse } from '../../pulse'
@@ -302,17 +304,29 @@ export default function Exercises() {
   const tracking = canResponses ? Number(params.get('suivi')) || null : null
 
   const url = useCallback((p: number) => `/admin/exercises?page=${p}&status=${status}${mine ? '&mine=1' : ''}${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ''}`, [status, mine, q])
+  const [loadError, setLoadError] = useState('')
+  const { begin, follow } = useLatestRequest()
+  // Adresse de la liste affichee : si sa relecture echoue, elle reste ; un autre filtre n'a rien a montrer.
+  const shownUrl = useRef(known ? '/admin/exercises?page=1&status=all' : '')
   const load = useCallback(() => {
-    api<ExercisePage>(url(1)).then((r) => { setExercises(r.exercises); setTotal(r.total); setHasMore(r.has_more); setPage(1) })
-      .catch(() => { setExercises([]); setTotal(0); setHasMore(false) })
-  }, [url])
+    const first = url(1)
+    const isLatest = begin()
+    api<ExercisePage>(url(1))
+      .then((r) => { if (!isLatest()) return; setExercises(r.exercises); setTotal(r.total); setHasMore(r.has_more); setPage(1); setLoadError(''); shownUrl.current = first })
+      .catch((err) => {
+        if (!isLatest() || shownUrl.current === first) return
+        setExercises(null); setTotal(0); setHasMore(false); shownUrl.current = ''
+        setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
+      })
+  }, [url, begin])
   useEffect(() => { const t = window.setTimeout(load, q ? 250 : 0); return () => window.clearTimeout(t) }, [load, q])
   usePulse('exercises', load)
 
   function more() {
+    const stillThisList = follow()
     setLoadingMore(true)
-    api<ExercisePage>(url(page + 1)).then((r) => { setExercises((prev) => [...(prev ?? []), ...r.exercises]); setHasMore(r.has_more); setPage(page + 1) })
-      .catch(() => {}).finally(() => setLoadingMore(false))
+    api<ExercisePage>(url(page + 1)).then((r) => { if (!stillThisList()) return; setExercises((prev) => [...(prev ?? []), ...r.exercises]); setHasMore(r.has_more); setPage(page + 1) })
+      .catch(() => toast.error('Impossible d’afficher la suite. Vérifiez votre réseau puis réessayez.')).finally(() => setLoadingMore(false))
   }
 
   const openTracking = (id: number | null) => {
@@ -345,7 +359,9 @@ export default function Exercises() {
             </div>
             <input aria-label="Rechercher un exercice" className="input" type="search" placeholder="Rechercher un exercice…" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
-          {exercises === null ? (
+          {exercises === null && loadError ? (
+            <LoadError message={loadError} onRetry={() => { setLoadError(''); load() }} />
+          ) : exercises === null ? (
             <div className="exercise-rows">{[0, 1, 2].map((i) => <div key={i} className="skeleton skeleton-row" />)}</div>
           ) : exercises.length === 0 ? (
             <div className="empty-state"><Icon name="play" size={28} /><h3>Aucun exercice</h3>
@@ -356,7 +372,7 @@ export default function Exercises() {
               <div className="admin-exercises">
                 {exercises.map((e) => (
                   <article key={e.id} className={`admin-exercise ${e.is_closed ? 'is-closed' : ''}`}>
-                    {e.video ? <img className="exercise-thumb" src={e.video.thumbnail} alt="" loading="lazy" /> : <span className="exercise-thumb exercise-thumb-icon"><Icon name="book" size={22} /></span>}
+                    {e.video ? <img className="exercise-thumb" src={e.video.thumbnail} alt="" loading="lazy" decoding="async" /> : <span className="exercise-thumb exercise-thumb-icon"><Icon name="book" size={22} /></span>}
                     <div className="admin-exercise-main">
                       <strong>{e.title}</strong>
                       <small>{e.type_label} · {e.target}</small>

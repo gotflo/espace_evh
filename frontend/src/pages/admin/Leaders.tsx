@@ -5,6 +5,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { toast } from '../../toast'
 import { AppLayout } from '../../components/AppLayout'
 import { Icon } from '../../components/Icon'
+import { LoadError } from '../../components/LoadError'
 import { SkeletonCard } from '../../components/Skeleton'
 import { WeekReportView } from '../../components/leaderReports/WeekReportView'
 import { usePulse } from '../../pulse'
@@ -17,7 +18,7 @@ const initials = (name: string) => name.split(/\s+/).slice(0, 2).map((w) => w[0]
 
 function Avatar({ person }: { person: { name: string; photo_url: string | null } }) {
   return person.photo_url
-    ? <img className="mini-avatar" src={person.photo_url} alt="" />
+    ? <img className="mini-avatar" src={person.photo_url} alt="" width={34} height={34} loading="lazy" decoding="async" />
     : <span className="mini-avatar">{initials(person.name)}</span>
 }
 
@@ -225,12 +226,16 @@ export default function Leaders() {
   const gemId = Number(params.get('gem')) || null
   const [data, setData] = useState<LeadersData | null>(() => peek<LeadersData>('/admin/leaders') ?? null)
   const [denied, setDenied] = useState(false)
+  const [loadError, setLoadError] = useState('')
   const [query, setQuery] = useState('')
   const [exporting, setExporting] = useState(false)
   const canExport = useAuth().hasPermission('members.export')
 
   const load = useCallback(() => {
-    api<LeadersData>('/admin/leaders').then((d) => { setData(d); setDenied(false) }).catch(() => setDenied(true))
+    api<LeadersData>('/admin/leaders').then((d) => { setData(d); setDenied(false); setLoadError('') }).catch((err) => {
+      if (err instanceof ApiError && err.status === 403) setDenied(true)
+      else setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.')
+    })
   }, [])
   useEffect(() => { if (!gemId) load() }, [load, gemId])
   usePulse(['gem_reports', 'members'], load, !gemId)
@@ -277,7 +282,8 @@ export default function Leaders() {
           <p>L'annuaire des responsables est consulté par les pasteurs et les responsables de tribu.</p>
         </div>
       ) : data === null ? (
-        <div className="validation-grid"><SkeletonCard /><SkeletonCard /></div>
+        loadError ? <LoadError message={loadError} onRetry={() => { setLoadError(''); load() }} />
+          : <div className="validation-grid"><SkeletonCard /><SkeletonCard /></div>
       ) : (
         <>
           <div className="toolbar">

@@ -54,17 +54,20 @@ class GemController extends Controller
         $allowed = $this->allowedTribeIds($request->user());
         abort_if($allowed !== null && ! in_array((int) $data['tribe_id'], array_map('intval', $allowed), true), 403, 'Hors de votre tribu.');
 
-        $members = Profile::where('tribe_id', $data['tribe_id'])->where('is_completed', true)
-            ->with('gem:id,name')->orderBy('first_name')->orderBy('last_name')->get()
-            ->map(fn (Profile $p) => [
-                'user_id' => $p->user_id,
-                'full_name' => $p->full_name,
-                'photo_url' => $p->photo_url,
-                'gem' => $p->gem?->name,
-                'leads' => Gem::where('leader_user_id', $p->user_id)->pluck('name')->values(),
-            ]);
+        $profiles = Profile::where('tribe_id', $data['tribe_id'])->where('is_completed', true)
+            ->with('gem:id,name')->orderBy('first_name')->orderBy('last_name')
+            ->get(['id', 'user_id', 'first_name', 'last_name', 'photo_path', 'gem_id']);
+        // GEM dirige par chaque membre : une seule lecture (et non une par membre).
+        $leads = Gem::whereNotNull('leader_user_id')->whereIn('leader_user_id', $profiles->pluck('user_id'))
+            ->orderBy('id')->get(['leader_user_id', 'name'])->groupBy('leader_user_id');
 
-        return response()->json(['members' => $members]);
+        return response()->json(['members' => $profiles->map(fn (Profile $p) => [
+            'user_id' => $p->user_id,
+            'full_name' => $p->full_name,
+            'photo_url' => $p->photo_url,
+            'gem' => $p->gem?->name,
+            'leads' => $leads->get($p->user_id, collect())->pluck('name')->values(),
+        ])]);
     }
 
     public function store(Request $request): JsonResponse

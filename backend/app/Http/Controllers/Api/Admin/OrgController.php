@@ -124,6 +124,9 @@ class OrgController extends Controller
         if ($role && $current !== collect($ids)->sort()->values()->all() && ($refusal = RoleGrants::assignRefusal($request->user(), $role))) {
             abort(403, $refusal);
         }
+        if ($current !== collect($ids)->sort()->values()->all() && ($refusal = DepartmentLeadership::protocolRefusal($request->user(), $department))) {
+            abort(403, $refusal);
+        }
         // Tout membre de l'eglise (profil complet) peut etre nomme ; s'il ne fait pas encore partie
         // du departement, il y est ajoute (un nouveau departement peut ainsi recevoir ses responsables).
         $profiles = Profile::whereIn('user_id', $ids)->where('is_completed', true)->pluck('id', 'user_id');

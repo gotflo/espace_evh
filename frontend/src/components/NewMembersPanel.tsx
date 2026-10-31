@@ -77,7 +77,7 @@ export function NewMembersPanel() {
           <div key={m.user_id} className="newcomer-row">
             <button className="mini-row" onClick={() => navigate(`/admin/membres/${m.user_id}`)}>
               {m.photo_url
-                ? <img className="mini-avatar" src={m.photo_url} alt="" />
+                ? <img className="mini-avatar" src={m.photo_url} alt="" width={34} height={34} loading="lazy" decoding="async" />
                 : <span className="mini-avatar">{(m.full_name[0] ?? '?').toUpperCase()}</span>}
               <span className="newcomer-text">
                 <strong>{m.full_name}{m.days_ago !== null && m.days_ago <= 2 && <span className="new-tag">Nouveau</span>}</strong>

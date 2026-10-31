@@ -206,7 +206,9 @@ class User extends Authenticatable
             return [];
         }
 
-        return $this->ledDepartmentIdsCache ??= $this->ledDepartments()->pluck('departments.id')->map(fn ($id) => (int) $id)->all();
+        return $this->ledDepartmentIdsCache ??= $this->relationLoaded('ledDepartments')
+            ? $this->ledDepartments->pluck('id')->map(fn ($id) => (int) $id)->all()
+            : $this->ledDepartments()->pluck('departments.id')->map(fn ($id) => (int) $id)->all();
     }
 
     /** Toutes les cles de permissions : roles + responsabilite de departement. */
@@ -236,6 +238,29 @@ class User extends Authenticatable
         }
 
         return $this->isSuperAdmin() || $this->permissionKeys()->contains($key);
+    }
+
+    /**
+     * Autorite sur toute l'eglise, pour cette permission : members.view_all, et la permission donnee par un role
+     * sans portee. Une permission recue sur une portee etroite (Garde d'un GEM, patriarche d'une tribu...) ne vaut que
+     * dans cette portee, meme cumulee avec un role qui voit tous les membres (ex. Administrateur + Garde).
+     */
+    public function isChurchWideFor(?string $permission = null): bool
+    {
+        if (! $this->hasPermission('members.view_all')) {
+            return false;
+        }
+        if (! $permission || $this->isSuperAdmin() || $this->isPlatformManager()) {
+            return true;
+        }
+
+        return $this->holdsWithoutScope($permission);
+    }
+
+    /** Un role sans portee donne-t-il cette permission ? */
+    public function holdsWithoutScope(string $permission): bool
+    {
+        return $this->roles->contains(fn (Role $r) => ! $r->pivot->scope_kind && $r->permissions->contains('key', $permission));
     }
 
     /** A recharger apres un changement de roles au cours de la meme requete. */
@@ -307,10 +332,10 @@ class User extends Authenticatable
         if ($permission && ! $this->hasPermission($permission)) {
             return false;
         }
-        if ($this->hasPermission('members.view_all')) {
+        if ($this->isChurchWideFor($permission)) {
             return true;
         }
-        if (! $this->hasPermission('members.view_scope')) {
+        if (! $this->hasPermission('members.view_scope') && ! $this->hasPermission('members.view_all')) {
             return false;
         }
 
@@ -330,10 +355,10 @@ class User extends Authenticatable
         if ($permission && ! $this->hasPermission($permission)) {
             return false;
         }
-        if ($this->hasPermission('members.view_all')) {
+        if ($this->isChurchWideFor($permission)) {
             return true;
         }
-        if (! $this->hasPermission('members.view_scope') || $target->id === $this->id) {
+        if ((! $this->hasPermission('members.view_scope') && ! $this->hasPermission('members.view_all')) || $target->id === $this->id) {
             return false;
         }
 
@@ -385,7 +410,7 @@ class User extends Authenticatable
             return [];
         }
 
-        return $this->hasPermission('members.view_all') ? null : $this->scopeTribeIds();
+        return $this->isChurchWideFor('spiritual.view') ? null : $this->scopesFor('spiritual.view')['tribe'];
     }
 
     /** Peut-il voir les FISS de ce membre (contenu, fiche du mois remplie ou non, historique) ? */
@@ -416,7 +441,7 @@ class User extends Authenticatable
             return [];
         }
 
-        return $this->hasPermission('members.view_all') ? null : $this->scopesFor('meditations.view')['tribe'];
+        return $this->isChurchWideFor('meditations.view') ? null : $this->scopesFor('meditations.view')['tribe'];
     }
 
     /** Peut-il lire les fiches de meditation de ce membre ? */

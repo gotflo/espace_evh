@@ -26,11 +26,16 @@ function paths(node) {
   if (ts.isStringLiteralLike(node)) return [node.text]
   if (ts.isParenthesizedExpression(node)) return paths(node.expression)
   if (ts.isConditionalExpression(node)) return [...paths(node.whenTrue), ...paths(node.whenFalse)]
+  if (ts.isIdentifier(node)) {
+    const local = localAddress(node)
+    if (local) return paths(local)
+  }
   if (ts.isTemplateExpression(node)) {
     let result = [node.head.text]
     for (const span of node.templateSpans) {
       // Les deux valeurs autorisées par OrgSection ; les autres expressions sont des IDs ou des query params.
-      const values = span.expression.getText() === 'endpoint' ? ['tribes', 'departments'] : ['1']
+      const local = ts.isIdentifier(span.expression) ? localAddress(span.expression) : null
+      const values = span.expression.getText() === 'endpoint' ? ['tribes', 'departments'] : local ? paths(local) : ['1']
       result = result.flatMap(prefix => values.map(value => prefix + value + span.literal.text))
     }
     return result
@@ -41,6 +46,20 @@ function paths(node) {
     if (body) return paths(body)
   }
   throw new Error(`Expression URL à prendre en charge : ${node.getText()}`)
+}
+
+/** Variable du bloc englobant qui contient directement une adresse (const path = `/admin/...`). */
+function localAddress(id) {
+  for (let n = id.parent; n; n = n.parent) {
+    if (!ts.isBlock(n) && !ts.isSourceFile(n)) continue
+    for (const st of n.statements) {
+      if (!ts.isVariableStatement(st)) continue
+      for (const d of st.declarationList.declarations) {
+        if (d.name.getText() === id.text && d.initializer && (ts.isTemplateExpression(d.initializer) || ts.isStringLiteralLike(d.initializer)) && /^[`'"]\//.test(d.initializer.getText())) return d.initializer
+      }
+    }
+  }
+  return null
 }
 
 /** Meme recherche dans le fichier d'ou la fonction est importee (ex. utils/schedule.ts). */

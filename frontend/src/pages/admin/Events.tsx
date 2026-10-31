@@ -300,7 +300,7 @@ export default function Events() {
             <p className="event-meta-soft">↻ {e.recurrence_label}{e.recurrence_until ? ` jusqu'au ${new Date(e.recurrence_until + 'T00:00').toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' })}` : ''}</p>
           )}
           <p className="event-meta-soft">{e.target}</p>
-          {e.image_url && <img className="event-image" style={{ marginTop: '0.6rem', marginBottom: 0 }} src={e.image_url} alt={e.title} loading="lazy" />}
+          {e.image_url && <img className="event-image" style={{ marginTop: '0.6rem', marginBottom: 0 }} src={e.image_url} alt={e.title} loading="lazy" decoding="async" />}
           {canParticipants ? (
             <button className="event-participants-btn" onClick={() => openParticipants(e.id)}>
               <Icon name="members" size={14} /> {e.going_count} inscrit(s){e.volunteer_count > 0 ? ` · ${e.volunteer_count} volontaire(s)` : ''}

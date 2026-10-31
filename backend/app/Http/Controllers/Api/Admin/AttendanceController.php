@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Http\Controllers\Api\PulseController;
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\Department;
@@ -9,13 +10,18 @@ use App\Models\Profile;
 use App\Models\User;
 use App\Services\ActivityService;
 use App\Support\MemberScope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class AttendanceController extends Controller
 {
+    /** Membres pointes au plus sur une feuille (toute l'eglise, avec de la marge). */
+    private const MAX_MEMBERS = 20000;
+
     /**
      * Feuille de presence pour une date + un evenement : membres ACTIFS de la portee.
      * Les inactifs sont masques ; ceux deja pointes ce jour-la restent affiches, et un inactif
@@ -86,16 +92,17 @@ class AttendanceController extends Controller
             'attended_on' => ['required', 'date', 'before_or_equal:today'],
             'event' => ['required', 'string', 'max:60'],
             'kind' => ['nullable', 'in:culte,repetition'],
-            'present_user_ids' => ['array', 'max:3000'],
+            'present_user_ids' => ['array', 'max:'.self::MAX_MEMBERS],
             'present_user_ids.*' => ['integer'],
-            'statuses' => ['array', 'max:3000'], // repetition : { user_id: status }
+            'statuses' => ['array', 'max:'.self::MAX_MEMBERS], // repetition : { user_id: status }
             'department_id' => ['nullable', 'integer'],
         ]);
 
         $kind = $data['kind'] ?? 'culte';
         $department = $this->department($request);
         $data['event'] = $this->eventName($data['event'], $department);
-        $rosterIds = $this->scopedProfiles($request->user(), $department, 'attendance.record')->pluck('user_id');
+        $rosterIds = $this->rosterQuery($request->user(), $department, 'attendance.record')->pluck('profiles.user_id');
+        $inRoster = $rosterIds->flip();
         $recordedBy = $request->user()->id;
         $valid = ['present', 'retard', 'absent_justifie', 'absent'];
 
@@ -103,33 +110,46 @@ class AttendanceController extends Controller
         $rows = collect();
         if ($kind === 'repetition') {
             foreach (($data['statuses'] ?? []) as $uid => $status) {
-                if ($rosterIds->contains((int) $uid) && in_array($status, $valid, true)) {
+                if (isset($inRoster[(int) $uid]) && in_array($status, $valid, true)) {
                     $rows->push(['uid' => (int) $uid, 'status' => $status]);
                 }
             }
         } else {
-            foreach (collect($data['present_user_ids'] ?? [])->intersect($rosterIds) as $uid) {
-                $rows->push(['uid' => (int) $uid, 'status' => 'present']);
+            foreach (collect($data['present_user_ids'] ?? [])->unique() as $uid) {
+                if (isset($inRoster[(int) $uid])) {
+                    $rows->push(['uid' => (int) $uid, 'status' => 'present']);
+                }
             }
         }
 
-        DB::transaction(function () use ($data, $kind, $rosterIds, $rows, $recordedBy) {
-            Attendance::where('attended_on', $data['attended_on'])
-                ->where('event', $data['event'])->where('kind', $kind)
-                ->whereIn('member_user_id', $rosterIds)
-                ->delete();
+        // Une ecriture groupee par lot (et non une requete par membre) ; nouvel essai automatique si deux
+        // appels se croisent (blocage mutuel de la base).
+        $attendedOn = Carbon::parse($data['attended_on'])->toDateString();
+        $removed = 0;
+        DB::transaction(function () use ($attendedOn, $data, $kind, $rosterIds, $rows, $recordedBy, &$removed) {
+            $sheet = fn () => Attendance::where('attended_on', $attendedOn)->where('event', $data['event']);
+            // Meme jour et meme nom, mais une feuille d'un autre type : elle n'est jamais ecrasee.
+            abort_if($rows->isNotEmpty() && $sheet()->where('kind', '!=', $kind)->whereIn('member_user_id', $rows->pluck('uid'))->exists(), 422,
+                'Une feuille d\'un autre type existe déjà pour ce jour et cet événement.');
 
-            foreach ($rows as $r) {
-                Attendance::create([
+            $marked = $rows->pluck('uid')->flip();
+            foreach ($rosterIds->reject(fn ($uid) => isset($marked[$uid]))->chunk(500) as $chunk) {
+                $removed += $sheet()->where('kind', $kind)->whereIn('member_user_id', $chunk->values())->delete();
+            }
+            foreach ($rows->chunk(500) as $chunk) {
+                Attendance::upsert($chunk->map(fn ($r) => [
                     'member_user_id' => $r['uid'],
-                    'attended_on' => $data['attended_on'],
+                    'attended_on' => $attendedOn,
                     'event' => $data['event'],
                     'kind' => $kind,
                     'status' => $r['status'],
                     'recorded_by' => $recordedBy,
-                ]);
+                ])->values()->all(), ['member_user_id', 'attended_on', 'event'], ['status', 'recorded_by']);
             }
-        });
+        }, 3);
+        if ($removed > 0) {
+            PulseController::forgetCounts();
+        }
 
         $present = $rows->where('status', 'present')->count();
 
@@ -146,11 +166,19 @@ class AttendanceController extends Controller
      */
     private function scopedProfiles(User $user, ?Department $department, string $permission): Collection
     {
-        $query = Profile::with(['tribe', 'user:id,activity_status,activity_override'])->has('user')
+        return $this->rosterQuery($user, $department, $permission)
+            ->with(['tribe:id,name', 'user:id,activity_status,activity_override'])
+            ->orderBy('last_name')->orderBy('first_name')
+            ->get(['profiles.id', 'profiles.user_id', 'profiles.first_name', 'profiles.last_name', 'profiles.tribe_id', 'profiles.photo_path']);
+    }
+
+    /** Requete des membres de l'appel, sans rien charger : l'enregistrement n'a besoin que de leurs identifiants. */
+    private function rosterQuery(User $user, ?Department $department, string $permission): Builder
+    {
+        $query = Profile::query()->has('user')
             ->when($department, fn ($q) => $q->whereHas('departments', fn ($d) => $d->whereKey($department->id)));
 
-        return MemberScope::manageableProfiles($query, $user, $permission)
-            ->orderBy('last_name')->orderBy('first_name')->get();
+        return MemberScope::manageableProfiles($query, $user, $permission);
     }
 
     /**

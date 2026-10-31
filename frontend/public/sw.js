@@ -3,8 +3,16 @@
 //   l'application s'ouvre donc instantanement une fois installee.
 // - Navigation (routes) : reseau d'abord, repli sur le cache hors-ligne.
 // - L'API et les medias /storage passent toujours par le reseau (jamais en cache).
+// - Seules les reponses reussies vont en cache : une erreur passagere (404, 503) n'y reste jamais.
 const CACHE = 'evh-app-v5'
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/logo-vh.png', '/icon-192.png']
+
+function remember(req, res) {
+  if (!res.ok) return res
+  const copy = res.clone()
+  caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {})
+  return res
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(APP_SHELL)).catch(() => {}))
@@ -25,6 +33,8 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return
   // Jamais de cache pour l'API ni les medias dynamiques.
   if (url.pathname.startsWith('/api') || url.pathname.startsWith('/storage')) return
+  // Video : lue par morceaux, directement sur le reseau (trop lourde pour le cache).
+  if (url.pathname.endsWith('.mp4')) return
 
   // Navigation (routes SPA) : reseau d'abord, repli sur index.html hors-ligne.
   if (req.mode === 'navigate') {
@@ -37,11 +47,7 @@ self.addEventListener('fetch', (event) => {
   // Fichiers build /assets/ : noms horodates (immuables) => cache d'abord (ouverture immediate).
   if (url.pathname.startsWith('/assets/')) {
     event.respondWith(
-      caches.match(req).then((hit) => hit || fetch(req).then((res) => {
-        const copy = res.clone()
-        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {})
-        return res
-      })),
+      caches.match(req).then((hit) => (hit && hit.ok ? hit : fetch(req).then((res) => remember(req, res)))),
     )
     return
   }
@@ -49,13 +55,63 @@ self.addEventListener('fetch', (event) => {
   // Autres ressources (images, icones...) : reseau d'abord + mise en cache, repli cache.
   event.respondWith(
     fetch(req)
-      .then((res) => {
-        const copy = res.clone()
-        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {})
-        return res
-      })
+      .then((res) => remember(req, res))
       .catch(() => caches.match(req)),
   )
+})
+
+// ---------------------------------------------------------------- Entretien du cache
+// Les noms de fichiers changent a chaque mise en ligne : sans entretien, le cache grossirait sans fin. L'application
+// annonce la version qui a bien demarre (utils/appUpdate.ts) ; c'est le seul moment sur pour :
+// - faire de sa page la page hors-ligne : ses fichiers sont en cache, ce qui n'est pas sur juste apres un chargement ;
+// - retirer les fichiers des anciennes versions, seulement si aucun autre onglet ne tourne (il peut en avoir besoin).
+// index.html ne cite que le demarrage : les pages chargees a la demande, polices et drapeaux sont cites par les fichiers
+// JS et CSS, qu'on suit de proche en proche. Un fichier absent du cache n'a rien a retirer et n'est pas telecharge.
+const FILE_NAME = /[\w@~.-]+\.(?:js|css|woff2?|ttf|otf|svg|png|jpe?g|webp|gif|ico|mp3|mp4|webm|json)\b/g
+const assetName = (url) => new URL(url).pathname.slice('/assets/'.length)
+
+async function assetsInUse(cache, html, cached) {
+  const inUse = new Set()
+  const todo = html.match(FILE_NAME) || []
+  while (todo.length) {
+    const name = todo.pop()
+    const req = cached.get(name)
+    if (!req || inUse.has(name)) continue
+    inUse.add(name)
+    if (!/\.(?:js|css)$/.test(name)) continue
+    const res = await cache.match(req)
+    const found = (res ? await res.text() : '').match(FILE_NAME) || []
+    for (const other of found) todo.push(other)
+  }
+  return inUse
+}
+
+async function buildStarted(main) {
+  const cache = await caches.open(CACHE)
+  const cached = new Map()
+  for (const req of await cache.keys()) {
+    if (new URL(req.url).pathname.startsWith('/assets/')) cached.set(assetName(req.url), req)
+  }
+  if (!cached.has(main.slice('/assets/'.length))) return // premiere visite : la page n'est pas encore en cache
+
+  // La page en ligne doit annoncer cette version : sinon cet onglet est en retard, on ne touche a rien.
+  const res = await fetch('/index.html', { cache: 'no-store' })
+  if (!res.ok) return
+  const html = await res.clone().text()
+  if (!html.includes(main)) return
+  await cache.put('/index.html', res.clone())
+  await cache.put('/', res)
+
+  const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+  if (windows.length > 1) return
+  const inUse = await assetsInUse(cache, html, cached)
+  await Promise.all([...cached].filter(([name]) => !inUse.has(name)).map(([, req]) => cache.delete(req)))
+}
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'evh-build-started' && typeof event.data.main === 'string') {
+    event.waitUntil(buildStarted(event.data.main).catch(() => {}))
+  }
 })
 
 // ---------------------------------------------------------------- Notifications push

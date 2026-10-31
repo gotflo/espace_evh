@@ -3,6 +3,7 @@ import { api, ApiError, auth as tokenStore, onSessionExpired } from '../api/clie
 import { forgetPushOnThisDevice } from '../push'
 import { setUnread } from '../notifications'
 import { rememberPreviousVisit } from '../utils/visit'
+import { setDraftAccount } from '../utils/drafts'
 import type { AppSettings, AuthPayload, Membership, ModuleName, Profile, User, UserRole } from '../types'
 
 interface AuthState {
@@ -55,8 +56,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const wakers = useRef(new Set<() => void>())
   const [settings, setSettings] = useState<AppSettings>({ modules: {}, push_prompt_snooze_days: 3 })
 
-  const apply = useCallback((p: AuthPayload) => {
+  const apply = useCallback((p: AuthPayload, resumed = false) => {
     signedIn.current = !!p.user
+    setDraftAccount(p.user?.id ?? null, resumed)
     rememberPreviousVisit(p.user?.last_seen_at)
     setUser(p.user)
     setProfileState(p.profile)
@@ -71,6 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const reset = useCallback(() => {
     signedIn.current = false
+    setDraftAccount(null)
     setUser(null); setProfileState(null); setRoles([]); setPermissions([]); setIsSuperAdmin(false); setIsPlatformManager(false)
     setMembership({ status: 'approved', submitted: true })
   }, [])
@@ -106,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     for (let attempt = 0; ; attempt++) {
       try {
         const me = await api<AuthPayload>('/me')
-        apply(me)
+        apply(me, true)
         if (typeof me.unread === 'number') setUnread(me.unread)
         break
       } catch (err) {
