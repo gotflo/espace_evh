@@ -45,9 +45,6 @@ export interface GuideChapter {
 
 export interface GuideFaq { q: string; a: string; audience: GuideAudience }
 
-/** Presentation de l'application aux fideles : fichier de la plateforme, lue dans la page du Guide. */
-export const GUIDE_VIDEO = { src: '/guide-captures/presentation-application.mp4', poster: '/guide-captures/video-affiche.webp', title: 'Présentation de l’application' }
-
 export const GUIDE_CHAPTERS: GuideChapter[] = [
   // ------------------------------------------------------------------ Pour tous
   {

@@ -4,6 +4,7 @@ import { api, ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { Brand } from '../components/Brand'
 import { Icon } from '../components/Icon'
+import { PresentationVideo } from '../components/PresentationVideo'
 import { VerseBanner } from '../components/VerseBanner'
 
 import type { Profile } from '../types'
@@ -109,6 +110,8 @@ export function AccountPending() {
             </div>
           )}
         </section>
+
+        <PresentationVideo className="pending-email pending-video" title="En attendant, découvrez l’application" />
 
         <button type="button" className="btn-link pending-logout" onClick={() => void logout()}>Se déconnecter</button>
       </div>
