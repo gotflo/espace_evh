@@ -548,4 +548,32 @@ class PlatformRulesTest extends TestCase
         $this->assertSame('active', User::find($user->id)->activity_status);
         $this->assertSame(['member.inactivated', 'member.reactivated'], AuditLog::where('member_user_id', $user->id)->orderBy('id')->pluck('action')->all());
     }
+
+    public function test_resetting_the_inactivity_counter_restarts_the_delay_without_touching_last_visits(): void
+    {
+        $user = $this->member('+14185550661', $this->juda);
+        $login = now()->subMonths(4)->startOfSecond();
+        DB::table('users')->where('id', $user->id)->update(['last_login_at' => $login, 'created_at' => now()->subMonths(6)]);
+        $this->artisan('app:tick', ['--only' => 'activity'])->assertSuccessful();
+        $this->assertSame('inactive', User::find($user->id)->activity_status);
+        DB::table('notification_dispatches')->where('key', 'like', 'activity:%')->delete();
+        $messages = DB::table('user_notifications')->count() + DB::table('outbound_messages')->count();
+
+        $this->artisan('app:activity-reset')->assertSuccessful();
+        $this->artisan('app:tick', ['--only' => 'activity'])->assertSuccessful();
+
+        $fresh = User::find($user->id);
+        $this->assertSame('active', $fresh->activity_status, 'le delai repart d\'aujourd\'hui');
+        $this->assertSame($login->toDateTimeString(), $fresh->last_login_at->toDateTimeString(), 'la derniere connexion reste vraie');
+        $this->assertSame($messages, DB::table('user_notifications')->count() + DB::table('outbound_messages')->count(), 'aucun message');
+        $this->assertSame(1, AuditLog::where('action', 'members.activity_reset')->count());
+
+        // Le delai recommence bien a courir : sans activite, inactif de nouveau apres 3 mois.
+        $this->travel(3)->months();
+        $this->travel(2)->days();
+        DB::table('notification_dispatches')->where('key', 'like', 'activity:%')->delete();
+        $this->artisan('app:tick', ['--only' => 'activity'])->assertSuccessful();
+        $this->assertSame('inactive', User::find($user->id)->activity_status);
+        $this->travelBack();
+    }
 }

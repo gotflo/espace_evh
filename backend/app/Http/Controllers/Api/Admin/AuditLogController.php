@@ -31,6 +31,7 @@ class AuditLogController extends Controller
         'tribe.changed' => 'Tribu modifiée',
         'member.inactivated' => 'Membre devenu inactif',
         'member.reactivated' => 'Membre réactivé',
+        'members.activity_reset' => 'Compteur d’inactivité remis à zéro',
         'member.status_forced' => "Statut d'activité forcé",
         'member.belonging_updated' => 'Appartenance modifiée',
         'member.welcomed' => 'Nouvel inscrit accueilli',

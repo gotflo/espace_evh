@@ -20,6 +20,27 @@ use Illuminate\Support\Facades\DB;
  */
 class ActivityService
 {
+    /** Date de depart du compteur d'inactivite (reglage interne, voir app:activity-reset). */
+    private const COUNTED_FROM = 'members.activity_counted_from';
+
+    public static function countedFrom(): ?Carbon
+    {
+        $value = json_decode((string) DB::table('platform_settings')->where('key', self::COUNTED_FROM)->value('value'), true);
+
+        return is_string($value) ? Carbon::parse($value) : null;
+    }
+
+    /** Le compteur repart d'aujourd'hui pour tous les membres. */
+    public static function resetCounter(): Carbon
+    {
+        $now = now();
+        DB::table('platform_settings')->updateOrInsert(['key' => self::COUNTED_FROM], [
+            'value' => json_encode($now->toDateString()), 'created_at' => $now, 'updated_at' => $now,
+        ]);
+
+        return $now->copy()->startOfDay();
+    }
+
     /**
      * Statut d'activite EFFECTIF dans une requete sur les comptes (ou dans un whereHas('user', ...)) :
      * le statut force par un pasteur (activity_override) l'emporte sur le statut calcule chaque jour,
@@ -64,12 +85,14 @@ class ActivityService
         $lastFiss = SpiritualHealthForm::select('user_id', DB::raw('MAX(COALESCE(submitted_at, created_at)) as d'))
             ->groupBy('user_id')->pluck('d', 'user_id');
 
+        $countedFrom = self::countedFrom();
+
         $changes = ['inactivated' => [], 'reactivated' => []];
         User::whereHas('profile', fn ($p) => $p->where('is_completed', true))
             ->select(['id', 'last_login_at', 'last_seen_at', 'activity_status', 'activity_override', 'created_at'])
             // Une transaction par lot : une seule ecriture disque par lot de changements.
-            ->chunkById(300, function ($users) use ($lastAttendance, $lastFiss, &$changes) {
-                DB::transaction(function () use ($users, $lastAttendance, $lastFiss, &$changes) {
+            ->chunkById(300, function ($users) use ($lastAttendance, $lastFiss, $countedFrom, &$changes) {
+                DB::transaction(function () use ($users, $lastAttendance, $lastFiss, $countedFrom, &$changes) {
                     foreach ($users as $user) {
                         $dates = array_filter([
                             $user->last_seen_at,
@@ -77,6 +100,7 @@ class ActivityService
                             isset($lastAttendance[$user->id]) ? Carbon::parse($lastAttendance[$user->id]) : null,
                             isset($lastFiss[$user->id]) ? Carbon::parse($lastFiss[$user->id]) : null,
                             $user->created_at, // un nouvel inscrit n'est pas inactif des le depart
+                            $countedFrom, // compteur remis a zero : le delai repart de cette date
                         ]);
                         $last = $dates ? collect($dates)->max() : null;
                         $status = User::activityFrom(null, $last);
