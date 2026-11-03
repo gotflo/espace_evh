@@ -25,7 +25,7 @@ class Event extends Model
 
     protected $fillable = [
         'title', 'description', 'image_path', 'category', 'starts_at', 'ends_at', 'all_day',
-        'recurrence', 'recurrence_until', 'location', 'is_personal', 'remind_all', 'created_by',
+        'recurrence', 'recurrence_until', 'location', 'is_personal', 'remind_all', 'muted', 'created_by',
     ];
 
     protected $casts = [
@@ -35,6 +35,7 @@ class Event extends Model
         'recurrence_until' => 'date:Y-m-d',
         'is_personal' => 'boolean',
         'remind_all' => 'boolean',
+        'muted' => 'boolean', // rappels coupes : aucun message automatique pour cet evenement
     ];
 
     public function getImageUrlAttribute(): ?string

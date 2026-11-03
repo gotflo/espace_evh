@@ -128,8 +128,8 @@ class EventController extends Controller
         $event->refresh()->load('scopes');
         $after = [$event->starts_at?->toIso8601String(), $event->location, $event->recurrence, $event->all_day];
 
-        // Date, lieu ou frequence modifies : les inscrits sont prevenus.
-        if ($before !== $after) {
+        // Date, lieu ou frequence modifies : les inscrits sont prevenus (sauf rappels coupes).
+        if ($before !== $after && ! $event->muted) {
             Notifier::send($this->upcomingParticipants($event), 'event', 'Événement modifié : '.$event->title,
                 $this->when($event), '/calendrier?date='.$event->starts_at->toDateString(), ['event_id' => $event->id]);
         }
@@ -151,7 +151,7 @@ class EventController extends Controller
         $event->scopes()->delete();
         $event->delete();
 
-        if ($wasUpcoming) {
+        if ($wasUpcoming && ! $event->muted) {
             Notifier::send($participants, 'event', 'Événement annulé : '.$title,
                 "L'événement auquel vous étiez inscrit a été annulé.", '/calendrier');
         }

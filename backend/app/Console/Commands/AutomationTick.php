@@ -333,12 +333,12 @@ class AutomationTick extends Command
         return count($changes['inactivated']) + count($changes['reactivated']);
     }
 
-    /** Rappel la veille (dans les 24 h) a l'audience, et ~1 h avant aux inscrits. */
+    /** Rappel la veille (dans les 24 h) a l'audience, et ~1 h avant aux inscrits. Evenements aux rappels coupes : rien. */
     private function eventReminders(): int
     {
         $now = now();
         $sent = 0;
-        foreach (CalendarService::occurrences(Event::query()->with('scopes'), $now, $now->copy()->addHours(24)) as $o) {
+        foreach (CalendarService::occurrences(Event::query()->where('muted', false)->with('scopes'), $now, $now->copy()->addHours(24)) as $o) {
             /** @var Event $event */
             $event = $o['event'];
             /** @var Carbon $start */
@@ -563,7 +563,7 @@ class AutomationTick extends Command
         $day = $now->copy()->addDay()->startOfDay();
         $date = $day->toDateString();
         $occurrences = CalendarService::occurrences(
-            Event::query()->where('remind_all', true)->where('is_personal', false)->with('scopes'),
+            Event::query()->where('remind_all', true)->where('is_personal', false)->where('muted', false)->with('scopes'),
             $day, $day->copy()->endOfDay(),
         )->sortBy(fn ($o) => $o['start']->timestamp)->values();
         if ($occurrences->isEmpty()) {
