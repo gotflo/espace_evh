@@ -25,6 +25,7 @@ import { isStaleBuildError, reloadOnce } from './utils/reload'
 import { installClientErrorReporting } from './monitoring'
 import { installIosViewportFix } from './utils/iosViewport'
 import { startAppUpdates } from './utils/appUpdate'
+import { initInstall } from './utils/install'
 
 // Apres une mise a jour du site, un ancien ecran peut chercher un fichier qui n'existe plus :
 // on recharge une fois pour obtenir la nouvelle version (au lieu d'une page blanche).
@@ -36,6 +37,8 @@ installClientErrorReporting()
 installIosViewportFix()
 // Nouvelle version en ligne : chargee au prochain changement de page ou au retour dans l'application.
 startAppUpdates()
+// Installation : le bouton « Installer » d'Android est capte des maintenant (il arrive parfois avant l'affichage).
+initInstall()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

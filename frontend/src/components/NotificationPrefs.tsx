@@ -10,8 +10,8 @@ interface Prefs { categories: Category[]; channels?: Channel[] }
  * Choix des notifications : par categorie (telephone, courriel et texto suivent le meme choix), et
  * canaux « par courriel » / « par texto ». Une categorie coupee reste visible dans la cloche.
  */
-export function NotificationPrefs() {
-  const [open, setOpen] = useState(false)
+export function NotificationPrefs({ defaultOpen = false }: { defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen)
   const [prefs, setPrefs] = useState<Prefs | null>(null)
 
   useEffect(() => {

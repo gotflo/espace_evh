@@ -12,6 +12,10 @@
   "background_color": "#06302c",
   "theme_color": "#0a4a44",
   "categories": ["lifestyle", "social"],
+  "related_applications": [
+    { "platform": "webapp", "url": "https://espace.vasesdhonneurchicoutimi.org/manifest.webmanifest" }
+  ],
+  "prefer_related_applications": false,
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },

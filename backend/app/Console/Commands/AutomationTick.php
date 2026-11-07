@@ -92,7 +92,8 @@ class AutomationTick extends Command
             'rm-renew' => fn () => $this->renewForgottenResolutions(),
             // Plus d'une semaine sans connexion : courriel au membre, liste a son patriarche et a son AP.
             'absences' => fn () => $this->absences(),
-            'tribe-changes' => fn () => TribeChangeService::completeApproved(),
+            // Changements de tribu : rattrapage des validations completes, et courriel aux valideurs qui ne l'ont pas recu.
+            'tribe-changes' => fn () => TribeChangeService::completeApproved() + TribeChangeService::mailPendingApprovers(),
             // Secours de app:push-outbox : aucun push ne reste bloque si seule cette tache tourne.
             'push-outbox' => fn () => Notifier::flushOutbox(),
             // Secours de app:send-outbox : courriels, textos et courriel du jour des pasteurs.

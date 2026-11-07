@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
 import { api, ApiError, peek } from '../../api/client'
 import { AppLayout } from '../../components/AppLayout'
@@ -179,6 +179,18 @@ export default function Validations() {
   useEffect(() => { load() }, [load])
   usePulse('validations', load)
 
+  // Lien d'une notification ou d'un courriel (#tribus, #services) : la section vient a l'ecran une fois chargee.
+  const location = useLocation()
+  const scrolledTo = useRef('')
+  useEffect(() => {
+    const id = decodeURIComponent(location.hash.replace(/^#/, ''))
+    if (!data || !id || scrolledTo.current === id) return
+    const el = document.getElementById(id)
+    if (!el) return
+    scrolledTo.current = id
+    requestAnimationFrame(() => el.scrollIntoView({ block: 'start', behavior: 'smooth' }))
+  }, [data, location.hash])
+
   async function decideDeletion(id: number, name: string, approve: boolean, comment: string) {
     if (approve && !confirm(`Supprimer définitivement ${name} ?`)) return
     setBusy(`d${id}`)
@@ -351,7 +363,7 @@ export default function Validations() {
           )}
 
           {data.tribes.length > 0 && (
-            <section className="mt">
+            <section className="mt" id="tribus">
               <h3 className="section-label">Changements de tribu ({data.tribes.length})</h3>
               <div className="validation-grid">
                 {data.tribes.map((r) => (

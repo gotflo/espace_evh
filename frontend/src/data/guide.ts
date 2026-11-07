@@ -58,7 +58,9 @@ export const GUIDE_CHAPTERS: GuideChapter[] = [
         steps: [
           { title: 'Sur iPhone', text: 'Dans Safari : Partager, puis « Sur l’écran d’accueil ». Ouvrez ensuite l’application depuis son icône.' },
           { title: 'Sur Android', text: 'Touchez « Installer » dans le bandeau « Installer My vasesdhonneur ».' },
+          { title: 'Plus tard, à tout moment', text: 'Menu, puis « Paramètres » : la rubrique Application montre les gestes de votre téléphone.' },
         ],
+        tips: ['Quelqu’un n’y arrive pas ? Envoyez-lui le lien espace.vasesdhonneurchicoutimi.org/installer : il montre les gestes de son téléphone, même sans être connecté.'],
       },
       {
         id: 'numero', title: 'Un numéro de téléphone, un code SMS',
@@ -411,7 +413,7 @@ export const GUIDE_CHAPTERS: GuideChapter[] = [
         steps: [
           { title: 'Toutes vos notifications', text: 'Triées par jour. Touchez-en une pour ouvrir la bonne page : elle passe en « lue ».' },
           { title: 'Sur votre téléphone', text: '« Activer les notifications » pour être prévenu même quand l’application est fermée.' },
-          { title: 'Choisir mes notifications', text: 'Par sujet, et aussi par courriel. Les messages essentiels restent toujours actifs.' },
+          { title: 'Choisir mes notifications', text: 'Par sujet, et aussi par courriel (ici ou dans Menu, puis « Paramètres »). Les messages essentiels restent toujours actifs.' },
         ],
         link: { to: '/notifications', label: 'Ouvrir les alertes' },
       },

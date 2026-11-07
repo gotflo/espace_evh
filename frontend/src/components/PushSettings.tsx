@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { disablePush, enablePush, getPushState, PushError, type PushState } from '../push'
 import { toast } from '../toast'
+import { openInstallSheet } from '../utils/install'
 import { Icon } from './Icon'
 
 // « Plus tard » : date (ms) jusqu'a laquelle l'invitation reste cachee. Ensuite elle revient, tant que
@@ -85,7 +86,7 @@ export function PushSettings({ variant = 'card' }: { variant?: 'card' | 'prompt'
               : <span>Autorisez-les une fois pour recevoir les annonces et rappels.</span>}
           </div>
           <div className="push-prompt-actions">
-            {!showIosSteps && <button className="btn btn-primary small" onClick={() => setShowIosSteps(true)}>Comment faire</button>}
+            {!showIosSteps && <button className="btn btn-primary small" onClick={() => { setShowIosSteps(true); openInstallSheet() }}>Comment faire</button>}
             <button className="btn-link" onClick={snooze}>Plus tard</button>
           </div>
         </div>
@@ -134,7 +135,8 @@ export function PushSettings({ variant = 'card' }: { variant?: 'card' | 'prompt'
       {state === 'ios-install' && (
         <p className="helper">
           Sur iPhone, installez d'abord l'application : bouton <strong>Partager</strong> puis <strong>« Sur l'écran d'accueil »</strong>.
-          Ouvrez ensuite l'application depuis son icône et revenez ici.
+          Ouvrez ensuite l'application depuis son icône et revenez ici.{' '}
+          <button type="button" className="btn-link" onClick={openInstallSheet}>Voir les étapes</button>
         </p>
       )}
       {state === 'denied' && (

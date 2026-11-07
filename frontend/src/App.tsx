@@ -29,6 +29,8 @@ function page(load: () => Promise<{ default: ComponentType }>, admin = false, pa
 }
 const Login = lazy(() => import('./pages/Login'))
 const ProfileSetup = lazy(() => import('./pages/ProfileSetup'))
+const Install = lazy(() => import('./pages/Install'))
+const MySettings = page(() => import('./pages/MySettings'), false, '/parametres')
 const MyVertumetre = page(() => import('./pages/MyVertumetre'), false, '/vertumetre')
 const Dashboard = page(() => import('./pages/Dashboard'), false, '/tableau-de-bord')
 const Members = page(() => import('./pages/admin/Members'), true, '/admin/membres')
@@ -238,6 +240,8 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/connexion" element={<PublicOnly><Login /></PublicOnly>} />
+      {/* Lien a envoyer a qui n'arrive pas a installer l'application : ouvert a tous, connecte ou non. */}
+      <Route path="/installer" element={<Install />} />
       <Route path="/profil" element={<RequireAuth memberSpace><ProfileSetup /></RequireAuth>} />
       {/* Pages connectees : cadre persistant (menus affiches une fois, seul le contenu change). */}
       <Route element={<ShellLayout />}>
@@ -262,6 +266,7 @@ export default function App() {
         <Route path="/exercices" element={<RequireAuth module="exercises" requireComplete memberSpace><MyExercisesPage /></RequireAuth>} />
         <Route path="/exercices/:id" element={<RequireAuth module="exercises" requireComplete memberSpace><ExerciseDetail /></RequireAuth>} />
         <Route path="/notifications" element={<RequireAuth requireComplete><Notifications /></RequireAuth>} />
+        <Route path="/parametres" element={<RequireAuth requireComplete><MySettings /></RequireAuth>} />
         <Route path="/admin/membres" element={<RequireAuth requireComplete anyPermission={MEMBER_PERMS}><Members /></RequireAuth>} />
         <Route path="/admin/membres/:id" element={<RequireAuth requireComplete anyPermission={MEMBER_PERMS}><MemberDetail /></RequireAuth>} />
         <Route path="/admin/roles" element={<RequireAuth requireComplete anyPermission={['roles.manage']}><RolesAdmin /></RequireAuth>} />

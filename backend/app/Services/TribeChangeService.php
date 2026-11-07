@@ -49,7 +49,10 @@ class TribeChangeService
         $from = $req->fromTribe?->name ?? 'aucune';
         Notifier::send(self::approvers($req), 'tribe_change', "Changement de tribu demandé : {$name}",
             "De {$from} vers {$req->toTribe->name}".($reason ? ' · '.mb_substr($reason, 0, 120) : ''),
-            '/admin/validations', ['tribe_change_request_id' => $req->id], 'high');
+            '/admin/validations#tribus', ['tribe_change_request_id' => $req->id], 'high');
+        // Aussi par courriel : la cloche ne se voit qu'en ouvrant l'application, et le push n'arrive que sur
+        // les telephones abonnes (application installee, notifications acceptees).
+        self::mailApprovers($req);
 
         return $req;
     }
@@ -101,17 +104,30 @@ class TribeChangeService
                 ['sides' => $sides, 'comment' => $comment]);
             $req->load('approvals', 'fromTribe', 'toTribe', 'member.profile');
 
+            $by = $approver->loadMissing('profile')->profile?->full_name;
             if (! $approve) {
                 $req->forceFill(['status' => 'rejected', 'completed_at' => now()])->save();
                 Notifier::send([$req->user_id], 'tribe_change', 'Changement de tribu refusé',
                     $comment ?: "Votre demande pour rejoindre la tribu {$req->toTribe->name} n'a pas été acceptée.", '/mon-profil');
+                self::mailMember($req, 'rejected', $by, $comment);
 
                 return $req;
             }
 
-            if (! array_diff($req->requiredSides(), $req->approvedSides())) {
-                self::apply($req);
+            $missing = array_values(array_diff($req->requiredSides(), $req->approvedSides()));
+            if (! $missing) {
+                self::apply($req, $by);
+
+                return $req;
             }
+
+            // Une etape validee : le fidele le sait aussitot (application et courriel), et sait ce qu'il reste.
+            $validated = self::sidesLabel($req, $sides);
+            $waiting = self::sideTribeName($req, $missing[0]);
+            Notifier::send([$req->user_id], 'tribe_change', 'Changement de tribu : une étape validée',
+                ($by ? "{$by} a validé votre demande" : 'Votre demande a été validée').($validated ? " pour la tribu {$validated}" : '')
+                .". Il reste la validation des responsables de la tribu {$waiting}.", '/mon-profil');
+            self::mailMember($req, 'step', $by, $comment, $validated, $waiting);
 
             return $req;
         });
@@ -151,7 +167,7 @@ class TribeChangeService
     }
 
     /** Toutes les validations obtenues : le membre change de tribu. */
-    private static function apply(TribeChangeRequest $req): void
+    private static function apply(TribeChangeRequest $req, ?string $by = null): void
     {
         $profile = $req->member->profile;
         $old = $profile->tribe_id;
@@ -162,10 +178,129 @@ class TribeChangeService
 
         Notifier::send([$req->user_id], 'tribe_change', "Bienvenue dans la tribu {$req->toTribe->name} !",
             'Votre changement de tribu a été validé.', '/mon-profil');
+        self::mailMember($req, 'approved', $by);
         $name = $profile->full_name;
         Notifier::send(array_diff(Recipients::tribeLeadersFor($req->to_tribe_id, 'members.view_scope'), [$req->user_id]),
             'member', "Nouveau membre dans la tribu : {$name}",
             $req->fromTribe?->name ? "Arrivé(e) de la tribu {$req->fromTribe->name}." : 'Changement de tribu validé.', '/admin/membres/'.$req->user_id);
+    }
+
+    /**
+     * Courriel aux valideurs encore attendus (cotes pas encore approuves) : le membre, les deux tribus, le motif
+     * et un bouton vers la validation. Une seule fois par demande et par valideur (cle anti-doublon) : les
+     * automatismes peuvent repasser (demande deja en attente, patriarche nomme depuis) sans rien renvoyer.
+     */
+    public static function mailApprovers(TribeChangeRequest $req): int
+    {
+        $req->loadMissing('fromTribe', 'toTribe', 'member.profile', 'approvals');
+        $member = $req->member;
+        if (! $member || $req->status !== 'pending') {
+            return 0;
+        }
+        $approved = $req->approvedSides();
+        $ids = [];
+        if ($req->from_tribe_id && ! in_array('from', $approved, true)) {
+            $ids = Recipients::tribeLeadersFor($req->from_tribe_id, 'tribes.transfer', $req->user_id);
+        }
+        if (! in_array('to', $approved, true)) {
+            $ids = array_merge($ids, Recipients::tribeLeadersFor($req->to_tribe_id, 'tribes.transfer', $req->user_id));
+        }
+        $decided = $req->approvals->pluck('approver_id')->map(fn ($id) => (int) $id)->all();
+        $ids = array_values(array_diff(array_unique($ids), $decided));
+        if (! $ids) {
+            return 0;
+        }
+        $name = $member->profile?->full_name ?: (string) $member->phone;
+        $queued = 0;
+        foreach (User::with('profile')->whereIn('id', $ids)->get() as $leader) {
+            $email = Messenger::emailOf($leader);
+            if (! $email || ! Messenger::wants($leader, 'email', null)) {
+                continue;
+            }
+            $queued += Messenger::queueEmail($email, $leader->id, 'tribe_change_request', "Changement de tribu à valider : {$name}",
+                'tribe-change-request', [
+                    'firstName' => $leader->profile?->first_name ?: '',
+                    'memberName' => $name,
+                    'from' => $req->fromTribe?->name,
+                    'to' => $req->toTribe?->name,
+                    'reason' => $req->reason,
+                    'requestedOn' => $req->created_at->copy()->locale('fr')->isoFormat('dddd D MMMM [à] H[h]mm'),
+                    'url' => rtrim((string) config('app.url'), '/').'/admin/validations#tribus',
+                ], "tribe-change-request:{$req->id}:{$leader->id}") ? 1 : 0;
+        }
+
+        return $queued;
+    }
+
+    /**
+     * Automatismes : courriel aux valideurs des demandes en attente (30 derniers jours) qui ne l'ont pas encore
+     * recu (demande faite avant les courriels, patriarche nomme depuis). La cle anti-doublon evite tout renvoi.
+     */
+    public static function mailPendingApprovers(): int
+    {
+        $queued = 0;
+        $pending = TribeChangeRequest::where('status', 'pending')->where('created_at', '>=', now()->subDays(30))
+            ->with('fromTribe', 'toTribe', 'member.profile', 'approvals')->get();
+        foreach ($pending as $req) {
+            $queued += self::mailApprovers($req);
+        }
+
+        return $queued;
+    }
+
+    /**
+     * Courriel au fidele a chaque decision : etape validee (et ce qu'il reste), changement valide, ou refus.
+     * Courriel si son adresse est remplie, sinon texto (si les textos sont configures). Une fois par decision.
+     */
+    private static function mailMember(TribeChangeRequest $req, string $outcome, ?string $by, ?string $comment = null,
+        ?string $validated = null, ?string $waiting = null): void
+    {
+        $member = User::with('profile')->find($req->user_id);
+        if (! $member) {
+            return;
+        }
+        $to = (string) $req->toTribe?->name;
+        $url = rtrim((string) config('app.url'), '/').'/mon-profil';
+        [$kind, $subject, $sms] = match ($outcome) {
+            'approved' => ['tribe_change_approved', "Bienvenue dans la tribu {$to}",
+                "My vasesdhonneur : votre changement de tribu est validé. Bienvenue dans la tribu {$to} !"],
+            'rejected' => ['tribe_change_rejected', 'Votre demande de changement de tribu',
+                "My vasesdhonneur : votre demande pour rejoindre la tribu {$to} n'a pas été acceptée."],
+            default => ['tribe_change_step', 'Changement de tribu : une étape validée',
+                "My vasesdhonneur : une étape de votre changement de tribu est validée. Il reste la validation de la tribu {$waiting}."],
+        };
+        Messenger::toMember($member, $kind, "tribe-change-{$outcome}:{$req->id}", [
+            'subject' => $subject,
+            'view' => 'tribe-change-decision',
+            'data' => [
+                'outcome' => $outcome,
+                'firstName' => $member->profile?->first_name ?: '',
+                'from' => $req->fromTribe?->name,
+                'to' => $to,
+                'by' => $by,
+                'comment' => $comment,
+                'validated' => $validated,
+                'waiting' => $waiting,
+                'url' => $url,
+            ],
+        ], $sms.' '.$url);
+    }
+
+    /** Nom de la tribu d'un cote (« from » : l'ancienne, « to » : la nouvelle). */
+    private static function sideTribeName(TribeChangeRequest $req, string $side): string
+    {
+        return (string) ($side === 'from' ? $req->fromTribe?->name : $req->toTribe?->name);
+    }
+
+    /** Tribus pour lesquelles une decision vient d'etre prise (null pour « both » : les deux d'un coup). */
+    private static function sidesLabel(TribeChangeRequest $req, array $sides): ?string
+    {
+        if (in_array('both', $sides, true)) {
+            return null;
+        }
+        $names = array_values(array_filter(array_map(fn (string $s) => self::sideTribeName($req, $s), $sides)));
+
+        return $names ? implode(' et ', $names) : null;
     }
 
     /** Personnes a prevenir : responsables de l'ancienne et de la nouvelle tribu (ou autorites). */

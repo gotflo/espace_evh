@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Mail\NotificationMail;
 use App\Models\AuditLog;
 use App\Models\Department;
 use App\Models\FamilyLink;
 use App\Models\FissEditRequest;
+use App\Models\OutboundMessage;
 use App\Models\Profile;
 use App\Models\Role;
 use App\Models\SpiritualHealthForm;
@@ -13,6 +15,7 @@ use App\Models\Tribe;
 use App\Models\TribeChangeRequest;
 use App\Models\User;
 use App\Models\UserNotification;
+use App\Services\Messenger;
 use App\Support\ProfileCompletion;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -259,6 +262,95 @@ class PlatformRulesTest extends TestCase
         $this->assertSame('rejected', $req->fresh()->status);
         $this->assertSame($this->juda->id, Profile::where('user_id', $member->id)->value('tribe_id'));
         $this->assertSame(1, UserNotification::where('user_id', $member->id)->where('title', 'Changement de tribu refusé')->count());
+    }
+
+    public function test_tribe_change_emails_the_patriarchs_and_tells_the_member_each_decision_by_notification_and_email(): void
+    {
+        $from = $this->give($this->member('+14185550542', $this->juda, 'PJuda', 'T', ['email' => 'pjuda@example.org']), 'patriarche', 'tribe', $this->juda->id);
+        $to = $this->give($this->member('+14185550543', $this->levi, 'PLevi', 'T', ['email' => 'plevi@example.org']), 'patriarche', 'tribe', $this->levi->id);
+        $member = $this->member('+14185550544', $this->juda, 'Paul', 'Martin', ['email' => 'paul@example.org']);
+
+        Sanctum::actingAs($member);
+        $this->postJson('/api/me/tribe-change', ['to_tribe_id' => $this->levi->id, 'reason' => 'Je déménage à Jonquière'])->assertCreated();
+        $req = TribeChangeRequest::first();
+
+        // Les deux patriarches : notification (vers la section des changements de tribu) ET courriel.
+        foreach ([$from, $to] as $patriarch) {
+            $this->assertSame('/admin/validations#tribus', UserNotification::where('user_id', $patriarch->id)->where('type', 'tribe_change')->value('url'));
+            $mail = OutboundMessage::where('user_id', $patriarch->id)->where('kind', 'tribe_change_request')->sole();
+            $this->assertSame('email', $mail->channel);
+            $this->assertSame('Changement de tribu à valider : Paul Martin', $mail->subject);
+            $this->assertSame(Messenger::PRIORITY_URGENT, (int) $mail->priority);
+            $html = (new NotificationMail($mail->subject, $mail->view, $mail->payload))->render();
+            $this->assertStringContainsString('Je déménage à Jonquière', $html);
+            $this->assertStringContainsString('Tribu Lévi', $html);
+            $this->assertStringContainsString('/admin/validations#tribus', $html);
+        }
+
+        // Les automatismes ne renvoient rien : chaque patriarche l'a deja recu.
+        $this->artisan('app:tick', ['--only' => 'tribe-changes'])->assertSuccessful();
+        $this->assertSame(2, OutboundMessage::where('kind', 'tribe_change_request')->count());
+
+        // Premiere validation : le fidele sait qui a valide et ce qu'il reste (notification + courriel).
+        Sanctum::actingAs($from);
+        $this->postJson("/api/admin/validations/tribe/{$req->id}", ['decision' => 'approved'])->assertOk();
+        $step = UserNotification::where('user_id', $member->id)->where('title', 'Changement de tribu : une étape validée')->sole();
+        $this->assertStringContainsString('PJuda T a validé votre demande pour la tribu Juda', $step->body);
+        $this->assertStringContainsString('Il reste la validation des responsables de la tribu Lévi', $step->body);
+        $mail = OutboundMessage::where('user_id', $member->id)->where('kind', 'tribe_change_step')->sole();
+        $this->assertSame('paul@example.org', $mail->recipient);
+        $html = (new NotificationMail($mail->subject, $mail->view, $mail->payload))->render();
+        $this->assertStringContainsString('Une étape de votre demande est validée', $html);
+        $this->assertStringContainsString('Lévi', $html);
+        // Le patriarche qui a deja valide n'est plus relance par les automatismes.
+        $this->artisan('app:tick', ['--only' => 'tribe-changes'])->assertSuccessful();
+        $this->assertSame(2, OutboundMessage::where('kind', 'tribe_change_request')->count());
+
+        // Derniere validation : changement applique, notification + courriel de bienvenue.
+        Sanctum::actingAs($to);
+        $this->postJson("/api/admin/validations/tribe/{$req->id}", ['decision' => 'approved'])->assertOk();
+        $this->assertSame(1, UserNotification::where('user_id', $member->id)->where('title', 'Bienvenue dans la tribu Lévi !')->count());
+        $mail = OutboundMessage::where('user_id', $member->id)->where('kind', 'tribe_change_approved')->sole();
+        $this->assertSame('Bienvenue dans la tribu Lévi', $mail->subject);
+        $html = (new NotificationMail($mail->subject, $mail->view, $mail->payload))->render();
+        $this->assertStringContainsString('Vous faites désormais partie de la tribu', $html);
+        $this->assertSame(1, OutboundMessage::where('user_id', $member->id)->where('kind', 'tribe_change_step')->count());
+    }
+
+    public function test_tribe_change_refusal_is_emailed_to_the_member_with_the_comment(): void
+    {
+        $from = $this->give($this->member('+14185550545', $this->juda, 'PJuda'), 'patriarche', 'tribe', $this->juda->id);
+        $member = $this->member('+14185550546', $this->juda, 'Anne', 'T', ['email' => 'anne@example.org']);
+        Sanctum::actingAs($member);
+        $this->postJson('/api/me/tribe-change', ['to_tribe_id' => $this->levi->id, 'reason' => 'Raison'])->assertCreated();
+
+        Sanctum::actingAs($from);
+        $this->postJson('/api/admin/validations/tribe/'.TribeChangeRequest::first()->id, ['decision' => 'rejected', 'comment' => 'Parlons-en dimanche'])->assertOk();
+        $mail = OutboundMessage::where('user_id', $member->id)->where('kind', 'tribe_change_rejected')->sole();
+        $html = (new NotificationMail($mail->subject, $mail->view, $mail->payload))->render();
+        $this->assertStringContainsString('Parlons-en dimanche', $html);
+        $this->assertStringContainsString('n’a pas été acceptée', $html);
+    }
+
+    public function test_pending_tribe_change_made_before_the_emails_reaches_the_patriarchs_through_the_automations(): void
+    {
+        $patriarch = $this->give($this->member('+14185550547', $this->juda, 'PJuda', 'T', ['email' => 'pjuda@example.org']), 'patriarche', 'tribe', $this->juda->id);
+        $noMail = $this->give($this->member('+14185550548', $this->levi, 'PLevi'), 'patriarche', 'tribe', $this->levi->id);
+        $member = $this->member('+14185550549', $this->juda, 'Silas');
+        // Demande deja en attente (faite avant les courriels), et une vieille demande oubliee : pas de courriel pour elle.
+        $req = TribeChangeRequest::create(['user_id' => $member->id, 'from_tribe_id' => $this->juda->id, 'to_tribe_id' => $this->levi->id,
+            'reason' => 'Déménagement', 'status' => 'pending']);
+        $old = TribeChangeRequest::create(['user_id' => $this->member('+14185550539', $this->juda)->id, 'from_tribe_id' => $this->juda->id,
+            'to_tribe_id' => $this->levi->id, 'reason' => 'Ancienne', 'status' => 'pending']);
+        $old->forceFill(['created_at' => now()->subDays(40)])->save();
+
+        $this->artisan('app:tick', ['--only' => 'tribe-changes'])->assertSuccessful();
+        $mail = OutboundMessage::where('kind', 'tribe_change_request')->sole();
+        $this->assertSame($patriarch->id, (int) $mail->user_id, 'le patriarche sans adresse n\'a pas de courriel ; la vieille demande non plus');
+        $this->assertSame("tribe-change-request:{$req->id}:{$patriarch->id}", $mail->dedupe_key);
+        $this->artisan('app:tick', ['--only' => 'tribe-changes'])->assertSuccessful();
+        $this->assertSame(1, OutboundMessage::where('kind', 'tribe_change_request')->count(), 'jamais deux fois');
+        $this->assertSame(0, OutboundMessage::where('user_id', $noMail->id)->count());
     }
 
     public function test_pastoral_authority_can_approve_both_sides_at_once(): void
