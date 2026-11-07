@@ -17,12 +17,16 @@ class LocalTestMode
     /**
      * La requete vise-t-elle une machine locale (localhost, 127.0.0.1, *.localhost, *.test) ? Un .env de
      * production recopie par erreur avec APP_ENV=local n'ouvre donc rien sur le vrai nom de domaine.
+     * L'adresse configuree de l'application (APP_URL) doit AUSSI etre locale : un en-tete Host forge
+     * (« Host: x.test ») envoye au vrai serveur n'ouvre rien.
      */
     public static function isLocalHost(): bool
     {
-        $host = strtolower((string) (request()->getHost() ?: parse_url((string) config('app.url'), PHP_URL_HOST)));
-
-        return in_array($host, ['localhost', '127.0.0.1', '::1', '[::1]'], true)
+        $local = fn (string $host) => in_array($host, ['localhost', '127.0.0.1', '::1', '[::1]'], true)
             || str_ends_with($host, '.localhost') || str_ends_with($host, '.test');
+        $configured = strtolower((string) parse_url((string) config('app.url'), PHP_URL_HOST));
+        $requested = strtolower((string) (request()->getHost() ?: $configured));
+
+        return $local($configured) && $local($requested);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\User;
 use App\Support\Like;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -181,9 +182,16 @@ class AuditLogController extends Controller
             $query->where('id', '<', $data['before']);
         }
         $items = $query->limit(51)->get();
+        $viewer = $request->user();
+        // Detail d'une entree : seulement sur un membre que l'on peut voir ; le motif d'une demande de suppression
+        // reste entre le Pasteur Resident et l'auteur de la demande (comme sur la fiche du membre).
+        $members = User::whereIn('id', $items->pluck('member_user_id')->filter()->unique())->get()->keyBy('id');
+        $seesDetails = fn (AuditLog $l) => $details
+            && (! $l->member_user_id || ! $members->has($l->member_user_id) || $viewer->canViewMember($members[$l->member_user_id]))
+            && (! str_starts_with((string) $l->action, 'member.deletion') || $viewer->isSuperAdmin() || (int) $l->user_id === $viewer->id);
 
         return response()->json([
-            'logs' => $items->take(50)->map(fn (AuditLog $l) => $details ? [
+            'logs' => $items->take(50)->map(fn (AuditLog $l) => $seesDetails($l) ? [
                 'id' => $l->id,
                 'action' => $l->action,
                 'label' => self::LABELS[$l->action] ?? $l->action,

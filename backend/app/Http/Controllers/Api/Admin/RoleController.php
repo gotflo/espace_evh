@@ -118,7 +118,7 @@ class RoleController extends Controller
         $added = array_values(array_diff($wanted, $before));
         $removed = array_values(array_diff($before, $wanted));
         // Seules les permissions ajoutees ou retirees doivent etre a la portee de l'auteur (RoleGrants).
-        $this->ensureEditable($actor, $added, $removed, $wanted);
+        $this->ensureEditable($actor, $added, $removed, $wanted, $role->key);
         $beforeRole = $role->only(['name', 'description', 'scope_kind']);
 
         $payload = ['name' => $data['name'], 'description' => $data['description'] ?? null];
@@ -190,9 +190,9 @@ class RoleController extends Controller
      * @param  array<int, string>  $removed
      * @param  array<int, string>  $wanted
      */
-    private function ensureEditable(User $actor, array $added, array $removed, array $wanted): void
+    private function ensureEditable(User $actor, array $added, array $removed, array $wanted, ?string $roleKey = null): void
     {
-        if ($refusal = RoleGrants::editRefusal($actor, $added, $removed, $wanted)) {
+        if ($refusal = RoleGrants::editRefusal($actor, $added, $removed, $wanted, $roleKey)) {
             throw ValidationException::withMessages(['permission_keys' => $refusal]);
         }
     }
@@ -251,7 +251,8 @@ class RoleController extends Controller
 
         // Anti-escalade (RoleGrants) : rang inferieur au sien, jamais a soi-meme, aucun acces confidentiel
         // qu'on n'a pas. Le Pasteur Resident fait tout ; le compte de gestion tout sauf le role de PR.
-        if ($refusal = RoleGrants::assignRefusal($actor, $role, $user)) {
+        // (Verifie aussi plus bas sur la portee choisie : on ne donne un acces que la ou on l'a.)
+        if ($refusal = RoleGrants::assignRefusal($actor, $role)) {
             abort(403, $refusal);
         }
 
@@ -282,6 +283,10 @@ class RoleController extends Controller
             }
         }
 
+        if ($refusal = RoleGrants::assignRefusal($actor, $role, $user, $scopeKind, $scopeId ? (int) $scopeId : null)) {
+            abort(403, $refusal);
+        }
+
         // Responsable de departement : memes conditions que dans Organisation (profil complet, 5 au plus).
         $leadsDepartment = DepartmentLeadership::isLeaderRole($role, $scopeKind);
         if ($leadsDepartment) {
@@ -306,7 +311,7 @@ class RoleController extends Controller
 
             $scopeName = match ($scopeKind) {
                 'tribe' => ' · tribu '.Tribe::find($scopeId)?->name,
-                'gem' => ' · GEM '.Gem::find($scopeId)?->name,
+                'gem' => ' · '.Gem::find($scopeId)?->label(),
                 'department' => ' · '.Department::find($scopeId)?->name,
                 'member' => ' · '.Profile::where('user_id', $scopeId)->first()?->full_name,
                 default => '',
@@ -337,7 +342,7 @@ class RoleController extends Controller
         }
 
         $revoked = Role::find($row->role_id);
-        if ($revoked && ($refusal = RoleGrants::assignRefusal($request->user(), $revoked, $user))) {
+        if ($revoked && ($refusal = RoleGrants::assignRefusal($request->user(), $revoked, $user, $row->scope_kind, $row->scope_id ? (int) $row->scope_id : null))) {
             abort(403, $refusal);
         }
 

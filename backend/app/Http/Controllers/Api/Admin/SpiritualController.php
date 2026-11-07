@@ -20,7 +20,7 @@ class SpiritualController extends Controller
         abort_unless($viewer->canViewMember($user, 'spiritual.view'), 403, 'Hors de votre portée.');
         // Ecrire, effacer, cocher : seulement dans sa portee d'ecriture ; effacer ce qu'un autre a note : un pasteur.
         $canRecord = $viewer->canManageMember($user, 'spiritual.record');
-        $pastoral = $viewer->hasPermission('members.view_all');
+        $pastoral = $viewer->isChurchWideFor('spiritual.record');
         $entries = SpiritualEntry::with('author.profile')
             ->where('member_user_id', $user->id)
             ->orderByDesc('entry_date')->orderByDesc('id')->get()
@@ -80,7 +80,7 @@ class SpiritualController extends Controller
         abort_unless($request->user()->canManageMember($user, 'spiritual.record'), 403, 'Consultation seule : action non autorisée.');
         abort_unless($entry->member_user_id === $user->id, 404);
         // Une entree ne s'efface que par son auteur, ou par une autorite pastorale.
-        abort_unless((int) $entry->author_user_id === $request->user()->id || $request->user()->hasPermission('members.view_all'), 403,
+        abort_unless((int) $entry->author_user_id === $request->user()->id || $request->user()->isChurchWideFor('spiritual.record'), 403,
             'Seul son auteur (ou un pasteur) peut supprimer cette entrée.');
         $entry->delete();
 
@@ -105,7 +105,7 @@ class SpiritualController extends Controller
             // Decocher l'etape notee par quelqu'un d'autre : seulement une autorite pastorale.
             $milestone = Milestone::where('member_user_id', $user->id)->where('milestone_key', $data['milestone_key'])->first();
             abort_if($milestone && $milestone->recorded_by && (int) $milestone->recorded_by !== $request->user()->id
-                && ! $request->user()->hasPermission('members.view_all'), 403, 'Cette étape a été notée par un autre responsable : seul un pasteur peut la retirer.');
+                && ! $request->user()->isChurchWideFor('spiritual.record'), 403, 'Cette étape a été notée par un autre responsable : seul un pasteur peut la retirer.');
             $milestone?->delete();
         }
 

@@ -69,7 +69,8 @@ class TribeChangeService
         if ($user->isChurchWideFor('tribes.transfer')) {
             return ['both'];
         }
-        $tribes = $user->scopeTribeIds();
+        // Les tribus ou il a ce droit (patriarche, AP), pas celles d'un autre role.
+        $tribes = $user->scopesFor('tribes.transfer')['tribe'];
         $sides = [];
         if ($req->from_tribe_id && in_array((int) $req->from_tribe_id, $tribes, true)) {
             $sides[] = 'from';

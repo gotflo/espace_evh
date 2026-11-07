@@ -43,7 +43,7 @@ function LinkList({ links }: { links: SettingsLink[] }) {
  * insister ailleurs), notifications de cet appareil et choix par sujet, liens du compte et deconnexion.
  */
 export default function MySettings() {
-  const { logout } = useAuth()
+  const { logout, isPlatformManager } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const standalone = isStandalone()
@@ -78,17 +78,20 @@ export default function MySettings() {
 
         <div className="settings-col" id="notifications">
           <PushSettings />
-          <NotificationPrefs defaultOpen />
+          {/* Le compte de gestion n'a pas d'espace membre : pas de choix par sujet, ni Guide, ni profil. */}
+          {!isPlatformManager && <NotificationPrefs defaultOpen />}
         </div>
 
-        <section className="panel settings-account" id="aide">
-          <div className="panel-head"><h3>Aide</h3></div>
-          <LinkList links={HELP} />
-        </section>
+        {!isPlatformManager && (
+          <section className="panel settings-account" id="aide">
+            <div className="panel-head"><h3>Aide</h3></div>
+            <LinkList links={HELP} />
+          </section>
+        )}
 
         <section className="panel settings-account">
           <div className="panel-head"><h3>Mon compte</h3></div>
-          <LinkList links={ACCOUNT} />
+          {!isPlatformManager && <LinkList links={ACCOUNT} />}
           <button type="button" className="btn btn-ghost small mt" onClick={() => void onLogout()}>
             <Icon name="logout" size={16} /> Se déconnecter
           </button>

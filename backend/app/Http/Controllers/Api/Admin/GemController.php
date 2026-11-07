@@ -9,6 +9,7 @@ use App\Models\Role;
 use App\Models\Tribe;
 use App\Models\User;
 use App\Services\BelongingNotices;
+use App\Services\Notifier;
 use App\Support\Audit;
 use App\Support\GemRules;
 use App\Support\LeaderRole;
@@ -114,7 +115,7 @@ class GemController extends Controller
         // Le Garde d'un autre GEM reste dans le sien.
         foreach (Gem::where('id', '!=', $gem->id)->whereIn('leader_user_id', $added)->get() as $other) {
             $p = $profiles->get((int) $other->leader_user_id);
-            throw ValidationException::withMessages(['user_ids' => "{$p?->full_name} est Garde du GEM {$other->name} : il ou elle reste dans son GEM."]);
+            throw ValidationException::withMessages(['user_ids' => "{$p?->full_name} est Garde du {$other->label()} : il ou elle reste dans son GEM."]);
         }
 
         DB::transaction(function () use ($gem, $added, $removed, $profiles, $actor) {
@@ -147,10 +148,11 @@ class GemController extends Controller
         $data = $this->validated($request);
         $leader = $data['leader_user_id'] ?? null;
         unset($data['leader_user_id']);
-        $this->ensureCanAppointGarde($request->user(), $leader, null);
+        $this->ensureCanAppointGarde($request->user(), $leader, null, (int) $data['tribe_id'], null);
         $gem = Gem::create($data);
         // Le responsable nomme recoit aussitot le role Garde sur ce GEM (et le rejoint).
         GemRules::appointLeader($gem, $leader, $request->user()->id);
+        $this->tellNewGarde($gem, $leader, null, $request->user());
 
         return response()->json(['message' => 'GEM créé.', 'gem' => $this->present($gem->load('tribe', 'leader.profile')->loadCount('members'))], 201);
     }
@@ -161,7 +163,7 @@ class GemController extends Controller
         $data = $this->validated($request);
         $leader = $data['leader_user_id'] ?? null;
         unset($data['leader_user_id']);
-        $this->ensureCanAppointGarde($request->user(), $leader, $gem->leader_user_id);
+        $this->ensureCanAppointGarde($request->user(), $leader, $gem->leader_user_id, (int) $data['tribe_id'], $gem->id);
 
         // Changer la tribu d'un GEM qui a deja des membres d'une autre tribu casserait la regle.
         if ((int) $data['tribe_id'] !== (int) $gem->tribe_id
@@ -169,24 +171,49 @@ class GemController extends Controller
             abort(422, 'Ce GEM contient des membres de sa tribu actuelle : impossible de le déplacer vers une autre tribu.');
         }
 
+        $previous = $gem->leader_user_id;
         $gem->update($data);
         GemRules::appointLeader($gem, $leader, $request->user()->id);
+        $this->tellNewGarde($gem, $leader, $previous, $request->user());
 
         return response()->json(['message' => 'GEM mis à jour.']);
+    }
+
+    /** Le Garde nomme ici est prevenu de sa fonction, comme par la fiche du membre (sauf s'il se nomme lui-meme). */
+    private function tellNewGarde(Gem $gem, mixed $leader, mixed $previous, User $actor): void
+    {
+        $leader = $leader ? (int) $leader : null;
+        if (! $leader || $leader === (int) $previous || $leader === $actor->id) {
+            return;
+        }
+        $fonction = Role::where('key', 'garde')->value('name') ?? 'Garde';
+        Notifier::send([$leader], 'role', "Nouvelle fonction : {$fonction} · {$gem->label()}",
+            'Une nouvelle fonction vous a été confiée. Que Dieu vous fortifie dans ce service !', '/tableau-de-bord');
     }
 
     /**
      * Nommer (ou retirer) un Garde lui donne (ou retire) le role Garde : memes regles que pour attribuer
      * ce role (rang, acces confidentiels detenus), voir RoleGrants.
      */
-    private function ensureCanAppointGarde(User $actor, mixed $leader, mixed $current): void
+    private function ensureCanAppointGarde(User $actor, mixed $leader, mixed $current, int $tribeId, ?int $gemId): void
     {
         if ((int) $leader === (int) $current) {
             return;
         }
         $role = Role::where('key', 'garde')->first();
-        if ($role && ($refusal = RoleGrants::assignRefusal($actor, $role))) {
+        if (! $role) {
+            return;
+        }
+        if ($refusal = RoleGrants::assignRefusal($actor, $role)) {
             abort(403, $refusal);
+        }
+        // Les acces du Garde ne se donnent que la ou on les a soi-meme (ce GEM, ou sa tribu).
+        [$kind, $scope] = $gemId ? ['gem', $gemId] : ['tribe', $tribeId];
+        foreach (array_filter([(int) $leader, (int) $current]) as $userId) {
+            $person = User::find($userId);
+            if ($person && $person->id !== $actor->id && ($refusal = RoleGrants::assignRefusal($actor, $role, $person, $kind, $scope))) {
+                abort(403, $refusal);
+            }
         }
     }
 

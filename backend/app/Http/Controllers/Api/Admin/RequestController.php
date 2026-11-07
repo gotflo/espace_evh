@@ -20,7 +20,8 @@ class RequestController extends Controller
         // Ses propres demandes vont a ses responsables a lui : jamais dans sa propre liste.
         $visibleIds = $scoped ? array_diff(MemberScope::manageableUserIds($user, 'requests.handle'), [$user->id]) : null;
 
-        $base = MemberRequest::query();
+        // Vue de toute l'eglise (PA, PR) comprise : sa propre demande va aux autres pasteurs, pas a soi.
+        $base = MemberRequest::where('user_id', '!=', $user->id);
         if ($scoped) {
             $base->whereIn('user_id', $visibleIds ?: [0]);
         }
@@ -55,6 +56,7 @@ class RequestController extends Controller
     public function reply(Request $request, MemberRequest $memberRequest): JsonResponse
     {
         abort_unless($request->user()->canManageMember($memberRequest->sender, 'requests.handle'), 403, 'Hors de votre portée.');
+        abort_if((int) $memberRequest->user_id === $request->user()->id, 403, 'Votre propre demande est traitée par vos responsables.');
         $data = $request->validate(['reply' => ['required', 'string', 'max:3000']]);
 
         $memberRequest->update([
@@ -75,8 +77,8 @@ class RequestController extends Controller
     public function newCount(Request $request): JsonResponse
     {
         $user = $request->user();
-        $q = MemberRequest::where('status', 'nouvelle');
-        if (MemberScope::isScoped($user)) {
+        $q = MemberRequest::where('status', 'nouvelle')->where('user_id', '!=', $user->id);
+        if (MemberScope::isScoped($user, 'requests.handle')) {
             $q->whereIn('user_id', array_diff(MemberScope::manageableUserIds($user, 'requests.handle'), [$user->id]) ?: [0]);
         }
 
@@ -87,6 +89,7 @@ class RequestController extends Controller
     public function updateStatus(Request $request, MemberRequest $memberRequest): JsonResponse
     {
         abort_unless($request->user()->canManageMember($memberRequest->sender, 'requests.handle'), 403, 'Hors de votre portée.');
+        abort_if((int) $memberRequest->user_id === $request->user()->id, 403, 'Votre propre demande est traitée par vos responsables.');
         $data = $request->validate([
             'status' => ['required', 'in:'.implode(',', array_keys(MyRequestController::STATUS))],
         ]);

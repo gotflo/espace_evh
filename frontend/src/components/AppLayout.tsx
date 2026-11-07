@@ -204,7 +204,7 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
               {moduleOn('exercises') && <NavLink to="/exercices" className="nav-item"><Icon path={ICONS.play} /><span>Mes exercices</span></NavLink>}
               {!isPastorHost && moduleOn('appointments') && <NavLink to="/rendez-vous" className="nav-item"><Icon path={ICONS.clock} /><span>Prendre rendez-vous</span></NavLink>}
               <NavLink to="/contact" className="nav-item"><Icon path={ICONS.requests} /><span>Nous contacter</span></NavLink>
-              <NavLink to="/guide" className="nav-item"><Icon path={ICONS.help} /><span>Guide</span></NavLink>
+              {/* Installation, notifications, Guide (rubrique Aide) et compte : pour tout le monde. */}
               <NavLink to="/parametres" className="nav-item"><Icon path={ICONS.settings} /><span>Paramètres</span></NavLink>
             </>
           )}
@@ -234,6 +234,8 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
           {canAudit && <NavLink to="/admin/journal" className="nav-item"><Icon path={ICONS.audit} /><span>Journal</span></NavLink>}
           {canSettings && <NavLink to="/admin/apparence" className="nav-item"><Icon path={ICONS.image} /><span>Apparence</span></NavLink>}
           {canSettings && <NavLink to="/admin/reglages" className="nav-item"><Icon path={ICONS.settings} /><span>Réglages</span></NavLink>}
+          {/* Compte de gestion (sans espace membre) : ses parametres aussi. */}
+          {isPlatformManager && <NavLink to="/parametres" className="nav-item"><Icon path={ICONS.settings} /><span>Paramètres</span></NavLink>}
         </nav>
 
         <div className="sidebar-foot">

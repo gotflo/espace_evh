@@ -153,13 +153,13 @@ class ScopedMemberAbilitiesTest extends TestCase
         // GEM par la fiche : le membre et le Garde.
         Sanctum::actingAs($patriarch);
         $this->patchJson("/api/admin/members/{$paul->id}/belonging", ['tribe_id' => $this->juda->id, 'gem_id' => $this->gem->id])->assertOk();
-        $this->assertSame(1, UserNotification::where('user_id', $paul->id)->where('title', 'Vous faites partie du GEM GEM A')->count());
+        $this->assertSame(1, UserNotification::where('user_id', $paul->id)->where('title', 'Vous faites partie du GEM A')->count());
         $this->assertSame(1, UserNotification::where('user_id', $garde->id)->where('title', 'Nouveau membre dans votre GEM : Paul T')->count());
         $this->assertSame(0, UserNotification::where('user_id', $patriarch->id)->count(), 'jamais pour son propre geste');
         // GEM par la page GEMs : pareil.
         $this->putJson("/api/admin/gems/{$this->gem->id}/members", ['user_ids' => [$paul->id, $anne->id]])->assertOk();
         $this->assertSame(1, UserNotification::where('user_id', $garde->id)->where('title', 'Nouveau membre dans votre GEM : Anne T')->count());
-        $this->assertSame(1, UserNotification::where('user_id', $paul->id)->where('title', 'Vous faites partie du GEM GEM A')->count(), 'Paul y etait deja');
+        $this->assertSame(1, UserNotification::where('user_id', $paul->id)->where('title', 'Vous faites partie du GEM A')->count(), 'Paul y etait deja');
 
         // Tribe et departement par un pasteur : le membre, et la tribu qui l'accueille.
         Sanctum::actingAs($pastor);

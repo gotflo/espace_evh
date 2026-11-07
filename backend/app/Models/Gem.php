@@ -28,4 +28,10 @@ class Gem extends Model
     {
         return $this->hasMany(Profile::class);
     }
+
+    /** « GEM Béthel » pour un GEM nommé « Béthel », sans doubler un nom qui commence deja par GEM. */
+    public function label(): string
+    {
+        return preg_match('/^gem\b/iu', trim($this->name)) ? trim($this->name) : 'GEM '.trim($this->name);
+    }
 }

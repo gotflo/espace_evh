@@ -136,7 +136,7 @@ export const GUIDE_CHAPTERS: GuideChapter[] = [
         shots: [{ name: 'fidele-menu', caption: 'Le menu, partie « Mon espace »' }],
         steps: [
           { title: 'La barre du bas', text: 'Accueil, Calendrier, Service, Alertes et Menu, toujours à portée de pouce.' },
-          { title: 'Le menu · Mon espace', text: 'Vos pages : vie spirituelle, fiche, méditation, Vertumètre, RM, devoir, exercices, rendez-vous, contact et guide.' },
+          { title: 'Le menu · Mon espace', text: 'Vos pages : vie spirituelle, fiche, méditation, Vertumètre, RM, devoir, exercices, rendez-vous, contact et paramètres (le guide s’y trouve, rubrique Aide).' },
           { title: 'Mon profil et Déconnexion', text: 'En bas du menu, sous votre nom.' },
         ],
       },

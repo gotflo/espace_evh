@@ -240,7 +240,7 @@ class MailAndSmsNotificationsTest extends TestCase
         $reject = OutboundMessage::where('kind', 'deletion_request')->sole()->payload['rejectUrl'];
         auth()->forgetGuards();
         // Messagerie qui n'envoie pas l'en-tete du clic : la page s'envoie elle-meme (POST), puis redirige.
-        $this->get($reject)->assertOk()->assertSee('Refus en cours');
+        $this->get($reject)->assertOk()->assertSee('Rejeter la demande');
         $this->post($reject)->assertStatus(303)
             ->assertRedirect('https://espace.vasesdhonneurchicoutimi.org/admin/validations?suppression='.$req->id.'&resultat=refusee');
         $this->assertSame('rejected', $req->fresh()->status);

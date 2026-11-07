@@ -108,7 +108,7 @@ class LeaderReportService
         }
 
         return $user->isChurchWideFor('reports.view')
-            || ($report->kind === 'tribe' && in_array($report->scope_id, $user->scopeTribeIds(), true));
+            || ($report->kind === 'tribe' && in_array($report->scope_id, $user->scopesFor('reports.view')['tribe'], true));
     }
 
     /**

@@ -60,9 +60,11 @@ class GemReportService
     /** Lecture des rapports d'un GEM : son Garde, les responsables de sa tribu, les autorites pastorales. */
     public static function canRead(User $user, Gem $gem): bool
     {
+        // Autorite pastorale pour la consultation des membres (et non un simple droit recu ailleurs) ; sinon la
+        // portee tribu du droit de consultation, jamais celle d'un autre role.
         return self::canFill($user, $gem)
             || $user->hasPermission('members.view_all')
-            || ($user->hasPermission('members.view_scope') && in_array((int) $gem->tribe_id, $user->scopeTribeIds(), true));
+            || ($user->hasPermission('members.view_scope') && in_array((int) $gem->tribe_id, $user->scopesFor('members.view_scope')['tribe'], true));
     }
 
     /** Membres du GEM (profils completes), le Garde compris s'il en fait partie. */

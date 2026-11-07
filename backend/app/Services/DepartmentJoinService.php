@@ -36,7 +36,7 @@ class DepartmentJoinService
         // Tous les departements : seulement qui les gere tous (pasteurs, administrateur). Un responsable de
         // departement decide pour SES departements, jamais pour les autres (departments.manage recu sur son departement).
         return $actor->managesAllDepartments()
-            || in_array((int) $request->department_id, $actor->scopeDepartmentIds(), true);
+            || in_array((int) $request->department_id, $actor->scopesFor('departments.approve')['department'], true);
     }
 
     /** @return Collection<int, DepartmentJoinRequest> demandes en attente que cet utilisateur peut traiter */

@@ -151,7 +151,7 @@ class MemberController extends Controller
                 'scope_name' => $this->scopeName($r->pivot->scope_kind, $r->pivot->scope_id),
                 // Memes regles que le retrait (RoleController::revoke) : rang, soi-meme, role de Protocole lie.
                 'can_remove' => $viewer->hasPermission('roles.assign') && ! $user->isPlatformManager()
-                    && RoleGrants::assignRefusal($viewer, $r, $user) === null
+                    && RoleGrants::assignRefusal($viewer, $r, $user, $r->pivot->scope_kind, $r->pivot->scope_id ? (int) $r->pivot->scope_id : null) === null
                     && ! DepartmentLeadership::isProtocolLeadership($r, $r->pivot->scope_kind)
                     && ! ($r->key === User::SUPER_ADMIN && $user->id === $viewer->id),
             ])->values(),
@@ -196,7 +196,9 @@ class MemberController extends Controller
             'department_ids' => ['nullable', 'array', 'max:60'],
             'department_ids.*' => ['integer', 'exists:departments,id'],
         ]);
-        $pastoral = $actor->hasPermission('members.view_all');
+        // Autorite pastorale pour modifier l'appartenance (et non un droit recu sur une portee, ex. Administrateur +
+        // Accompagnateur d'un fidele).
+        $pastoral = $actor->isChurchWideFor('members.edit');
 
         $profile = $user->profile;
         abort_unless($profile, 404, 'Profil introuvable.');
@@ -302,7 +304,7 @@ class MemberController extends Controller
     public static function belongingRights(User $actor, User $member): array
     {
         $full = $actor->canManageMember($member, 'members.edit');
-        $pastoral = $full && $actor->hasPermission('members.view_all');
+        $pastoral = $full && $actor->isChurchWideFor('members.edit');
         $tribeId = $member->profile?->tribe_id ? (int) $member->profile->tribe_id : null;
 
         return [
@@ -310,7 +312,7 @@ class MemberController extends Controller
             'tribe' => $full && ($pastoral || $tribeId === null),
             'departments' => $full,
             // Departements qu'il peut cocher ou decocher (null : tous, autorite pastorale).
-            'department_ids' => $full && ! $actor->hasPermission('members.view_all') ? $actor->scopesFor('members.edit')['department'] : null,
+            'department_ids' => $full && ! $actor->isChurchWideFor('members.edit') ? $actor->scopesFor('members.edit')['department'] : null,
             'gem' => $pastoral || ($actor->canManageMember($member) && GemRules::canPlaceMembers($actor, $tribeId)),
         ];
     }

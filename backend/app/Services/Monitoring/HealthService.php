@@ -58,7 +58,8 @@ class HealthService
                 'devices' => DB::table('push_subscriptions')->count(),
                 'waiting' => $stuck,
                 'last_delivery_hours' => $last ? (int) Carbon::parse($last)->diffInHours(now(), true) : null,
-                'error' => $error,
+                // Message public : jamais un chemin du serveur (ex. fichier de cles illisible).
+                'error' => $error !== null ? preg_replace('#(?:/[^\s:/]+){2,}/?#', '…', mb_substr($error, 0, 160)) : null,
             ], fn ($v) => $v !== null);
         } catch (\Throwable $e) {
             report($e);

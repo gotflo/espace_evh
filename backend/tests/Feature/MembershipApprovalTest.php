@@ -72,7 +72,10 @@ class MembershipApprovalTest extends TestCase
     /** Inscription complete d'un nouveau compte (code par SMS, puis profil). */
     private function signUp(?string $email = null): User
     {
+        // Code affiche a l'ecran : seulement sur une adresse locale (jamais sur le vrai domaine, voir LocalTestMode).
+        config(['app.url' => 'http://localhost']);
         $code = $this->postJson('/api/auth/request-otp', ['phone' => self::PHONE])->assertOk()->json('dev_code');
+        config(['app.url' => 'https://espace.vasesdhonneurchicoutimi.org']);
         $login = $this->postJson('/api/auth/verify-otp', ['phone' => self::PHONE, 'code' => $code])->assertOk()
             ->assertJsonPath('is_new_account', true)->assertJsonPath('membership.status', 'pending')
             ->assertJsonPath('membership.submitted', false)->assertJsonPath('profile_completed', false);
@@ -135,9 +138,12 @@ class MembershipApprovalTest extends TestCase
         auth()->forgetGuards();
 
         // Un antivirus qui « ouvre » le lien ne decide rien ; un vrai appui valide aussitot.
-        $this->get($mail->payload['approveUrl'])->assertOk()->assertSee('Validation en cours');
+        // Jamais de decision a l'ouverture du lien (antivirus de messagerie) : une page avec un bouton, sans envoi automatique.
+        $this->get($mail->payload['approveUrl'])->assertOk()->assertSee('Valider l&#039;inscription', false)->assertDontSee('f.submit()', false);
         $this->assertSame(User::PENDING, $user->fresh()->approval_status);
-        $this->get($mail->payload['approveUrl'], ['Sec-Fetch-User' => '?1'])->assertStatus(303)->assertRedirect($app.'&resultat=validee');
+        $this->get($mail->payload['approveUrl'], ['Sec-Fetch-User' => '?1'])->assertOk()->assertSee('Valider l&#039;inscription', false);
+        $this->assertSame(User::PENDING, $user->fresh()->approval_status, 'rien n\'est decide sans le bouton');
+        $this->post($mail->payload['approveUrl'])->assertStatus(303)->assertRedirect($app.'&resultat=validee');
         $user->refresh();
         $this->assertSame(User::APPROVED, $user->approval_status);
         $this->assertTrue((bool) $user->profile->is_completed);
@@ -220,7 +226,7 @@ class MembershipApprovalTest extends TestCase
         $reject = OutboundMessage::where('kind', 'membership_request')->sole()->payload['rejectUrl'];
         auth()->forgetGuards();
         // Messagerie sans en-tete de clic : la page envoie la decision elle-meme.
-        $this->get($reject)->assertOk()->assertSee('Refus en cours');
+        $this->get($reject)->assertOk()->assertSee('Refuser l&#039;inscription', false);
         $this->post($reject)->assertStatus(303)->assertRedirect('https://espace.vasesdhonneurchicoutimi.org/admin/validations?inscription='.$user->id.'&resultat=refusee');
         $this->assertSame(User::REJECTED, $user->fresh()->approval_status);
         $this->assertSame('Votre demande d\'inscription à My vasesdhonneur', OutboundMessage::where('kind', 'membership_rejected')->sole()->subject);
@@ -305,6 +311,7 @@ class MembershipApprovalTest extends TestCase
         $this->getJson('/api/me')->assertJsonPath('membership.status', 'approved');
 
         // Compte predefini du Pasteur Resident : jamais en attente.
+        config(['app.url' => 'http://localhost']); // code a l'ecran : adresse locale seulement
         $code = $this->postJson('/api/auth/request-otp', ['phone' => '+14185500785'])->assertOk()->json('dev_code');
         $this->postJson('/api/auth/verify-otp', ['phone' => '+14185500785', 'code' => $code])->assertOk()->assertJsonPath('membership.status', 'approved');
     }

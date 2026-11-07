@@ -55,11 +55,11 @@ class BelongingNotices
             return;
         }
         $name = $member->profile?->full_name ?: (string) $member->phone;
-        Notifier::send([$member->id], 'member', "Vous faites partie du GEM {$gem->name}",
+        Notifier::send([$member->id], 'member', "Vous faites partie du {$gem->label()}",
             $gem->leader?->profile?->full_name ? "Votre Garde : {$gem->leader->profile->full_name}." : null, '/mon-profil');
         if ($gem->leader_user_id && ! in_array((int) $gem->leader_user_id, [$actor->id, $member->id], true)) {
             Notifier::send([(int) $gem->leader_user_id], 'member', "Nouveau membre dans votre GEM : {$name}",
-                "{$name} rejoint le GEM {$gem->name}.", '/admin/membres/'.$member->id);
+                "{$name} rejoint le {$gem->label()}.", '/admin/membres/'.$member->id);
         }
     }
 }

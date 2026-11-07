@@ -103,14 +103,14 @@ export function installIosViewportFix(): void {
       + `${Math.round(vv.height)}+${Math.round(vv.offsetTop)}, compensation haut ${topPx} px, bas ${bottomPx} px`
     if (!toldCompensated && Math.max(Math.abs(topPx), Math.abs(bottomPx)) >= 40) {
       toldCompensated = true
-      reportClientError('error', new Error(`Diagnostic iPhone : decalage de Safari compense (${facts})`))
+      reportClientError('error', new Error(`Diagnostic iPhone : décalage de Safari compensé (${facts})`))
     }
     const nav = document.querySelector('.bottom-nav')
     if (toldStillWrong || !nav || getComputedStyle(nav).display === 'none') return
     const off = Math.round(vv.height - nav.getBoundingClientRect().bottom)
     if (Math.abs(off) > 40) {
       toldStillWrong = true
-      reportClientError('error', new Error(`Diagnostic iPhone : barre du bas a ${off} px du bas apres correction (${facts})`))
+      reportClientError('error', new Error(`Diagnostic iPhone : barre du bas à ${off} px du bas après correction (${facts})`))
     }
   }
 

@@ -42,7 +42,7 @@ class LeaderDirectoryService
         if ($user->hasPermission('members.view_all')) {
             return null;
         }
-        $tribeIds = $user->hasPermission('members.view_scope') ? $user->scopeTribeIds() : [];
+        $tribeIds = $user->hasPermission('members.view_scope') ? $user->scopesFor('members.view_scope')['tribe'] : [];
         abort_unless($tribeIds, 403, 'Cette page est réservée aux pasteurs et aux responsables de tribu.');
 
         return $tribeIds;

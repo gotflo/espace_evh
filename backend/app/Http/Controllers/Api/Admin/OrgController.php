@@ -140,6 +140,13 @@ class OrgController extends Controller
         if ($role && $current !== collect($ids)->sort()->values()->all() && ($refusal = RoleGrants::assignRefusal($request->user(), $role))) {
             abort(403, $refusal);
         }
+        // Chaque personne nommee ou retiree : jamais soi-meme, et les acces seulement la ou on les a (RoleGrants).
+        foreach (array_merge(array_diff($ids, $current), array_diff($current, $ids)) as $changedId) {
+            $person = User::find($changedId);
+            if ($role && $person && ($refusal = RoleGrants::assignRefusal($request->user(), $role, $person, 'department', (int) $department->id))) {
+                abort(403, $refusal);
+            }
+        }
         if ($current !== collect($ids)->sort()->values()->all() && ($refusal = DepartmentLeadership::protocolRefusal($request->user(), $department))) {
             abort(403, $refusal);
         }

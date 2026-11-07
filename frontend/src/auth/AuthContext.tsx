@@ -3,7 +3,7 @@ import { api, ApiError, auth as tokenStore, onForbidden, onSessionExpired } from
 import { forgetPushOnThisDevice } from '../push'
 import { setUnread } from '../notifications'
 import { rememberPreviousVisit } from '../utils/visit'
-import { setDraftAccount } from '../utils/drafts'
+import { clearAccountDrafts, setDraftAccount } from '../utils/drafts'
 import type { AppSettings, AuthPayload, Membership, ModuleName, Profile, User, UserRole } from '../types'
 
 interface AuthState {
@@ -142,6 +142,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await forgetPushOnThisDevice()
     setUnread(0)
     try { await api('/auth/logout', { method: 'POST', toast: false }) } catch { /* ignore */ }
+    // Deconnexion volontaire : ses brouillons ne restent pas lisibles sur l'appareil.
+    clearAccountDrafts(user?.id ?? null)
     tokenStore.clear()
     reset()
   }

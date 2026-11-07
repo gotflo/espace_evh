@@ -15,15 +15,16 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * Boutons des courriels envoyes au pasteur (lien signe, nominatif, limite dans le temps) : « Accepter / Rejeter »
- * une demande de suppression, « Valider / Rejeter » une nouvelle inscription. Un appui decide aussitot, puis
- * l'application s'ouvre (Validations) pour confirmer le resultat.
+ * une demande de suppression, « Valider / Rejeter » une nouvelle inscription. L'application s'ouvre ensuite
+ * (Validations) pour confirmer le resultat.
  *
- * Protection contre les antivirus de messagerie qui « ouvrent » les liens pour les analyser : la decision
- * part tout de suite seulement pour un vrai clic de navigateur (en-tete Sec-Fetch-User) ; sinon une page
- * d'un instant envoie la decision par elle-meme (un robot qui ne fait que lire la page ne decide rien).
- * Accepter une SUPPRESSION (definitive) demande toujours un appui sur un bouton : un analyseur qui ouvre
- * le lien dans un vrai navigateur ne peut pas supprimer un membre. Une decision deja prise n'est jamais
- * refaite ; un pasteur bloque ne decide plus rien.
+ * Protection contre les antivirus de messagerie qui « ouvrent » les liens, parfois dans un vrai navigateur
+ * (Outlook, messageries professionnelles) : rien ne se decide jamais tout seul a l'ouverture d'une page.
+ * - Valider une inscription (acces aux donnees des membres) ou accepter une suppression (definitive) : toujours
+ *   un appui sur le bouton de la page de confirmation.
+ * - Refuser : decide aussitot pour un vrai clic de navigateur (en-tete Sec-Fetch-User) ; sinon la page de
+ *   confirmation (plus d'envoi automatique par la page).
+ * Une decision deja prise n'est jamais refaite ; un pasteur bloque ne decide plus rien.
  */
 class EmailActionController extends Controller
 {
@@ -32,21 +33,17 @@ class EmailActionController extends Controller
         if ($stop = $this->stop($request, $deletionRequest, $pastor)) {
             return $stop;
         }
+        $name = $deletionRequest->member_name ?: 'ce membre';
         if ($decision === 'approve') {
-            return response()->view('email-action', NotificationMail::common() + [
-                'title' => 'Supprimer '.($deletionRequest->member_name ?: 'ce membre').' ?',
-                'action' => $request->fullUrl(),
-                'confirm' => 'Confirmer la suppression définitive',
-            ])->header('Cache-Control', 'no-store')->header('X-Robots-Tag', 'noindex');
+            return $this->confirmPage($request, 'Supprimer '.$name.' ?', 'Confirmer la suppression définitive',
+                'Le compte et ses données seront supprimés définitivement.');
         }
         if ($request->header('Sec-Fetch-User') === '?1') {
             return $this->decide($deletionRequest, $decision, $pastor);
         }
 
-        return response()->view('email-action', NotificationMail::common() + [
-            'title' => 'Refus en cours…',
-            'action' => $request->fullUrl(),
-        ])->header('Cache-Control', 'no-store')->header('X-Robots-Tag', 'noindex');
+        return $this->confirmPage($request, 'Rejeter la demande de suppression ?', 'Rejeter la demande',
+            'Le compte de '.$name.' est conservé.');
     }
 
     public function decideDeletion(Request $request, MemberDeletionRequest $deletionRequest, string $decision, User $pastor): RedirectResponse
@@ -61,13 +58,27 @@ class EmailActionController extends Controller
         if ($stop = $this->stopMembership($request, $member, $pastor)) {
             return $stop;
         }
+        $name = $member->profile?->full_name ?: 'cette personne';
+        if ($decision === 'approve') {
+            return $this->confirmPage($request, 'Valider l\'inscription de '.$name.' ?', 'Valider l\'inscription',
+                'Son compte s\'ouvrira et ses responsables seront prévenus.');
+        }
         if ($request->header('Sec-Fetch-User') === '?1') {
             return $this->decideMember($member, $decision, $pastor);
         }
 
+        return $this->confirmPage($request, 'Refuser l\'inscription de '.$name.' ?', 'Refuser l\'inscription',
+            'Vous pourrez encore la valider plus tard depuis l\'application.');
+    }
+
+    /** Page de confirmation : la decision ne part que sur un appui du bouton (jamais toute seule). */
+    private function confirmPage(Request $request, string $title, string $confirm, string $message): Response
+    {
         return response()->view('email-action', NotificationMail::common() + [
-            'title' => $decision === 'approve' ? 'Validation en cours…' : 'Refus en cours…',
+            'title' => $title,
             'action' => $request->fullUrl(),
+            'confirm' => $confirm,
+            'message' => $message,
         ])->header('Cache-Control', 'no-store')->header('X-Robots-Tag', 'noindex');
     }
 

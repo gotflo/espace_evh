@@ -27,6 +27,7 @@ use App\Support\SecurityJournal;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
@@ -93,6 +94,24 @@ class AuthController extends Controller
             return $this->loginVerifiedPhone($phone);
         }
 
+        // Une demande a la fois par numero : deux appuis (ou deux appareils) simultanes ne passent pas ensemble
+        // les verifications ci-dessous (delai entre deux codes, plafonds) avant que le premier code soit compte.
+        $sending = Cache::lock('otp-send:'.$phone, 20);
+        if (! $sending->get()) {
+            throw ValidationException::withMessages([
+                'phone' => 'Un code vient déjà d\'être envoyé. Patientez un instant avant de réessayer.',
+            ]);
+        }
+        try {
+            return $this->sendCodeTo($phone);
+        } finally {
+            $sending->release();
+        }
+    }
+
+    /** Verifications (delai, blocage, anti-fraude) puis envoi du code ; appele sous le verrou du numero. */
+    private function sendCodeTo(string $phone): JsonResponse
+    {
         if ($this->otp->isThrottled($phone)) {
             throw ValidationException::withMessages([
                 'phone' => 'Un code vient déjà d\'être envoyé. Patientez un instant avant de réessayer.',

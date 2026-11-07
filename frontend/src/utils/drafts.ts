@@ -22,6 +22,23 @@ function currentKey(key: string, raw: string): string {
  * deja, une saisie en cours n'est pas perdue a la mise a jour). Nouvelle connexion : impossible de savoir a qui ils
  * sont, ils ne doivent reapparaitre chez personne.
  */
+/**
+ * Deconnexion volontaire (« Se déconnecter ») : les brouillons de ce compte sont effaces de l'appareil (FISS,
+ * meditation, demandes de priere...) : sur un telephone partage, personne ne peut les relire. Une session qui
+ * expire seulement les garde (rien n'est perdu d'une saisie en cours).
+ */
+export function clearAccountDrafts(id: number | null) {
+  if (id === null) return
+  try {
+    const mine: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (k && k.startsWith(`${PREFIX}u${id}:`)) mine.push(k)
+    }
+    mine.forEach((k) => localStorage.removeItem(k))
+  } catch { /* stockage indisponible */ }
+}
+
 export function setDraftAccount(id: number | null, resumed = false) {
   account = id
   if (id === null || legacyPurged) return
