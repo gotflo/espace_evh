@@ -47,12 +47,15 @@ class TribeChangeService
 
         $name = $profile->full_name ?: $member->phone;
         $from = $req->fromTribe?->name ?? 'aucune';
-        Notifier::send(self::approvers($req), 'tribe_change', "Changement de tribu demandé : {$name}",
+        $approvers = self::approvers($req);
+        Notifier::send($approvers, 'tribe_change', "Changement de tribu demandé : {$name}",
             "De {$from} vers {$req->toTribe->name}".($reason ? ' · '.mb_substr($reason, 0, 120) : ''),
             '/admin/validations#tribus', ['tribe_change_request_id' => $req->id], 'high');
         // Aussi par courriel : la cloche ne se voit qu'en ouvrant l'application, et le push n'arrive que sur
         // les telephones abonnes (application installee, notifications acceptees).
         self::mailApprovers($req);
+        // En meme temps, les patriarches des deux tribus sont informes (s'ils ne valident pas eux-memes).
+        self::informPatriarchs($req, 'requested', $approvers);
 
         return $req;
     }
@@ -110,6 +113,7 @@ class TribeChangeService
                 Notifier::send([$req->user_id], 'tribe_change', 'Changement de tribu refusé',
                     $comment ?: "Votre demande pour rejoindre la tribu {$req->toTribe->name} n'a pas été acceptée.", '/mon-profil');
                 self::mailMember($req, 'rejected', $by, $comment);
+                self::informPatriarchs($req, 'rejected', [$approver->id], $by);
 
                 return $req;
             }
@@ -180,9 +184,86 @@ class TribeChangeService
             'Votre changement de tribu a été validé.', '/mon-profil');
         self::mailMember($req, 'approved', $by);
         $name = $profile->full_name;
-        Notifier::send(array_diff(Recipients::tribeLeadersFor($req->to_tribe_id, 'members.view_scope'), [$req->user_id]),
-            'member', "Nouveau membre dans la tribu : {$name}",
+        $welcomed = array_values(array_diff(Recipients::tribeLeadersFor($req->to_tribe_id, 'members.view_scope'), [$req->user_id]));
+        Notifier::send($welcomed, 'member', "Nouveau membre dans la tribu : {$name}",
             $req->fromTribe?->name ? "Arrivé(e) de la tribu {$req->fromTribe->name}." : 'Changement de tribu validé.', '/admin/membres/'.$req->user_id);
+        // Patriarches des deux tribus : informes du changement (notification, sauf s'ils viennent de la recevoir, et courriel).
+        self::informPatriarchs($req, 'approved', array_filter([auth()->id()]), $by, $welcomed);
+    }
+
+    /**
+     * Patriarches de l'ancienne et de la nouvelle tribu, informes en meme temps que les valideurs : demande faite,
+     * changement valide ou refuse (notification et courriel, preferences de courriel respectees). Ceux qui valident
+     * eux-memes ($exclude) recoivent deja les messages de validation. Une seule fois par patriarche et par etape.
+     *
+     * @param  array<int>  $exclude  personnes qui n'ont rien a recevoir ici (valideurs, auteur de la decision)
+     * @param  array<int>  $alreadyNotified  personnes deja notifiees de la meme chose (courriel seulement)
+     */
+    public static function informPatriarchs(TribeChangeRequest $req, string $outcome, array $exclude = [], ?string $by = null, array $alreadyNotified = []): int
+    {
+        $req->loadMissing('fromTribe', 'toTribe');
+        $member = User::with('profile')->find($req->user_id);
+        if (! $member) {
+            return 0;
+        }
+        // Patriarche => cote (« from » : son ancienne tribu, « to » : la nouvelle).
+        $sides = [];
+        foreach (['from' => $req->from_tribe_id, 'to' => $req->to_tribe_id] as $side => $tribeId) {
+            foreach ($tribeId ? Recipients::tribeRoleHolders((int) $tribeId, ['patriarche']) : [] as $id) {
+                $sides[$id] ??= $side;
+            }
+        }
+        foreach (array_merge([$req->user_id], $exclude) as $id) {
+            unset($sides[(int) $id]);
+        }
+        if (! $sides) {
+            return 0;
+        }
+
+        $name = $member->profile?->full_name ?: (string) $member->phone;
+        $from = $req->fromTribe?->name;
+        $to = (string) $req->toTribe?->name;
+        $deciders = $outcome === 'requested'
+            ? User::with('profile')->whereIn('id', self::approvers($req))->get()->map(fn (User $u) => $u->profile?->full_name)->filter()->take(3)->implode(', ')
+            : '';
+        [$title, $body] = match ($outcome) {
+            'approved' => ["Changement de tribu validé : {$name}", ($from ? "De la tribu {$from} vers la tribu {$to}" : "Vers la tribu {$to}").($by ? " (validé par {$by})." : '.')],
+            'rejected' => ["Changement de tribu refusé : {$name}", "Sa demande pour rejoindre la tribu {$to} n'a pas été acceptée".($by ? " ({$by})." : '.')],
+            default => ["Changement de tribu demandé : {$name}", ($from ? "De la tribu {$from} vers la tribu {$to}." : "Vers la tribu {$to}.")
+                .' Pour information : '.($deciders ? "la décision revient à {$deciders}." : 'la décision revient aux responsables.')],
+        };
+        // La fiche du membre s'ouvre pour le patriarche de la tribu ou il se trouve (l'ancienne tant que rien n'est valide).
+        $memberSide = $outcome === 'approved' ? 'to' : 'from';
+        $fiche = '/admin/membres/'.$member->id;
+        foreach (['from', 'to'] as $side) {
+            $ids = array_values(array_diff(array_keys(array_filter($sides, fn ($s) => $s === $side)), $alreadyNotified));
+            Notifier::send($ids, 'tribe_change', $title, $body, $side === $memberSide ? $fiche : null, ['tribe_change_request_id' => $req->id]);
+        }
+
+        $queued = 0;
+        $app = rtrim((string) config('app.url'), '/');
+        foreach (User::with('profile')->whereIn('id', array_keys($sides))->get() as $patriarch) {
+            $email = Messenger::emailOf($patriarch);
+            if (! $email || ! Messenger::wants($patriarch, 'email', 'followup')) {
+                continue;
+            }
+            $side = $sides[$patriarch->id];
+            $queued += Messenger::queueEmail($email, $patriarch->id, 'tribe_change_info', $title, 'tribe-change-info', [
+                'outcome' => $outcome,
+                'firstName' => $patriarch->profile?->first_name ?: '',
+                'memberName' => $name,
+                'from' => $from,
+                'to' => $to,
+                'mine' => $side === 'from' ? $from : $to,
+                'side' => $side,
+                'reason' => $outcome === 'requested' ? $req->reason : null,
+                'deciders' => $deciders ?: null,
+                'by' => $by,
+                'url' => $side === $memberSide ? $app.$fiche : null,
+            ], "tribe-change-info:{$req->id}:{$outcome}:{$patriarch->id}") ? 1 : 0;
+        }
+
+        return $queued;
     }
 
     /**

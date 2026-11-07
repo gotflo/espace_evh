@@ -353,6 +353,75 @@ class PlatformRulesTest extends TestCase
         $this->assertSame(0, OutboundMessage::where('user_id', $noMail->id)->count());
     }
 
+    public function test_patriarchs_who_do_not_validate_are_informed_by_notification_and_email_at_each_step(): void
+    {
+        // Comme en production depuis le 13/10 : le role patriarche n'a plus la validation des changements de tribu,
+        // l'AP de chaque tribu valide.
+        $patriarchRole = Role::where('key', 'patriarche')->first();
+        $patriarchRole->permissions()->detach(DB::table('permissions')->where('key', 'tribes.transfer')->value('id'));
+        $apJuda = $this->give($this->member('+14185550560', $this->juda, 'ApJuda', 'T', ['email' => 'apjuda@example.org']), 'assistant_pasteur', 'tribe', $this->juda->id);
+        $apLevi = $this->give($this->member('+14185550561', $this->levi, 'ApLevi', 'T', ['email' => 'aplevi@example.org']), 'assistant_pasteur', 'tribe', $this->levi->id);
+        $pJuda = $this->give($this->member('+14185550562', $this->juda, 'PJuda', 'T', ['email' => 'pjuda@example.org']), 'patriarche', 'tribe', $this->juda->id);
+        $pLevi = $this->give($this->member('+14185550563', $this->levi, 'PLevi', 'T', ['email' => 'plevi@example.org']), 'patriarche', 'tribe', $this->levi->id);
+        $member = $this->member('+14185550564', $this->juda, 'Kelly', 'Martin');
+
+        Sanctum::actingAs($member);
+        $this->postJson('/api/me/tribe-change', ['to_tribe_id' => $this->levi->id, 'reason' => 'Rapprochement familial'])->assertCreated();
+        $req = TribeChangeRequest::first();
+
+        // Les AP valident (action) ; les patriarches sont informes en meme temps (notification + courriel).
+        $this->assertSame(2, OutboundMessage::where('kind', 'tribe_change_request')->whereIn('user_id', [$apJuda->id, $apLevi->id])->count());
+        foreach ([$pJuda, $pLevi] as $p) {
+            $n = UserNotification::where('user_id', $p->id)->where('type', 'tribe_change')->sole();
+            $this->assertSame('Changement de tribu demandé : Kelly Martin', $n->title);
+            $this->assertStringContainsString('la décision revient à', $n->body);
+            $mail = OutboundMessage::where('user_id', $p->id)->where('kind', 'tribe_change_info')->sole();
+            $this->assertSame(Messenger::PRIORITY_URGENT, (int) $mail->priority);
+            $html = (new NotificationMail($mail->subject, $mail->view, $mail->payload))->render();
+            $this->assertStringContainsString('Rapprochement familial', $html);
+            $this->assertStringContainsString('Pour information', $html);
+        }
+        $this->assertSame('/admin/membres/'.$member->id, UserNotification::where('user_id', $pJuda->id)->value('url'), 'fiche ouverte dans sa tribu');
+        $this->assertNull(UserNotification::where('user_id', $pLevi->id)->value('url'), 'pas encore dans la tribu de ce patriarche');
+        $this->assertSame(0, OutboundMessage::where('kind', 'tribe_change_request')->whereIn('user_id', [$pJuda->id, $pLevi->id])->count());
+
+        Sanctum::actingAs($apJuda);
+        $this->postJson("/api/admin/validations/tribe/{$req->id}", ['decision' => 'approved'])->assertOk();
+        Sanctum::actingAs($apLevi);
+        $this->postJson("/api/admin/validations/tribe/{$req->id}", ['decision' => 'approved'])->assertOk();
+        $this->assertSame($this->levi->id, Profile::where('user_id', $member->id)->value('tribe_id'));
+
+        // Changement valide : les deux patriarches en sont informes, une fois chacun.
+        $this->assertSame(1, UserNotification::where('user_id', $pJuda->id)->where('title', 'Changement de tribu validé : Kelly Martin')->count());
+        $this->assertSame(1, UserNotification::where('user_id', $pLevi->id)->where('title', 'Nouveau membre dans la tribu : Kelly Martin')->count());
+        $this->assertSame(0, UserNotification::where('user_id', $pLevi->id)->where('title', 'Changement de tribu validé : Kelly Martin')->count(), 'pas deux fois la même nouvelle');
+        foreach ([$pJuda, $pLevi] as $p) {
+            $this->assertSame(2, OutboundMessage::where('user_id', $p->id)->where('kind', 'tribe_change_info')->count());
+        }
+        $mail = OutboundMessage::where('user_id', $pLevi->id)->where('kind', 'tribe_change_info')->latest('id')->first();
+        $html = (new NotificationMail($mail->subject, $mail->view, $mail->payload))->render();
+        $this->assertStringContainsString('pensez à lui souhaiter la bienvenue', $html);
+        $this->assertStringContainsString('/admin/membres/'.$member->id, $html);
+    }
+
+    public function test_patriarchs_are_informed_when_a_tribe_change_is_refused(): void
+    {
+        Role::where('key', 'patriarche')->first()->permissions()->detach(DB::table('permissions')->where('key', 'tribes.transfer')->value('id'));
+        $apJuda = $this->give($this->member('+14185550565', $this->juda, 'ApJuda'), 'assistant_pasteur', 'tribe', $this->juda->id);
+        $pLevi = $this->give($this->member('+14185550566', $this->levi, 'PLevi', 'T', ['email' => 'plevi@example.org']), 'patriarche', 'tribe', $this->levi->id);
+        $member = $this->member('+14185550567', $this->juda, 'Anne', 'Roy');
+        Sanctum::actingAs($member);
+        $this->postJson('/api/me/tribe-change', ['to_tribe_id' => $this->levi->id, 'reason' => 'Raison'])->assertCreated();
+
+        Sanctum::actingAs($apJuda);
+        $this->postJson('/api/admin/validations/tribe/'.TribeChangeRequest::first()->id, ['decision' => 'rejected', 'comment' => 'Parlons-en'])->assertOk();
+        $this->assertSame(1, UserNotification::where('user_id', $pLevi->id)->where('title', 'Changement de tribu refusé : Anne Roy')->count());
+        $mail = OutboundMessage::where('user_id', $pLevi->id)->where('kind', 'tribe_change_info')->latest('id')->first();
+        $html = (new NotificationMail($mail->subject, $mail->view, $mail->payload))->render();
+        $this->assertStringContainsString('n’a pas été acceptée', $html);
+        $this->assertStringNotContainsString('Parlons-en', $html, 'le commentaire est pour le fidèle');
+    }
+
     public function test_pastoral_authority_can_approve_both_sides_at_once(): void
     {
         $pastor = $this->give($this->member('+14185550550', null, 'Pasteur'), 'pasteur_assistant');

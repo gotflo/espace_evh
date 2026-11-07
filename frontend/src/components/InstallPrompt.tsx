@@ -20,7 +20,7 @@ interface BannerState { until: number; closes: number }
 function readBanner(): BannerState {
   try {
     if (localStorage.getItem(OLD_DISMISS_KEY)) {
-      // Ferme avec l'ancien bandeau : il revient une fois (nouvelles etapes d'installation), puis la regle normale.
+      // Ferme avec l'ancien bandeau : il revient une fois (nouvelles étapes d'installation), puis la regle normale.
       localStorage.removeItem(OLD_DISMISS_KEY)
       const migrated = { until: 0, closes: 1 }
       localStorage.setItem(BANNER_KEY, JSON.stringify(migrated))
