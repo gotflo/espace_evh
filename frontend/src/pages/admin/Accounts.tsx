@@ -111,8 +111,10 @@ function AssignRole({ account, roles, reference, onDone }: { account: Account; r
  * des roles sans ouvrir la fiche du membre (aucune donnee personnelle au-dela de l'identite).
  */
 export default function Accounts() {
-  const { hasPermission } = useAuth()
+  const { hasPermission, user, isSuperAdmin } = useAuth()
   const canAssign = hasPermission('roles.assign')
+  // Ses propres roles : seul le Pasteur Resident les change (le serveur refuse sinon).
+  const editable = (accountId: number) => canAssign && (isSuperAdmin || accountId !== user?.id)
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
   const [data, setData] = useState<AccountsPage | null>(null)
@@ -168,7 +170,7 @@ export default function Accounts() {
     } catch { /* message affiche par le client */ }
   }
 
-  const canRemove = (r: AccountRole) => canAssign && roles.find((x) => x.key === r.key)?.can_assign !== false
+  const canRemove = (a: { id: number }, r: AccountRole) => editable(a.id) && roles.find((x) => x.key === r.key)?.can_assign !== false
 
   return (
     <AppLayout title="Comptes" subtitle="Fonctions et rôles des membres inscrits">
@@ -193,7 +195,7 @@ export default function Accounts() {
                     <strong className="acc-name">{a.name ?? 'Sans nom'}</strong>
                     <small>{[a.tribe ? `Tribu ${a.tribe}` : null, a.phone, a.status === 'blocked' ? 'Suspendu' : a.status === 'inactive' ? 'Inactif' : null].filter(Boolean).join(' · ')}</small>
                   </div>
-                  {canAssign && (
+                  {editable(a.id) && (
                     <button className="btn btn-ghost small acc-open" aria-expanded={openId === a.id} onClick={() => setOpenId(openId === a.id ? null : a.id)}>
                       <Icon name={openId === a.id ? 'check' : 'plus'} size={15} /> {openId === a.id ? 'Fermer' : 'Rôle'}
                     </button>
@@ -203,7 +205,7 @@ export default function Accounts() {
                   {a.roles.map((r) => (
                     <span key={r.assignment_id} className={`role-chip ${r.key === 'super_admin' ? 'badge-gold' : ''}`}>
                       {r.name}{r.scope_name ? ` · ${r.scope_name}` : ''}
-                      {canRemove(r) && <button className="role-chip-x" onClick={() => removeRole(a, r)} aria-label={`Retirer ${r.name}`}>×</button>}
+                      {canRemove(a, r) && <button className="role-chip-x" onClick={() => removeRole(a, r)} aria-label={`Retirer ${r.name}`}>×</button>}
                     </span>
                   ))}
                   {a.led_departments.map((d) => <span key={d} className="role-chip">Responsable · {d}</span>)}

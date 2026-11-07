@@ -240,7 +240,7 @@ export function EventEditor({ date, event, onClose, onSaved }: {
         </div>
 
         {church && (
-          <AudiencePicker value={f.scopes} onChange={(scopes) => setF((p) => ({ ...p, scopes }))} />
+          <AudiencePicker kind="events" value={f.scopes} onChange={(scopes) => setF((p) => ({ ...p, scopes }))} />
         )}
         {church && !editing && <p className="helper">Les destinataires sont prévenus immédiatement, puis rappelés la veille.</p>}
 

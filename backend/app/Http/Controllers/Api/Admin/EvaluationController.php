@@ -18,10 +18,16 @@ class EvaluationController extends Controller
     {
         abort_unless($request->user()->canViewMember($user, 'evaluations.manage'), 403, 'Accès refusé.');
 
+        $viewer = $request->user();
+        // Supprimer une note : qui peut noter ce fidele, et seulement ses propres notes (sauf autorite pastorale).
+        $canManage = $viewer->canManageMember($user, 'evaluations.manage');
+        $pastoral = $viewer->hasPermission('members.view_all');
         $items = Evaluation::with('author.profile')
             ->where('user_id', $user->id)
             ->orderByDesc('evaluated_on')->orderByDesc('id')->get()
-            ->map(fn (Evaluation $e) => $this->present($e));
+            ->map(fn (Evaluation $e) => $this->present($e) + [
+                'can_delete' => $canManage && ($pastoral || (int) $e->created_by === $viewer->id),
+            ]);
 
         return response()->json([
             'evaluations' => $items,

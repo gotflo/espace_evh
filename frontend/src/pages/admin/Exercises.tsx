@@ -264,7 +264,7 @@ function NewExercise({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
         {pastDeadline && <p className="helper editor-error">La date limite doit être dans le futur.</p>}
       </div>
 
-      <AudiencePicker value={scopes} onChange={setScopes} />
+      <AudiencePicker kind="exercises" value={scopes} onChange={setScopes} />
 
       <button className="btn btn-primary mt" disabled={busy || !valid} onClick={publish}>
         {busy ? <span className="spinner" /> : "Publier et prévenir les fidèles"}

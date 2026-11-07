@@ -31,7 +31,15 @@ class OrgController extends Controller
             abort(403, 'Accès refusé.');
         }
 
+        // Gerer tous les departements (pasteurs, administrateur) ou seulement les siens (role de departement) :
+        // l'ecran n'affiche que les actions que le serveur acceptera.
+        $all = $user->managesAllDepartments();
+        $deptRole = Role::where('key', DepartmentLeadership::ROLE)->first();
+        $roleRefusal = $all && $deptRole ? RoleGrants::assignRefusal($user, $deptRole) : null;
+
         return response()->json([
+            'can_manage_tribes' => $user->hasPermission('tribes.manage'),
+            'can_create_departments' => $all,
             // Membres comptes : profils completes seulement (comme partout ailleurs).
             'tribes' => Tribe::withCount(['members' => fn ($q) => $q->where('is_completed', true)])->orderBy('name')->get()
                 ->map(fn (Tribe $t) => ['id' => $t->id, 'name' => $t->name, 'members_count' => $t->members_count]),
@@ -41,6 +49,11 @@ class OrgController extends Controller
                     'id' => $d->id, 'name' => $d->name, 'members_count' => $d->members_count, 'tracks_rehearsal' => $d->tracks_rehearsal,
                     'description' => $d->description, 'is_active' => $d->is_active,
                     'leaders' => $d->leaders->map(fn ($u) => ['user_id' => $u->id, 'name' => $u->profile?->full_name ?: $u->phone])->values(),
+                    'can_edit' => $user->managesDepartment((int) $d->id),
+                    'can_delete' => $all,
+                    // Nommer les responsables : qui gere tous les departements, si ce role lui est attribuable.
+                    'can_appoint' => $all && ! $roleRefusal && ! DepartmentLeadership::protocolRefusal($user, $d),
+                    'appoint_refusal' => $all ? ($roleRefusal ?: DepartmentLeadership::protocolRefusal($user, $d)) : null,
                 ]),
         ]);
     }
@@ -89,6 +102,7 @@ class OrgController extends Controller
 
     public function storeDepartment(Request $request): JsonResponse
     {
+        abort_unless($request->user()->managesAllDepartments(), 403, 'La création des départements revient aux pasteurs.');
         $name = $this->validateName($request);
         Department::create(['name' => $name, 'slug' => $this->uniqueSlug(Department::class, $name)]);
 
@@ -97,6 +111,7 @@ class OrgController extends Controller
 
     public function updateDepartment(Request $request, Department $department): JsonResponse
     {
+        abort_unless($request->user()->managesDepartment((int) $department->id), 403, 'Vous ne gérez pas ce département.');
         $data = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:60'],
             'tracks_rehearsal' => ['sometimes', 'boolean'],
@@ -112,6 +127,7 @@ class OrgController extends Controller
      */
     public function setDepartmentLeaders(Request $request, Department $department): JsonResponse
     {
+        abort_unless($request->user()->managesAllDepartments(), 403, 'Les responsables des départements sont nommés par les pasteurs.');
         $data = $request->validate([
             'user_ids' => ['present', 'array', 'max:5'],
             'user_ids.*' => ['integer', 'exists:users,id'],
@@ -156,6 +172,7 @@ class OrgController extends Controller
      */
     public function departmentCandidates(Request $request, Department $department): JsonResponse
     {
+        abort_unless($request->user()->managesAllDepartments(), 403, 'Les responsables des départements sont nommés par les pasteurs.');
         $q = $request->validate(['q' => ['required', 'string', 'min:2', 'max:60']])['q'];
         $words = array_slice(preg_split('/\s+/u', trim($q), -1, PREG_SPLIT_NO_EMPTY) ?: [], 0, 4);
 
@@ -176,14 +193,16 @@ class OrgController extends Controller
     }
 
     /** Membres d'un departement (pour choisir ses responsables). */
-    public function departmentMembers(Department $department): JsonResponse
+    public function departmentMembers(Request $request, Department $department): JsonResponse
     {
+        abort_unless($request->user()->managesDepartment((int) $department->id), 403, 'Vous ne gérez pas ce département.');
         return response()->json(['members' => $department->members()->orderBy('first_name')->get(['profiles.user_id', 'first_name', 'last_name'])
             ->map(fn ($p) => ['user_id' => $p->user_id, 'name' => trim($p->first_name.' '.$p->last_name)])->values()]);
     }
 
-    public function destroyDepartment(Department $department): JsonResponse
+    public function destroyDepartment(Request $request, Department $department): JsonResponse
     {
+        abort_unless($request->user()->managesAllDepartments(), 403, 'La suppression des départements revient aux pasteurs.');
         Audit::log('department.deleted', $department, null, ['name' => $department->name], [], ['member_profile_ids' => $department->members()->pluck('profiles.id')]);
         DepartmentLeadership::forget($department);
         $department->delete();

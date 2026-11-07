@@ -16,7 +16,11 @@ class SpiritualController extends Controller
     /** Journal + etapes d'un fidele, plus le catalogue pour les formulaires. */
     public function show(Request $request, User $user): JsonResponse
     {
-        abort_unless($request->user()->canViewMember($user, 'spiritual.view'), 403, 'Hors de votre portée.');
+        $viewer = $request->user();
+        abort_unless($viewer->canViewMember($user, 'spiritual.view'), 403, 'Hors de votre portée.');
+        // Ecrire, effacer, cocher : seulement dans sa portee d'ecriture ; effacer ce qu'un autre a note : un pasteur.
+        $canRecord = $viewer->canManageMember($user, 'spiritual.record');
+        $pastoral = $viewer->hasPermission('members.view_all');
         $entries = SpiritualEntry::with('author.profile')
             ->where('member_user_id', $user->id)
             ->orderByDesc('entry_date')->orderByDesc('id')->get()
@@ -27,6 +31,7 @@ class SpiritualController extends Controller
                 'entry_date' => $e->entry_date?->toDateString(),
                 'note' => $e->note,
                 'author' => $e->author?->profile?->full_name ?: null,
+                'can_delete' => $canRecord && ($pastoral || (int) $e->author_user_id === $viewer->id),
             ]);
 
         $reached = Milestone::where('member_user_id', $user->id)->get()
@@ -39,7 +44,11 @@ class SpiritualController extends Controller
                 'label' => $label,
                 'reached' => $reached->has($key),
                 'reached_at' => $reached->get($key)?->reached_at?->toDateString(),
+                // Decocher l'etape notee par un autre responsable : seulement un pasteur.
+                'can_unset' => $canRecord && ($pastoral || ! $reached->get($key)?->recorded_by
+                    || (int) $reached->get($key)->recorded_by === $viewer->id),
             ])->values(),
+            'can_record' => $canRecord,
             'entry_types' => SpiritualCatalog::entryTypes(),
         ]);
     }

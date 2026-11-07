@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { api, ApiError, auth as tokenStore, onSessionExpired } from '../api/client'
+import { api, ApiError, auth as tokenStore, onForbidden, onSessionExpired } from '../api/client'
 import { forgetPushOnThisDevice } from '../push'
 import { setUnread } from '../notifications'
 import { rememberPreviousVisit } from '../utils/visit'
@@ -126,6 +126,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [apply, reset, pause])
 
   useEffect(() => { refresh() }, [refresh])
+  // Un refus du serveur : les droits ont pu changer (role retire ou ajoute) ; le compte est relu, menus a jour.
+  useEffect(() => {
+    onForbidden(() => { if (signedIn.current) void refresh() })
+    return () => onForbidden(null)
+  }, [refresh])
 
   const login = (token: string, payload: AuthPayload) => {
     tokenStore.set(token)

@@ -33,16 +33,36 @@ async function loadPdfMake() {
   return pdfMake
 }
 
+/**
+ * Logo en PNG pour pdfmake (qui ne lit que PNG et JPEG). Le CDN de l'hebergeur sert le logo en WebP aux navigateurs
+ * qui l'acceptent, et le navigateur peut garder cette version en cache : le PDF echouait alors sans aucun message.
+ * On demande du PNG, puis l'image est toujours redessinee en PNG ; au moindre doute, le PDF part sans logo.
+ */
 async function logoDataUrl(): Promise<string | null> {
   try {
-    const blob = await (await fetch('/logo-vh.png')).blob()
-    return await new Promise((resolve) => {
-      const r = new FileReader()
-      r.onload = () => resolve(String(r.result))
-      r.onerror = () => resolve(null)
-      r.readAsDataURL(blob)
-    })
+    const res = await fetch('/logo-vh.png', { cache: 'no-store', headers: { Accept: 'image/png' } })
+    if (!res.ok) return null
+    const blob = await res.blob()
+    const image = typeof createImageBitmap === 'function' ? await createImageBitmap(blob) : await loadImage(blob)
+    const canvas = document.createElement('canvas')
+    canvas.width = image.width
+    canvas.height = image.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx || !canvas.width || !canvas.height) return null
+    ctx.drawImage(image, 0, 0)
+    const url = canvas.toDataURL('image/png')
+    return url.startsWith('data:image/png;base64,') ? url : null
   } catch { return null }
+}
+
+function loadImage(blob: Blob): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const src = URL.createObjectURL(blob)
+    const img = new Image()
+    img.onload = () => { URL.revokeObjectURL(src); resolve(img) }
+    img.onerror = () => { URL.revokeObjectURL(src); reject(new Error('logo illisible')) }
+    img.src = src
+  })
 }
 
 const pct = (v: number | null) => (v === null ? '—' : `${Math.round(v)} %`)

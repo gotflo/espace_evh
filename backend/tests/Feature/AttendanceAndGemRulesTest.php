@@ -178,7 +178,7 @@ class AttendanceAndGemRulesTest extends TestCase
 
         Sanctum::actingAs($patriarch);
         $this->getJson("/api/admin/members/{$paul->id}")->assertOk()
-            ->assertJsonPath('belonging_edit', ['status' => false, 'tribe' => false, 'departments' => false, 'gem' => true]);
+            ->assertJsonPath('belonging_edit', ['status' => false, 'tribe' => false, 'departments' => false, 'department_ids' => null, 'gem' => true]);
         $this->patchJson("/api/admin/members/{$paul->id}/belonging", ['tribe_id' => $this->juda->id, 'gem_id' => $gem->id, 'department_ids' => []])
             ->assertOk();
         $this->assertSame($gem->id, Profile::where('user_id', $paul->id)->value('gem_id'));
@@ -222,18 +222,18 @@ class AttendanceAndGemRulesTest extends TestCase
         Sanctum::actingAs($patriarch);
         // Membre de sa tribu hors de son departement : refuse avant (« Action non autorisée sur ce membre »).
         $this->getJson("/api/admin/members/{$paul->id}")
-            ->assertJsonPath('belonging_edit', ['status' => false, 'tribe' => false, 'departments' => false, 'gem' => true]);
+            ->assertJsonPath('belonging_edit', ['status' => false, 'tribe' => false, 'departments' => false, 'department_ids' => null, 'gem' => true]);
         $this->patchJson("/api/admin/members/{$paul->id}/belonging", ['tribe_id' => $this->juda->id, 'gem_id' => $gem->id, 'department_ids' => []])
             ->assertOk();
         // Membre de sa tribu ET de son departement : droit complet, et le GEM aussi.
         $this->getJson("/api/admin/members/{$singer->id}")
-            ->assertJsonPath('belonging_edit', ['status' => true, 'tribe' => false, 'departments' => true, 'gem' => true]);
+            ->assertJsonPath('belonging_edit', ['status' => true, 'tribe' => false, 'departments' => true, 'department_ids' => [$choir->id], 'gem' => true]);
         $this->patchJson("/api/admin/members/{$singer->id}/belonging", ['tribe_id' => $this->juda->id, 'gem_id' => $gem->id, 'department_ids' => [$choir->id]])
             ->assertOk();
         $this->assertSame(2, Profile::where('gem_id', $gem->id)->count());
         // Membre de son departement mais d'une autre tribu : ses departements oui, son GEM non (rien ne se melange).
         $this->getJson("/api/admin/members/{$leviSinger->id}")
-            ->assertJsonPath('belonging_edit', ['status' => true, 'tribe' => false, 'departments' => true, 'gem' => false]);
+            ->assertJsonPath('belonging_edit', ['status' => true, 'tribe' => false, 'departments' => true, 'department_ids' => [$choir->id], 'gem' => false]);
         $this->patchJson("/api/admin/members/{$leviSinger->id}/belonging", ['tribe_id' => $this->levi->id, 'gem_id' => $leviGem->id, 'department_ids' => [$choir->id]])
             ->assertStatus(422)->assertJsonPath('errors.gem_id.0', 'Le GEM se change par le patriarche ou l’AP de la tribu.');
         $this->assertNull(Profile::where('user_id', $leviSinger->id)->value('gem_id'));

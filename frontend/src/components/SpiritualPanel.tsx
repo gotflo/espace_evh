@@ -57,9 +57,9 @@ export function SpiritualPanel({ userId, canRecord }: { userId: string; canRecor
           <button
             key={m.key} type="button"
             className={`chip-toggle ${m.reached ? 'on' : ''}`}
-            disabled={!canRecord}
-            title={m.reached && m.reached_at ? `Franchi le ${m.reached_at}` : ''}
-            onClick={() => canRecord && toggleMilestone(m.key, !m.reached)}
+            disabled={!canRecord || (m.reached && m.can_unset === false)}
+            title={m.reached && m.reached_at ? `Franchi le ${m.reached_at}${m.can_unset === false ? ' · noté par un autre responsable' : ''}` : ''}
+            onClick={() => canRecord && !(m.reached && m.can_unset === false) && toggleMilestone(m.key, !m.reached)}
           >
             {m.reached ? '✓ ' : ''}{m.label}
           </button>
@@ -90,7 +90,7 @@ export function SpiritualPanel({ userId, canRecord }: { userId: string; canRecor
             <div className="journal-item-head">
               <span className="journal-type">{e.type_label}</span>
               <span className="journal-date">{e.entry_date}</span>
-              {canRecord && <button className="org-del" onClick={() => removeEntry(e.id)} aria-label="Supprimer">×</button>}
+              {canRecord && e.can_delete !== false && <button className="org-del" onClick={() => removeEntry(e.id)} aria-label="Supprimer">×</button>}
             </div>
             {e.note && <p className="journal-note">{e.note}</p>}
             {e.author && <span className="journal-author">par {e.author}</span>}

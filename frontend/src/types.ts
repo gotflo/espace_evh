@@ -131,6 +131,8 @@ export interface RoleOption {
   name: string
   description: string | null
   scope_kind: 'none' | 'tribe' | 'gem' | 'department' | 'member'
+  /** Attribution permise a l'utilisateur connecte (rang, acces confidentiels). */
+  can_assign?: boolean
 }
 
 export interface ManagedRole extends RoleOption {
@@ -168,6 +170,11 @@ export interface OrgItem {
   tracks_rehearsal?: boolean
   description?: string | null
   leaders?: { user_id: number; name: string }[]
+  /** Departements : actions permises a l'utilisateur connecte (calculees par le serveur). */
+  can_edit?: boolean
+  can_delete?: boolean
+  can_appoint?: boolean
+  appoint_refusal?: string | null
 }
 
 export interface JournalEntry {
@@ -177,6 +184,8 @@ export interface JournalEntry {
   entry_date: string
   note: string | null
   author: string | null
+  /** Vue d'un responsable : effacement permis (son entree, ou pasteur). */
+  can_delete?: boolean
 }
 
 export interface MilestoneItem {
@@ -184,12 +193,15 @@ export interface MilestoneItem {
   label: string
   reached: boolean
   reached_at: string | null
+  /** Vue d'un responsable : decocher permis (etape qu'il a notee, ou pasteur). */
+  can_unset?: boolean
 }
 
 export interface SpiritualData {
   entries: JournalEntry[]
   milestones: MilestoneItem[]
   entry_types: { key: string; label: string }[]
+  can_record?: boolean
 }
 
 export type AttendanceStatus = 'present' | 'retard' | 'absent_justifie' | 'absent'
@@ -504,6 +516,8 @@ export interface EvaluationItem {
   evaluated_on: string
   comment: string | null
   author?: string | null
+  /** Vue d'un responsable : suppression permise (sa note, ou pasteur). */
+  can_delete?: boolean
 }
 export interface EvalTypeAverage { type: string; type_label: string; average: number; count: number }
 export interface MyEvaluations {
@@ -519,6 +533,8 @@ export interface RoleAssignment {
   scope_kind: string | null
   scope_id: number | null
   scope_name: string | null
+  /** Retrait permis a ce responsable (rang, soi-meme, role de Protocole lie). */
+  can_remove?: boolean
 }
 
 export interface MemberDetailData {
@@ -538,7 +554,12 @@ export interface MemberDetailData {
   can_manage: boolean
   /** Ce qui est modifiable chez ce membre, chaque droit a sa source : statut et departements (members.edit sur ce
    *  membre), tribu (pasteurs), GEM (patriarche ou AP de sa tribu, pasteurs). */
-  belonging_edit?: { status: boolean; tribe: boolean; departments: boolean; gem: boolean } | null
+  belonging_edit?: { status: boolean; tribe: boolean; departments: boolean; department_ids?: number[] | null; gem: boolean } | null
+  /** Ce que ce responsable peut faire sur CE membre (portees comprises), calcule par le serveur. */
+  abilities?: {
+    evaluations_view: boolean; evaluations_manage: boolean; spiritual_record: boolean; exercises_view: boolean
+    deletion: boolean; assign_roles: boolean
+  }
   can_view_fiss: boolean
   /** Fiches de meditation lisibles (patriarche de sa tribu, pasteurs). */
   can_view_meditations: boolean
@@ -705,9 +726,10 @@ export interface ProfileCompletion {
 }
 export interface FamilyPerson { user_id: number; full_name: string; tribe: string | null; photo_url: string | null; birth_month: number | null; has_spouse: boolean }
 export interface FamilyOverview {
-  spouse: { id: number; user_id: number | null; name: string | null; tribe: string | null; photo_url: string | null; status: 'pending' | 'confirmed' | 'declined' } | null
+  /** can_open (vue d'un responsable) : la fiche du proche s'ouvrira pour lui. */
+  spouse: { id: number; user_id: number | null; name: string | null; tribe: string | null; photo_url: string | null; status: 'pending' | 'confirmed' | 'declined'; can_open?: boolean } | null
   spouse_name: string | null
-  children: { id: number; name: string; birth_year: number | null; birth_date?: string | null; user_id: number | null; status: string }[]
+  children: { id: number; name: string; birth_year: number | null; birth_date?: string | null; user_id: number | null; status: string; can_open?: boolean }[]
   incoming: { id: number; relation: 'spouse' | 'child'; from: string; from_user_id: number }[]
   suggestions: FamilyPerson[]
 }

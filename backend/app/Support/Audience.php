@@ -14,12 +14,14 @@ use Illuminate\Validation\ValidationException;
  * Portee de publication (annonces, evenements, exercices) :
  * - quelles cibles un auteur peut choisir (toute l'eglise seulement avec broadcast.all ;
  *   sinon uniquement SES tribus, GEMs et departements) ;
+ * - chaque droit vaut dans la portee du role qui le donne ($permission) : un Garde qui dirige aussi un departement
+ *   ne publie pas vers son GEM avec les droits de son departement (rien ne se melange) ;
  * - validation cote serveur de la selection (impossible de viser une tribu non assignee) ;
  * - destinataires correspondants.
  */
 class Audience
 {
-    /** Options deja calculees, par utilisateur (la duree de la requete). */
+    /** Options deja calculees, par utilisateur et par permission (la duree de la requete). */
     private static ?\WeakMap $optionsCache = null;
 
     public const TYPES = ['church', 'tribe', 'gem', 'department'];
@@ -29,24 +31,41 @@ class Audience
      *
      * @return array{church: bool, tribes: array<int, array{id: int, name: string}>, gems: array<int, array{id: int, name: string, tribe_id: int}>, departments: array<int, array{id: int, name: string}>}
      */
-    public static function options(User $author): array
+    public static function options(User $author, ?string $permission = null): array
     {
         self::$optionsCache ??= new \WeakMap;
+        $cached = self::$optionsCache[$author] ?? [];
+        $key = $permission ?? '*';
+        if (! array_key_exists($key, $cached)) {
+            $cached[$key] = self::buildOptions($author, $permission);
+            self::$optionsCache[$author] = $cached;
+        }
 
-        return self::$optionsCache[$author] ??= self::buildOptions($author);
+        return $cached[$key];
     }
 
-    private static function buildOptions(User $author): array
+    /** Portees ou cette permission s'applique (toutes ses portees si aucune permission n'est precisee). */
+    private static function scopeIds(User $author, ?string $permission): array
+    {
+        if ($permission) {
+            return $author->scopesFor($permission);
+        }
+
+        return ['tribe' => $author->scopeTribeIds(), 'gem' => $author->scopeGemIds(), 'department' => $author->scopeDepartmentIds()];
+    }
+
+    private static function buildOptions(User $author, ?string $permission): array
     {
         $all = $author->canBroadcastAll();
         $pick = fn ($query, array $ids) => $all ? $query : $query->whereIn('id', $ids ?: [0]);
+        $ids = self::scopeIds($author, $permission);
 
         return [
             'church' => $all,
-            'tribes' => $pick(Tribe::query(), $author->scopeTribeIds())->where('is_active', true)->orderBy('name')->get(['id', 'name'])->toArray(),
-            'gems' => $pick(Gem::query(), array_merge($author->scopeGemIds(), $all ? [] : Gem::whereIn('tribe_id', $author->scopeTribeIds() ?: [0])->pluck('id')->all()))
+            'tribes' => $pick(Tribe::query(), $ids['tribe'])->where('is_active', true)->orderBy('name')->get(['id', 'name'])->toArray(),
+            'gems' => $pick(Gem::query(), array_merge($ids['gem'], $all ? [] : Gem::whereIn('tribe_id', $ids['tribe'] ?: [0])->pluck('id')->all()))
                 ->orderBy('name')->get(['id', 'name', 'tribe_id'])->toArray(),
-            'departments' => $pick(Department::query(), $author->scopeDepartmentIds())->where('is_active', true)->orderBy('name')->get(['id', 'name'])->toArray(),
+            'departments' => $pick(Department::query(), $ids['department'])->where('is_active', true)->orderBy('name')->get(['id', 'name'])->toArray(),
         ];
     }
 
@@ -57,9 +76,9 @@ class Audience
      * @param  array<int, array{type?: string, id?: int|null}>|null  $input
      * @return array<int, array{type: string, id: int|null}>
      */
-    public static function resolve(User $author, ?array $input): array
+    public static function resolve(User $author, ?array $input, ?string $permission = null): array
     {
-        $options = self::options($author);
+        $options = self::options($author, $permission);
         $allowed = [
             'tribe' => array_column($options['tribes'], 'id'),
             'gem' => array_column($options['gems'], 'id'),
@@ -93,7 +112,7 @@ class Audience
         if ($options['church']) {
             return [['type' => 'church', 'id' => null]];
         }
-        foreach (['tribe' => $allowed['tribe'], 'gem' => $author->scopeGemIds(), 'department' => $allowed['department']] as $type => $ids) {
+        foreach (['tribe' => $allowed['tribe'], 'gem' => self::scopeIds($author, $permission)['gem'], 'department' => $allowed['department']] as $type => $ids) {
             if ($ids) {
                 return array_map(fn ($id) => ['type' => $type, 'id' => (int) $id], $ids);
             }
@@ -122,7 +141,7 @@ class Audience
      *
      * @param  array<int, array{type: string, id: int|null}>  $scopes
      */
-    public static function canManage(User $user, ?int $createdBy, array $scopes): bool
+    public static function canManage(User $user, ?int $createdBy, array $scopes, ?string $permission = null): bool
     {
         if ($createdBy && $createdBy === $user->id) {
             return true;
@@ -133,7 +152,7 @@ class Audience
         if ($scopes === []) {
             return false;
         }
-        $options = self::options($user);
+        $options = self::options($user, $permission);
         $allowed = [
             'tribe' => array_column($options['tribes'], 'id'),
             'gem' => array_column($options['gems'], 'id'),

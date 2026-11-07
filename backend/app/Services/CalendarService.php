@@ -141,7 +141,9 @@ class CalendarService
      */
     public static function canEdit(User $user, Event $e): bool
     {
-        if ((int) $e->created_by === $user->id) {
+        // Auteur : son evenement personnel toujours ; un evenement publie, tant qu'il garde le droit de gerer les
+        // evenements (sinon « Modifier » serait refuse par le serveur).
+        if ((int) $e->created_by === $user->id && ($e->is_personal || $user->hasPermission('events.manage'))) {
             return true;
         }
         if ($e->is_personal || ! $user->hasPermission('events.manage')) {
@@ -150,7 +152,7 @@ class CalendarService
         if ($user->canBroadcastAll()) {
             return true;
         }
-        $options = Audience::options($user);
+        $options = Audience::options($user, 'events.manage');
         $allowed = [
             'tribe' => array_column($options['tribes'], 'id'),
             'gem' => array_column($options['gems'], 'id'),

@@ -38,7 +38,7 @@ class EventController extends Controller
                 'participations as volunteer_count' => fn ($q) => $q->where('volunteer', true),
             ])
             ->orderByDesc('starts_at')->limit(300)->get()
-            ->filter(fn (Event $e) => Audience::canManage($user, $e->created_by, $e->audienceList()))
+            ->filter(fn (Event $e) => Audience::canManage($user, $e->created_by, $e->audienceList(), 'events.manage'))
             ->map(fn (Event $e) => $this->present($e))->values();
 
         return response()->json(['events' => $items, 'recurrences' => Event::RECURRENCES]);
@@ -47,7 +47,7 @@ class EventController extends Controller
     /** Liste des participants (presents) et des volontaires d'un evenement (ou d'une occurrence). */
     public function participants(Request $request, Event $event): JsonResponse
     {
-        $this->authorizeManage($request, $event);
+        $this->authorizeManage($request, $event, 'events.participants');
         $date = $request->query('date');
         $rows = $event->participations()->with('user.profile')
             ->when($date, fn ($q) => $q->where('occurs_on', $date))
@@ -71,7 +71,7 @@ class EventController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $this->validated($request);
-        $scopes = Audience::resolve($request->user(), Audience::fromRequest($request));
+        $scopes = Audience::resolve($request->user(), Audience::fromRequest($request), 'events.manage');
         if ($request->hasFile('image')) {
             $data['image_path'] = ImageOptimizer::store($request->file('image'), 'events', ImageOptimizer::CONTENT);
         }
@@ -96,7 +96,7 @@ class EventController extends Controller
     {
         $this->authorizeManage($request, $event);
         $data = $this->validated($request, $event);
-        $scopes = $request->has('scopes') ? Audience::resolve($request->user(), Audience::fromRequest($request)) : null;
+        $scopes = $request->has('scopes') ? Audience::resolve($request->user(), Audience::fromRequest($request), 'events.manage') : null;
         // Nouvelle image enregistree d'abord : l'ancienne n'est supprimee qu'une fois la fiche a jour
         // (une image refusee ou une erreur ne laisse jamais l'evenement sans image).
         $oldImage = null;
@@ -139,7 +139,7 @@ class EventController extends Controller
 
     public function destroy(Request $request, Event $event): JsonResponse
     {
-        $this->authorizeManage($request, $event);
+        $this->authorizeManage($request, $event, 'events.delete');
         $participants = $this->upcomingParticipants($event);
         $title = $event->title;
         $wasUpcoming = $event->isRecurring() || $event->starts_at->isFuture();
@@ -221,10 +221,10 @@ class EventController extends Controller
         return $data;
     }
 
-    private function authorizeManage(Request $request, Event $event): void
+    private function authorizeManage(Request $request, Event $event, string $permission = 'events.manage'): void
     {
         abort_if($event->is_personal, 404);
-        abort_unless(Audience::canManage($request->user(), $event->created_by, $event->audienceList()), 403, 'Cet événement est hors de votre périmètre.');
+        abort_unless(Audience::canManage($request->user(), $event->created_by, $event->audienceList(), $permission), 403, 'Cet événement est hors de votre périmètre.');
     }
 
     /** @return array<int> fideles inscrits (presents) aux occurrences a venir. */

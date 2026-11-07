@@ -18,7 +18,13 @@ import { Icon } from '../../components/Icon'
 import { useDirty } from '../../utils/dirty'
 import { LoadError } from '../../components/LoadError'
 
+/** Une fiche par membre : changer de membre (lien d'un proche) repart de zero, sans afficher les donnees du precedent. */
 export default function MemberDetail() {
+  const { id } = useParams()
+  return <MemberDetailView key={id} />
+}
+
+function MemberDetailView() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { hasPermission } = useAuth()
@@ -27,11 +33,7 @@ export default function MemberDetail() {
   // Composer les GEMs de sa tribu (patriarche, AP) : choisir le GEM d'un membre, meme sans members.edit.
   const canPlaceGem = hasPermission('gems.manage')
   const canViewSpiritual = hasPermission('spiritual.view')
-  const canManageEval = hasPermission('evaluations.manage')
-  const canRecordSpiritual = hasPermission('spiritual.record')
   const canFissHistory = hasPermission('fiss.review') || hasPermission('audit.view')
-  // Meme permission que l'appel /admin/members/{id}/exercises (sinon un bloc toujours refuse).
-  const canExercises = hasPermission('exercises.view_responses')
 
   const [data, setData] = useState<MemberDetailData | null>(null)
   const [roleOptions, setRoleOptions] = useState<RoleOption[]>([])
@@ -156,6 +158,12 @@ export default function MemberDetail() {
   const canEditHere = rights.status
   const canBelong = rights.tribe || rights.gem || rights.departments
   const belongParts = [rights.tribe && 'la tribu', rights.gem && 'le GEM', rights.departments && 'les départements'].filter(Boolean) as string[]
+  // Departements que ce responsable peut cocher (null : tous) ; les autres restent tels quels et s'affichent a part.
+  const deptAllowed = rights.department_ids ?? null
+  const deptsHere = deptAllowed ? departments.filter((d) => deptAllowed.includes(d.id)) : departments
+  const deptsElsewhere = deptAllowed ? belongDepts.filter((d) => !deptAllowed.includes(d)) : []
+  // Ce que ce responsable peut faire sur CE membre (portees comprises) : panneaux et boutons seulement si permis.
+  const ab = data.abilities ?? { evaluations_view: false, evaluations_manage: false, spiritual_record: false, exercises_view: false, deletion: false, assign_roles: false }
   const initials = ((p?.first_name?.[0] ?? '') + (p?.last_name?.[0] ?? '')).toUpperCase()
 
   return (
@@ -224,20 +232,20 @@ export default function MemberDetail() {
             {data.roles.map((r) => (
               <span key={r.assignment_id} className={`role-chip ${r.key === 'super_admin' ? 'badge-gold' : ''}`}>
                 {r.name}{r.scope_name ? ` · ${r.scope_name}` : ''}
-                {canAssign && <button className="role-chip-x" onClick={() => removeRole(r.assignment_id)} aria-label="Retirer">×</button>}
+                {r.can_remove && <button className="role-chip-x" onClick={() => removeRole(r.assignment_id)} aria-label="Retirer">×</button>}
               </span>
             ))}
             {data.roles.length === 0 && <p className="helper">Aucun rôle.</p>}
           </div>
 
-          {canAssign && (
+          {ab.assign_roles && (
             <div className="assign-box mt">
               <div className="field-row">
                 <div className="field" style={{ marginBottom: 0 }}>
                   <label>Ajouter un rôle</label>
                   <select aria-label="Ajouter un rôle" className="select" value={roleKey} onChange={(e) => { setRoleKey(e.target.value); setScopeId('') }}>
                     <option value="">Choisir un rôle...</option>
-                    {roleOptions.map((r) => <option key={r.key} value={r.key}>{r.name}</option>)}
+                    {roleOptions.filter((r) => r.can_assign !== false).map((r) => <option key={r.key} value={r.key}>{r.name}</option>)}
                   </select>
                 </div>
                 {needsScope && (
@@ -310,7 +318,11 @@ export default function MemberDetail() {
           {rights.departments && (
             <div className="field">
               <label>Départements <span className="helper" style={{ display: 'inline' }}>(plusieurs possibles)</span></label>
-              <DepartmentPicker departments={departments} selected={belongDepts} onChange={setBelongDepts} />
+              <DepartmentPicker departments={deptsHere} selected={deptAllowed ? belongDepts.filter((d) => deptAllowed.includes(d)) : belongDepts}
+                onChange={(ids) => setBelongDepts([...ids, ...deptsElsewhere])} />
+              {deptsElsewhere.length > 0 && (
+                <p className="helper">Aussi : {departments.filter((d) => deptsElsewhere.includes(d.id)).map((d) => d.name).join(', ')} (gérés par leurs responsables).</p>
+              )}
             </div>
           )}
           <button className="btn btn-primary" disabled={busy || !belonging.dirty} onClick={saveBelonging}>
@@ -342,10 +354,10 @@ export default function MemberDetail() {
       {canViewSpiritual && data.can_view_fiss && id && <MemberGrowth userId={id} />}
       {/* Fiches de meditation : patriarche de la tribu et pasteurs seulement (le serveur decide). */}
       {data.can_view_meditations && id && <MemberMeditationPanel userId={id} />}
-      {canExercises && id && <MemberExercises userId={id} />}
-      {canViewSpiritual && id && <SpiritualPanel userId={id} canRecord={canRecordSpiritual && manage} />}
-      {canManageEval && id && <EvaluationsPanel userId={id} canManage={manage} />}
-      {id && <MemberDeletion userId={id} name={data.profile?.full_name ?? 'ce membre'} />}
+      {ab.exercises_view && id && <MemberExercises userId={id} />}
+      {canViewSpiritual && id && <SpiritualPanel userId={id} canRecord={ab.spiritual_record} />}
+      {ab.evaluations_view && id && <EvaluationsPanel userId={id} canManage={ab.evaluations_manage} />}
+      {ab.deletion && id && <MemberDeletion userId={id} name={data.profile?.full_name ?? 'ce membre'} />}
     </AppLayout>
   )
 }

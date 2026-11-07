@@ -10,13 +10,16 @@ use App\Models\SpiritualHealthForm;
 use App\Models\Tribe;
 use App\Models\User;
 use App\Services\DepartmentJoinService;
+use App\Services\BelongingNotices;
 use App\Services\FamilyService;
+use App\Services\MemberDeletionService;
 use App\Support\Audit;
 use App\Support\DepartmentLeadership;
 use App\Support\GemRules;
 use App\Support\Like;
 use App\Support\MemberScope;
 use App\Support\ProfileCompletion;
+use App\Support\RoleGrants;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -118,8 +121,20 @@ class MemberController extends Controller
             'profile' => $user->profile,
             'spiritual_profile' => $viewer->canViewMember($user, 'spiritual.view') ? $user->spiritualProfile : null,
             'completion' => $user->profile ? ProfileCompletion::for($user->profile) : null,
-            'family' => FamilyService::overview($user),
+            'family' => $this->familyFor($viewer, $user),
             'can_manage' => $viewer->canManageMember($user),
+            // Ce que ce responsable peut faire sur CE membre (portees comprises) : l'ecran n'affiche que cela,
+            // jamais un bouton ou un panneau que le serveur refuserait ensuite.
+            'abilities' => [
+                'evaluations_view' => $viewer->canViewMember($user, 'evaluations.manage'),
+                'evaluations_manage' => $viewer->canManageMember($user, 'evaluations.manage'),
+                'spiritual_record' => $viewer->canManageMember($user, 'spiritual.record'),
+                'exercises_view' => $viewer->canViewMember($user, 'exercises.view_responses'),
+                'deletion' => MemberDeletionService::canDelete($viewer, $user) || MemberDeletionService::canRequest($viewer, $user)
+                    || $viewer->canManageMember($user),
+                'assign_roles' => $viewer->hasPermission('roles.assign') && ! $user->isPlatformManager()
+                    && ($viewer->isSuperAdmin() || $viewer->id !== $user->id),
+            ],
             // Appartenance modifiable : « full » (tribu, GEM, departements), « gem » (le GEM seulement) ou null.
             'belonging_edit' => self::belongingRights($viewer, $user),
             'can_view_fiss' => $viewer->canViewFissOf($user),
@@ -134,6 +149,11 @@ class MemberController extends Controller
                 'scope_kind' => $r->pivot->scope_kind,
                 'scope_id' => $r->pivot->scope_id,
                 'scope_name' => $this->scopeName($r->pivot->scope_kind, $r->pivot->scope_id),
+                // Memes regles que le retrait (RoleController::revoke) : rang, soi-meme, role de Protocole lie.
+                'can_remove' => $viewer->hasPermission('roles.assign') && ! $user->isPlatformManager()
+                    && RoleGrants::assignRefusal($viewer, $r, $user) === null
+                    && ! DepartmentLeadership::isProtocolLeadership($r, $r->pivot->scope_kind)
+                    && ! ($r->key === User::SUPER_ADMIN && $user->id === $viewer->id),
             ])->values(),
         ]);
     }
@@ -168,7 +188,7 @@ class MemberController extends Controller
     {
         $actor = $request->user();
         $rights = self::belongingRights($actor, $user);
-        abort_unless(in_array(true, $rights, true), 403, 'Action non autorisée sur ce membre.');
+        abort_unless($rights['status'] || $rights['tribe'] || $rights['departments'] || $rights['gem'], 403, 'Action non autorisée sur ce membre.');
 
         $data = $request->validate([
             'tribe_id' => ['nullable', 'exists:tribes,id'],
@@ -233,6 +253,11 @@ class MemberController extends Controller
         [$old, $new] = Audit::diff($before, $after);
         if ($new) {
             Audit::log(isset($new['tribe_id']) ? 'tribe.changed' : 'member.belonging_updated', $profile, $user->id, $old, $new, ['by' => 'authority']);
+            // Le membre, la tribu qui l'accueille et le Garde de son nouveau GEM en sont prevenus.
+            $ints = fn (array $ids) => array_map('intval', $ids);
+            BelongingNotices::after($user->load('profile'),
+                ['tribe_id' => $before['tribe_id'], 'gem_id' => $before['gem_id'], 'department_ids' => $ints($before['department_ids'])],
+                ['tribe_id' => $after['tribe_id'], 'gem_id' => $after['gem_id'], 'department_ids' => $ints($after['department_ids'])], $actor);
         }
         ProfileCompletion::refresh($profile->fresh());
 
@@ -243,13 +268,36 @@ class MemberController extends Controller
     }
 
     /**
+     * Famille vue par un responsable : un lien vers la fiche d'un proche seulement si elle s'ouvrira pour lui
+     * (fiche terminee, dans sa portee). Les demandes recues et suggestions de conjoint restent au membre lui-meme.
+     *
+     * @return array<string, mixed>
+     */
+    private function familyFor(User $viewer, User $member): array
+    {
+        $family = FamilyService::overview($member);
+        $opens = function (?int $id) use ($viewer): bool {
+            $relative = $id ? User::with('profile')->find($id) : null;
+
+            return (bool) ($relative?->profile?->is_completed && $viewer->canViewMember($relative));
+        };
+        if ($family['spouse']) {
+            $family['spouse']['can_open'] = $opens($family['spouse']['user_id'] ?? null);
+        }
+        $family['children'] = array_map(fn (array $c) => $c + ['can_open' => $opens($c['user_id'] ?? null)], $family['children']);
+        unset($family['incoming'], $family['suggestions']);
+
+        return $family;
+    }
+
+    /**
      * Ce que l'utilisateur peut changer chez ce membre, chaque droit venant de sa propre source :
      * - status, departments : members.edit sur ce membre (portee comprise : un responsable de departement, ses membres) ;
      * - tribe : autorite pastorale (ou membre encore sans tribu, avec members.edit) ;
      * - gem : composition des GEMs de la tribu du membre (patriarche, AP de cette tribu, pasteurs), jamais par un
      *   role de departement.
      *
-     * @return array{status: bool, tribe: bool, departments: bool, gem: bool}
+     * @return array{status: bool, tribe: bool, departments: bool, department_ids: array<int>|null, gem: bool}
      */
     public static function belongingRights(User $actor, User $member): array
     {
@@ -261,6 +309,8 @@ class MemberController extends Controller
             'status' => $full,
             'tribe' => $full && ($pastoral || $tribeId === null),
             'departments' => $full,
+            // Departements qu'il peut cocher ou decocher (null : tous, autorite pastorale).
+            'department_ids' => $full && ! $actor->hasPermission('members.view_all') ? $actor->scopesFor('members.edit')['department'] : null,
             'gem' => $pastoral || ($actor->canManageMember($member) && GemRules::canPlaceMembers($actor, $tribeId)),
         ];
     }

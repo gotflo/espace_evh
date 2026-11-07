@@ -4,21 +4,25 @@ import { useAuth } from '../auth/AuthContext'
 import type { AudienceOptions, AudienceScope } from '../types'
 import { MultiSelect } from './MultiSelect'
 
-// Memoire propre a la session : cle = jeton + roles. Un autre compte (ou des roles modifies) ne
-// recoit jamais les destinataires du precedent.
-let cache: { key: string; opts: AudienceOptions } | null = null
+// Memoire propre a la session : cle = jeton + roles + type de publication. Un autre compte (ou des roles
+// modifies) ne recoit jamais les destinataires du precedent.
+const cache = new Map<string, AudienceOptions>()
 
-/** Destinataires autorises pour l'utilisateur (charges une fois par session et par jeu de roles). */
-export function useAudienceOptions(): AudienceOptions | null {
+/** Type de publication : chaque droit vaut dans la portee du role qui le donne (rien ne se melange). */
+export type AudienceKind = 'announcements' | 'events' | 'exercises'
+
+/** Destinataires autorises pour ce type de publication (charges une fois par session et par jeu de roles). */
+export function useAudienceOptions(kind: AudienceKind): AudienceOptions | null {
   const { roles } = useAuth()
   const roleSignature = roles.map((r) => [r.key, r.scope_kind, r.scope_id].join(':')).join(',')
-  const cacheKey = (auth.get() ?? '') + '|' + roleSignature
-  const [opts, setOpts] = useState<AudienceOptions | null>(() => (cache?.key === cacheKey ? cache.opts : null))
+  const cacheKey = (auth.get() ?? '') + '|' + roleSignature + '|' + kind
+  const [opts, setOpts] = useState<AudienceOptions | null>(() => cache.get(cacheKey) ?? null)
   useEffect(() => {
-    if (cache?.key === cacheKey) { setOpts(cache.opts); return }
+    const known = cache.get(cacheKey)
+    if (known) { setOpts(known); return }
     setOpts(null)
-    api<AudienceOptions>('/admin/audiences').then((o) => { cache = { key: cacheKey, opts: o }; setOpts(o) }).catch(() => setOpts({ church: false, tribes: [], gems: [], departments: [] }))
-  }, [cacheKey])
+    api<AudienceOptions>(`/admin/audiences?for=${kind}`).then((o) => { cache.set(cacheKey, o); setOpts(o) }).catch(() => setOpts({ church: false, tribes: [], gems: [], departments: [] }))
+  }, [cacheKey, kind])
   return opts
 }
 
@@ -36,8 +40,8 @@ const key = (s: AudienceScope) => `${s.type}:${s.id ?? ''}`
  * Portee d'une publication : toute l'eglise (si permis) ou une selection de tribus, GEMs et
  * departements. Seules les cibles autorisees sont proposees (le serveur verifie aussi).
  */
-export function AudiencePicker({ value, onChange }: { value: AudienceScope[]; onChange: (s: AudienceScope[]) => void }) {
-  const opts = useAudienceOptions()
+export function AudiencePicker({ kind, value, onChange }: { kind: AudienceKind; value: AudienceScope[]; onChange: (s: AudienceScope[]) => void }) {
+  const opts = useAudienceOptions(kind)
 
   useEffect(() => {
     if (opts && value.length === 0) onChange(defaultScopes(opts))

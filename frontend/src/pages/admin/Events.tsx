@@ -248,7 +248,7 @@ export default function Events() {
                 : existingImage && <span className="helper">Image actuelle : choisir un fichier pour la remplacer.</span>}
             </div>
           </div>
-          <AudiencePicker value={form.scopes} onChange={(scopes) => setForm((f) => ({ ...f, scopes }))} />
+          <AudiencePicker kind="events" value={form.scopes} onChange={(scopes) => setForm((f) => ({ ...f, scopes }))} />
           <button className="btn btn-primary mt" disabled={busy || preparing || !form.title.trim() || !form.starts_at || form.scopes.length === 0 || (!!form.id && !formState.dirty)} onClick={save}>
             {busy ? <span className="spinner" /> : form.id ? 'Enregistrer' : "Créer l'événement"}
           </button>

@@ -17,6 +17,19 @@ export const auth = {
 let expiredShown = false
 let expired: (() => void) | null = null
 export function onSessionExpired(cb: (() => void) | null) { expired = cb }
+
+/**
+ * Refus (403) : les droits de la personne ont peut-etre change depuis l'ouverture (role retire ou ajoute par un
+ * pasteur). Le compte est relu (menus et boutons a jour) au plus une fois par minute, sans rien afficher.
+ */
+let forbidden: (() => void) | null = null
+let forbiddenAt = 0
+export function onForbidden(cb: (() => void) | null) { forbidden = cb }
+function rightsMayHaveChanged(path: string) {
+  if (path === '/me' || Date.now() - forbiddenAt < 60_000) return
+  forbiddenAt = Date.now()
+  forbidden?.()
+}
 function sessionExpired() {
   if (expiredShown) return
   expiredShown = true
@@ -47,12 +60,14 @@ function remember(key: string, data: unknown) {
  * Lecture anticipee (survol ou toucher d'un lien) : la page suivante a deja ses donnees en
  * arrivant. Rien n'est relu si la derniere lecture a moins de 20 s ou si elle est en cours.
  */
+// Lecture anticipee refusee ou en echec : pas de nouvel essai a chaque survol pendant une minute.
+const warmFailedAt = new Map<string, number>()
 export function warm(path: string) {
   const token = auth.get()
   if (!token) return
   const key = `${token} ${path}`
-  if (inflight.has(key) || Date.now() - (cachedAt.get(key) ?? 0) < 20000) return
-  api(path, { toast: false }).catch(() => {})
+  if (inflight.has(key) || Date.now() - (cachedAt.get(key) ?? 0) < 20000 || Date.now() - (warmFailedAt.get(key) ?? 0) < 60000) return
+  api(path, { toast: false }).then(() => { warmFailedAt.delete(key) }).catch(() => { warmFailedAt.set(key, Date.now()) })
 }
 
 /** Derniere reponse connue d'une lecture (ou undefined) : affichage immediat avant la mise a jour. */
@@ -225,6 +240,7 @@ async function request<T>(path: string, method: string, opts: Options): Promise<
       auth.clear()
       if (!path.startsWith('/auth/')) sessionExpired()
     }
+    if (res.status === 403 && needAuth && !data.membership) rightsMayHaveChanged(path)
     // Messages techniques (anglais) remplaces par un texte clair, y compris le 404 de Laravel
     // (« No query results for model [App\Models\Event] 42 »).
     const technical = !data.message

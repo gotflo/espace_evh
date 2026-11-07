@@ -101,7 +101,8 @@ class MyServiceController extends Controller
                 'service',
                 "{$name} a quitté le service {$department->name}",
                 null,
-                "/admin/membres/{$user->id}",
+                // Pas de lien vers sa fiche : hors du service, elle n'est plus dans la portee de ses responsables.
+                null,
             );
         }
 

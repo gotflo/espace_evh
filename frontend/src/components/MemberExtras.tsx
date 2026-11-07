@@ -54,7 +54,7 @@ export function MemberFamily({ family, maritalStatus, wedding }: { family: Famil
           <div className="detail-line">
             <span>Conjoint(e)</span>
             <strong>
-              {spouse?.user_id ? <Link to={`/admin/membres/${spouse.user_id}`}>{spouseName}</Link> : spouseName}
+              {spouse?.user_id && spouse.can_open !== false ? <Link to={`/admin/membres/${spouse.user_id}`}>{spouseName}</Link> : spouseName}
               {spouse?.status === 'pending' && <em className="helper-inline"> (en attente de confirmation)</em>}
               {!spouse?.user_id && <em className="helper-inline"> (non inscrit)</em>}
             </strong>
@@ -68,7 +68,7 @@ export function MemberFamily({ family, maritalStatus, wedding }: { family: Famil
               {family.children.map((c, i) => (
                 <span key={c.id}>
                   {i > 0 && ', '}
-                  {c.user_id ? <Link to={`/admin/membres/${c.user_id}`}>{c.name}</Link> : c.name}
+                  {c.user_id && c.can_open !== false ? <Link to={`/admin/membres/${c.user_id}`}>{c.name}</Link> : c.name}
                   {c.birth_date ? ` (${childAge(c.birth_date)})` : c.birth_year ? ` (${c.birth_year})` : ''}
                 </span>
               ))}

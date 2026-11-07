@@ -88,7 +88,7 @@ class ExerciseController extends Controller
                     'created_at' => $e->created_at->toDateString(),
                     'author' => self::authorOf($e),
                     'is_mine' => (int) $e->created_by === $user->id,
-                    'can_delete' => $user->hasPermission('exercises.delete') && Audience::canManage($user, $e->created_by, $e->audienceList()),
+                    'can_delete' => $user->hasPermission('exercises.delete') && Audience::canManage($user, $e->created_by, $e->audienceList(), 'exercises.delete'),
                 ];
             })->values();
 
@@ -107,7 +107,8 @@ class ExerciseController extends Controller
         if ($user->canBroadcastAll()) {
             return $query;
         }
-        $o = Audience::options($user);
+        // Suivi des exercices : la portee ou il lit les reponses (pas celle d'un autre role, ex. son departement).
+        $o = Audience::options($user, self::VIEW_RESPONSES);
         $tribes = array_column($o['tribes'], 'id');
         $gems = array_column($o['gems'], 'id');
         $depts = array_column($o['departments'], 'id');
@@ -129,7 +130,7 @@ class ExerciseController extends Controller
     /** Peut-il voir cet exercice et son suivi ? */
     public static function canFollow(User $user, Exercise $exercise): bool
     {
-        return Audience::canManage($user, $exercise->created_by, $exercise->audienceList())
+        return Audience::canManage($user, $exercise->created_by, $exercise->audienceList(), self::VIEW_RESPONSES)
             || self::followedBy($user)->whereKey($exercise->id)->exists();
     }
 
@@ -144,7 +145,7 @@ class ExerciseController extends Controller
             return $user->holdsWithoutScope(self::VIEW_RESPONSES);
         }
 
-        return Audience::canManage($user, $exercise->created_by, $exercise->audienceList());
+        return Audience::canManage($user, $exercise->created_by, $exercise->audienceList(), self::VIEW_RESPONSES);
     }
 
     /**
@@ -326,7 +327,7 @@ class ExerciseController extends Controller
             : (! empty($data['due_date']) ? Carbon::parse($data['due_date'])->setTime(23, 59) : null);
 
         $author = $request->user();
-        $scopes = Audience::resolve($author, Audience::fromRequest($request));
+        $scopes = Audience::resolve($author, Audience::fromRequest($request), 'exercises.create');
         $attributes = [
             'title' => $data['title'],
             'content' => (string) ($data['content'] ?? ''),
@@ -360,7 +361,7 @@ class ExerciseController extends Controller
 
     public function destroy(Request $request, Exercise $exercise): JsonResponse
     {
-        $this->authorizeManage($request, $exercise);
+        $this->authorizeManage($request, $exercise, 'exercises.delete');
         Audit::log('exercise.deleted', $exercise, null, ['title' => $exercise->title, 'scopes' => $exercise->audienceList()]);
         $exercise->scopes()->delete();
         $exercise->delete();
@@ -475,9 +476,9 @@ class ExerciseController extends Controller
         return $what.$until.'.';
     }
 
-    private function authorizeManage(Request $request, Exercise $exercise): void
+    private function authorizeManage(Request $request, Exercise $exercise, string $permission = self::VIEW_RESPONSES): void
     {
-        abort_unless(Audience::canManage($request->user(), $exercise->created_by, $exercise->audienceList()), 403, 'Cet exercice est hors de votre périmètre.');
+        abort_unless(Audience::canManage($request->user(), $exercise->created_by, $exercise->audienceList(), $permission), 403, 'Cet exercice est hors de votre périmètre.');
     }
 
     private function typeList(): array

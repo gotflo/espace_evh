@@ -33,7 +33,9 @@ class DepartmentJoinService
             return false;
         }
 
-        return $actor->hasPermission('departments.manage')
+        // Tous les departements : seulement qui les gere tous (pasteurs, administrateur). Un responsable de
+        // departement decide pour SES departements, jamais pour les autres (departments.manage recu sur son departement).
+        return $actor->managesAllDepartments()
             || in_array((int) $request->department_id, $actor->scopeDepartmentIds(), true);
     }
 

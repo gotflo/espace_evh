@@ -133,7 +133,13 @@ class GemReportService
         }
 
         if ($first) {
-            Notifier::send(array_diff(Recipients::tribeRoleHolders((int) $gem->tribe_id, ['patriarche', 'assistant_pasteur']), [$author->id]),
+            // Patriarche et AP de la tribu ; s'il n'y a personne d'autre (le patriarche est lui-meme le Garde),
+            // les autorites qui lisent les rapports : un rapport n'arrive jamais nulle part.
+            $readers = array_values(array_diff(Recipients::tribeRoleHolders((int) $gem->tribe_id, ['patriarche', 'assistant_pasteur']), [$author->id]));
+            if (! $readers) {
+                $readers = array_values(array_diff(Recipients::authorities('reports.view'), [$author->id]));
+            }
+            Notifier::send($readers,
                 'gem_report', 'Rapport de GEM reçu · '.$gem->name,
                 'Semaine '.self::weekLabel($due).' · culte : '.$report->culte_count.' sur '.$report->members_count
                     .($meetingHeld ? ' · rencontre : '.$report->meeting_count.' sur '.$report->members_count : ' · pas de rencontre'),

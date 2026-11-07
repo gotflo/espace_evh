@@ -122,7 +122,7 @@ export default function Announcements() {
               {CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
           </div>
-          <AudiencePicker value={scopes} onChange={setScopes} />
+          <AudiencePicker kind="announcements" value={scopes} onChange={setScopes} />
           <button className="btn btn-primary mt" disabled={busy || preparing || !hasContent || scopes.length === 0} onClick={publish}>
             {busy ? <span className="spinner" /> : "Publier l'annonce"}
           </button>

@@ -99,7 +99,7 @@ export function EvaluationsPanel({ userId, canManage = true }: { userId: string;
               <span className="grade-date">{e.evaluated_on}{e.author ? ` · ${e.author}` : ''}</span>
             </div>
             <span className="grade-score">{e.score}<small>/{e.max_score}</small></span>
-            {canManage && <button className="org-del" onClick={() => remove(e.id)} aria-label="Supprimer">×</button>}
+            {canManage && e.can_delete !== false && <button className="org-del" onClick={() => remove(e.id)} aria-label="Supprimer">×</button>}
           </div>
         ))}
         {items.length === 0 && (loadError ? <LoadError compact message={loadError} onRetry={() => { setLoadError(''); load() }} /> : <p className="helper">Aucune note pour l'instant.</p>)}

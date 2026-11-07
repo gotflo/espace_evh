@@ -23,7 +23,7 @@ class AnnouncementController extends Controller
     {
         $user = $request->user();
         $announcements = Announcement::with('creator.profile', 'scopes')->latest()->limit(200)->get()
-            ->filter(fn (Announcement $a) => Audience::canManage($user, $a->created_by, $a->audienceList()));
+            ->filter(fn (Announcement $a) => Audience::canManage($user, $a->created_by, $a->audienceList(), 'announcements.publish'));
         // Nombre de destinataires garde sur l'annonce : il n'est recompte que pour une annonce qui ne l'a pas.
         $unknown = $announcements->whereNull('recipients_count')->pluck('id');
         $counted = $unknown->isEmpty() ? collect() : DB::table('announcement_user')->whereIn('announcement_id', $unknown)
@@ -60,7 +60,7 @@ class AnnouncementController extends Controller
 
         // Portee : une ou plusieurs tribus / GEMs / departements, controlee par les droits de l'auteur.
         $author = $request->user();
-        $scopes = Audience::resolve($author, Audience::fromRequest($request));
+        $scopes = Audience::resolve($author, Audience::fromRequest($request), 'announcements.publish');
 
         [$announcement, $recipients] = DB::transaction(function () use ($data, $request, $author, $scopes) {
             $announcement = Announcement::create([
@@ -96,7 +96,7 @@ class AnnouncementController extends Controller
 
     public function destroy(Request $request, Announcement $announcement): JsonResponse
     {
-        abort_unless(Audience::canManage($request->user(), $announcement->created_by, $announcement->audienceList()), 403, 'Cette annonce est hors de votre périmètre.');
+        abort_unless(Audience::canManage($request->user(), $announcement->created_by, $announcement->audienceList(), 'announcements.delete'), 403, 'Cette annonce est hors de votre périmètre.');
         Audit::log('announcement.deleted', $announcement, null, ['title' => $announcement->title, 'scopes' => $announcement->audienceList()]);
         if ($announcement->image_path) {
             Storage::disk('public')->delete($announcement->image_path);

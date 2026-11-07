@@ -263,6 +263,24 @@ class User extends Authenticatable
         return $this->roles->contains(fn (Role $r) => ! $r->pivot->scope_kind && $r->permissions->contains('key', $permission));
     }
 
+    /**
+     * Gere TOUS les departements (creer, supprimer, nommer les responsables) : departments.manage recu sans portee
+     * (pasteurs, administrateur), Pasteur Resident ou compte de gestion. Recu par un role de departement, il ne vaut
+     * que pour ce departement (managesDepartment).
+     */
+    public function managesAllDepartments(): bool
+    {
+        return $this->hasPermission('departments.manage')
+            && ($this->isSuperAdmin() || $this->isPlatformManager() || $this->holdsWithoutScope('departments.manage'));
+    }
+
+    /** Peut modifier CE departement (nom, suivi des repetitions) : tous, ou ceux de sa portee departments.manage. */
+    public function managesDepartment(int $departmentId): bool
+    {
+        return $this->managesAllDepartments()
+            || ($this->hasPermission('departments.manage') && in_array($departmentId, $this->scopesFor('departments.manage')['department'], true));
+    }
+
     /** A recharger apres un changement de roles au cours de la meme requete. */
     public function forgetPermissions(): void
     {

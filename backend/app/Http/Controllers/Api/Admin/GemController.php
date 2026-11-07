@@ -8,6 +8,7 @@ use App\Models\Profile;
 use App\Models\Role;
 use App\Models\Tribe;
 use App\Models\User;
+use App\Services\BelongingNotices;
 use App\Support\Audit;
 use App\Support\GemRules;
 use App\Support\LeaderRole;
@@ -128,6 +129,12 @@ class GemController extends Controller
                 Audit::log('member.belonging_updated', $p, (int) $p->user_id, ['gem_id' => $gem->id], ['gem_id' => null], ['by' => 'gem_page'], $actor);
             }
         });
+
+        // Chaque arrivant et le Garde du GEM en sont prevenus.
+        $gem->load('leader.profile');
+        foreach (User::with('profile')->whereIn('id', $added)->get() as $member) {
+            BelongingNotices::joinedGem($member, $gem, $actor);
+        }
 
         return response()->json([
             'message' => $added->isEmpty() && $removed->isEmpty() ? 'Aucun changement.' : 'Membres du GEM enregistrés.',

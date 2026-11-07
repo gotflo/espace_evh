@@ -132,7 +132,9 @@ Route::prefix('agent')->middleware(['throttle:agent', VerifyAgentSignature::clas
 
 // --- Routes protegees (jeton Sanctum requis) ---
 // Compte pas encore valide par le pasteur : seul l'ecran d'attente repond (EnsureApprovedMember).
-Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, TrackActivity::class, EnsureApprovedMember::class, PlatformManagerGuard::class])->group(function () {
+// Limite par personne (tous ses appareils ensemble) : 300 lectures/ecritures par minute. Une fiche membre fait
+// une douzaine d'appels, le retour a l'accueil autant : a 150, un responsable qui enchainait les fiches etait bloque.
+Route::middleware(['auth:sanctum', 'throttle:300,1', EnsureNotBlocked::class, TrackActivity::class, EnsureApprovedMember::class, PlatformManagerGuard::class])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 

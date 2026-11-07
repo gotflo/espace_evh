@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError, peek } from '../../api/client'
 import { invalidateReference } from '../../api/reference'
-import { useAuth } from '../../auth/AuthContext'
 import { AppLayout } from '../../components/AppLayout'
+import { LoadError } from '../../components/LoadError'
 import type { OrgItem } from '../../types'
 
-interface OrgData { tribes: OrgItem[]; departments: OrgItem[] }
+/** Actions permises calculees par le serveur : jamais un bouton qui serait refuse ensuite. */
+interface OrgData { tribes: OrgItem[]; departments: OrgItem[]; can_manage_tribes?: boolean; can_create_departments?: boolean }
 
 type Person = { user_id: number; name: string }
 const mergePeople = (a: Person[], b: Person[]) => [...a, ...b.filter((p) => !a.some((x) => x.user_id === p.user_id))]
@@ -15,6 +16,8 @@ const mergePeople = (a: Person[], b: Person[]) => [...a, ...b.filter((p) => !a.s
  * membre de l'eglise trouve par la recherche (il est alors ajoute au departement).
  */
 function LeadersEditor({ item, onDone }: { item: OrgItem; onDone: (saved: boolean) => void }) {
+  // Nommer les responsables : seulement qui gere tous les departements ; sinon, le suivi des repetitions seul.
+  const canAppoint = item.can_appoint !== false
   const initial = (item.leaders ?? []).map((l) => l.user_id)
   const [members, setMembers] = useState<Person[] | null>(null)
   const [known, setKnown] = useState<Person[]>((item.leaders ?? []).map((l) => ({ user_id: l.user_id, name: l.name })))
@@ -26,9 +29,10 @@ function LeadersEditor({ item, onDone }: { item: OrgItem; onDone: (saved: boolea
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
+    if (!canAppoint) return
     api<{ members: Person[] }>(`/admin/departments/${item.id}/members`)
       .then((r) => { setMembers(r.members); setKnown((k) => mergePeople(k, r.members)) }).catch(() => setMembers([]))
-  }, [item.id])
+  }, [item.id, canAppoint])
 
   // Recherche dans toute l'eglise (a partir de 2 lettres, apres une courte pause de frappe), par
   // la route « candidates » reservee a la gestion des departements : le compte de gestion n'a pas
@@ -36,21 +40,15 @@ function LeadersEditor({ item, onDone }: { item: OrgItem; onDone: (saved: boolea
   useEffect(() => {
     const q = query.trim()
     setSearchError('')
-    if (q.length < 2) { setResults([]); return }
+    if (q.length < 2 || !canAppoint) { setResults([]); return }
     const t = window.setTimeout(() => {
       api<{ candidates?: Person[]; members?: Person[] }>(`/admin/departments/${item.id}/candidates?q=${encodeURIComponent(q)}`)
         .then((r) => r.candidates ?? r.members ?? [])
-        // Serveur sans cette route (version precedente) : ancienne recherche dans les membres.
-        .catch((err) => {
-          if (!(err instanceof ApiError && err.status === 404)) throw err
-          return api<{ members: { user_id: number; full_name: string }[] }>(`/admin/members?per_page=8&q=${encodeURIComponent(q)}`)
-            .then((r) => r.members.map((m) => ({ user_id: m.user_id, name: m.full_name })))
-        })
         .then(setResults)
         .catch((err) => { setResults([]); setSearchError(err instanceof ApiError ? err.firstMessage : 'La recherche a échoué. Réessayez.') })
     }, 300)
     return () => window.clearTimeout(t)
-  }, [query, item.id])
+  }, [query, item.id, canAppoint])
 
   const toggle = (p: Person) => {
     setKnown((k) => mergePeople(k, [p]))
@@ -68,6 +66,22 @@ function LeadersEditor({ item, onDone }: { item: OrgItem; onDone: (saved: boolea
       if (rehearsal !== !!item.tracks_rehearsal) await api(`/admin/departments/${item.id}`, { method: 'PUT', body: { tracks_rehearsal: rehearsal } })
       onDone(true)
     } catch { /* toast deja affiche */ } finally { setBusy(false) }
+  }
+
+  if (!canAppoint) {
+    return (
+      <div className="leaders-editor">
+        <p className="helper">{item.appoint_refusal ?? 'Les responsables des départements sont nommés par les pasteurs.'}</p>
+        <label className="check-line mt-sm">
+          <input type="checkbox" checked={rehearsal} onChange={(e) => setRehearsal(e.target.checked)} />
+          Suivre la ponctualité aux répétitions (retards, absences)
+        </label>
+        <div className="row-actions">
+          <button className="btn btn-ghost small" onClick={() => onDone(false)}>Annuler</button>
+          <button className="btn btn-primary small" disabled={busy || !changed} onClick={save}>{busy ? <span className="spinner" /> : 'Enregistrer'}</button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -115,12 +129,14 @@ function LeadersEditor({ item, onDone }: { item: OrgItem; onDone: (saved: boolea
   )
 }
 
-function OrgSection({ title, addLabel, items, endpoint, canManage, showLeaders, onChange, onError }: {
+function OrgSection({ title, addLabel, items, endpoint, canCreate, canManage, showLeaders, onChange, onError }: {
   title: string
   /** Champ d'ajout, accorde : « Nouvelle tribu », « Nouveau département ». */
   addLabel: string
   items: OrgItem[]
   endpoint: string
+  canCreate: boolean
+  /** Droit de modifier / supprimer quand l'element ne le precise pas (tribus). */
   canManage: boolean
   showLeaders?: boolean
   onChange: () => void
@@ -160,7 +176,7 @@ function OrgSection({ title, addLabel, items, endpoint, canManage, showLeaders, 
     <section className="panel">
       <div className="panel-head"><h3>{title}</h3></div>
 
-      {canManage && (
+      {canCreate && (
         <div className="org-add">
           <input className="input" aria-label={addLabel} placeholder={`${addLabel}…`} value={name}
             onChange={(e) => setName(e.target.value)}
@@ -177,15 +193,15 @@ function OrgSection({ title, addLabel, items, endpoint, canManage, showLeaders, 
               {showLeaders && (
                 <small className="org-leaders">
                   {it.leaders && it.leaders.length > 0 ? `Responsable(s) : ${it.leaders.map((l) => l.name).join(', ')}` : 'Aucun responsable'}
-                  {canManage && <button className="btn-link" onClick={() => setEditing(editing === it.id ? null : it.id)}>Modifier</button>}
+                  {(it.can_edit ?? canManage) && <button className="btn-link" onClick={() => setEditing(editing === it.id ? null : it.id)}>Modifier</button>}
                 </small>
               )}
             </span>
             <span className="org-count">{it.members_count} membre(s)</span>
-            {canManage && (
+            {((it.can_edit ?? canManage) || (it.can_delete ?? canManage)) && (
               <span className="org-actions">
-                <button className="btn-link" onClick={() => rename(it)}>Renommer</button>
-                <button className="org-del" onClick={() => remove(it)} aria-label="Supprimer">×</button>
+                {(it.can_edit ?? canManage) && <button className="btn-link" onClick={() => rename(it)}>Renommer</button>}
+                {(it.can_delete ?? canManage) && <button className="org-del" onClick={() => remove(it)} aria-label="Supprimer">×</button>}
               </span>
             )}
             {editing === it.id && <LeadersEditor item={it} onDone={(saved) => { setEditing(null); if (saved) onChange() }} />}
@@ -198,25 +214,29 @@ function OrgSection({ title, addLabel, items, endpoint, canManage, showLeaders, 
 }
 
 export default function Organization() {
-  const { hasPermission } = useAuth()
   const [data, setData] = useState<OrgData | null>(() => peek<OrgData>('/admin/organization') ?? null)
   const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
 
   const load = useCallback(() => {
     invalidateReference() // les listes tribus/departements ont pu changer
-    api<OrgData>('/admin/organization').then(setData).catch(() => {})
+    setLoadError('')
+    // Echec de lecture : un message et « Réessayer », jamais une liste vide trompeuse.
+    api<OrgData>('/admin/organization').then(setData)
+      .catch((err) => setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.'))
   }, [])
   useEffect(() => { load() }, [load])
 
   return (
     <AppLayout title="Organisation" subtitle="Tribus et départements de l'église">
       {error && <div className="alert alert-error">{error}</div>}
+      {loadError && !data && <LoadError message={loadError} onRetry={load} />}
       <div className="detail-grid">
         <OrgSection title="Tribus" addLabel="Nouvelle tribu" endpoint="tribes"
-          items={data?.tribes ?? []} canManage={hasPermission('tribes.manage')}
+          items={data?.tribes ?? []} canCreate={!!data?.can_manage_tribes} canManage={!!data?.can_manage_tribes}
           onChange={load} onError={setError} />
         <OrgSection title="Départements" addLabel="Nouveau département" endpoint="departments"
-          items={data?.departments ?? []} canManage={hasPermission('departments.manage')}
+          items={data?.departments ?? []} canCreate={!!data?.can_create_departments} canManage={false}
           showLeaders onChange={load} onError={setError} />
       </div>
     </AppLayout>
