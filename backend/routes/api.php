@@ -376,8 +376,9 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
         Route::get('/members/{user}', [MemberController::class, 'show']);
         Route::patch('/members/{user}/status', [MemberController::class, 'setActivity'])
             ->middleware('permission:members.edit');
-        Route::patch('/members/{user}/belonging', [MemberController::class, 'updateBelonging'])
-            ->middleware('permission:members.edit');
+        // Appartenance : members.edit (tout, selon les portees) ou composition des GEMs de la tribu (le GEM seulement),
+        // verifie dans le controleur (MemberController::belongingRights).
+        Route::patch('/members/{user}/belonging', [MemberController::class, 'updateBelonging']);
 
         // Suivi spirituel (journal + etapes)
         Route::get('/members/{user}/spiritual', [SpiritualController::class, 'show'])
@@ -502,6 +503,7 @@ Route::middleware(['auth:sanctum', 'throttle:150,1', EnsureNotBlocked::class, Tr
             Route::get('/gems/candidates', [GemController::class, 'candidates']);
             Route::post('/gems', [GemController::class, 'store']);
             Route::put('/gems/{gem}', [GemController::class, 'update']);
+            Route::put('/gems/{gem}/members', [GemController::class, 'members']);
             Route::delete('/gems/{gem}', [GemController::class, 'destroy']);
         });
     });

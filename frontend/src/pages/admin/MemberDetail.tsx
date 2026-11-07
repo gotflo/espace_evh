@@ -24,6 +24,8 @@ export default function MemberDetail() {
   const { hasPermission } = useAuth()
   const canAssign = hasPermission('roles.assign')
   const canEdit = hasPermission('members.edit')
+  // Composer les GEMs de sa tribu (patriarche, AP) : choisir le GEM d'un membre, meme sans members.edit.
+  const canPlaceGem = hasPermission('gems.manage')
   const canViewSpiritual = hasPermission('spiritual.view')
   const canManageEval = hasPermission('evaluations.manage')
   const canRecordSpiritual = hasPermission('spiritual.record')
@@ -73,10 +75,10 @@ export default function MemberDetail() {
     if (canAssign) {
       api<{ roles: RoleOption[] }>('/admin/roles').then((r) => setRoleOptions(r.roles)).catch(() => {})
     }
-    if (canAssign || canEdit) {
+    if (canAssign || canEdit || canPlaceGem) {
       getReference().then((r) => { setTribes(r.tribes); setDepartments(r.departments); setGems(r.gems) }).catch(() => {})
     }
-  }, [canAssign, canEdit])
+  }, [canAssign, canEdit, canPlaceGem])
 
   const selectedRole = roleOptions.find((r) => r.key === roleKey)
   const needsScope = selectedRole && selectedRole.scope_kind !== 'none'
@@ -148,7 +150,12 @@ export default function MemberDetail() {
   const sp = data.spiritual_profile
   // Consultation seule (ex. AP hors de ses tribus) : les actions sont masquees.
   const manage = data.can_manage
-  const canEditHere = canEdit && manage
+  // Le serveur dit ce qui est permis pour CE membre, chaque droit a sa source (jamais un formulaire qui serait refuse) :
+  // statut et departements (members.edit sur ce membre), tribu (pasteurs), GEM (patriarche ou AP de sa tribu, pasteurs).
+  const rights = data.belonging_edit ?? { status: false, tribe: false, departments: false, gem: false }
+  const canEditHere = rights.status
+  const canBelong = rights.tribe || rights.gem || rights.departments
+  const belongParts = [rights.tribe && 'la tribu', rights.gem && 'le GEM', rights.departments && 'les départements'].filter(Boolean) as string[]
   const initials = ((p?.first_name?.[0] ?? '') + (p?.last_name?.[0] ?? '')).toUpperCase()
 
   return (
@@ -274,28 +281,38 @@ export default function MemberDetail() {
       <MemberFamily family={data.family} maritalStatus={p?.marital_status}
         wedding={p?.wedding_day && p?.wedding_month ? new Date(2000, p.wedding_month - 1, p.wedding_day).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long' }) : null} />
 
-      {canEditHere && (
+      {canBelong && (
         <section className="panel mt">
           <div className="panel-head"><h3>Appartenance</h3></div>
-          <p className="section-sub">Assignez la tribu et les départements de ce membre.</p>
-          <div className="field">
-            <label>Tribu</label>
-            <select aria-label="Tribu" className="select" value={belongTribe} onChange={(e) => { setBelongTribe(e.target.value); setBelongGem('') }}>
-              <option value="">Aucune</option>
-              {tribes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label>GEM <span className="helper" style={{ display: 'inline' }}>(groupe dans la tribu)</span></label>
-            <select aria-label="GEM" className="select" value={belongGem} onChange={(e) => setBelongGem(e.target.value)} disabled={!belongTribe}>
-              <option value="">Aucun</option>
-              {gems.filter((g) => g.tribe_id === Number(belongTribe)).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label>Départements <span className="helper" style={{ display: 'inline' }}>(plusieurs possibles)</span></label>
-            <DepartmentPicker departments={departments} selected={belongDepts} onChange={setBelongDepts} />
-          </div>
+          <p className="section-sub">
+            Vous pouvez changer {belongParts.length > 1 ? belongParts.slice(0, -1).join(', ') + ' et ' + belongParts[belongParts.length - 1] : belongParts[0]} de ce membre.
+          </p>
+          {rights.tribe ? (
+            <div className="field">
+              <label>Tribu</label>
+              <select aria-label="Tribu" className="select" value={belongTribe} onChange={(e) => { setBelongTribe(e.target.value); setBelongGem('') }}>
+                <option value="">Aucune</option>
+                {tribes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+          ) : (
+            <div className="detail-line"><span>Tribu</span><strong>{tribes.find((t) => t.id === Number(belongTribe))?.name ?? 'Aucune'}</strong></div>
+          )}
+          {rights.gem && (
+            <div className="field">
+              <label>GEM <span className="helper" style={{ display: 'inline' }}>(groupe dans la tribu)</span></label>
+              <select aria-label="GEM" className="select" value={belongGem} onChange={(e) => setBelongGem(e.target.value)} disabled={!belongTribe}>
+                <option value="">Aucun</option>
+                {gems.filter((g) => g.tribe_id === Number(belongTribe)).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+            </div>
+          )}
+          {rights.departments && (
+            <div className="field">
+              <label>Départements <span className="helper" style={{ display: 'inline' }}>(plusieurs possibles)</span></label>
+              <DepartmentPicker departments={departments} selected={belongDepts} onChange={setBelongDepts} />
+            </div>
+          )}
           <button className="btn btn-primary" disabled={busy || !belonging.dirty} onClick={saveBelonging}>
             {busy ? <span className="spinner" /> : 'Enregistrer'}
           </button>

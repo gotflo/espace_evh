@@ -160,6 +160,129 @@ class AttendanceAndGemRulesTest extends TestCase
         $this->assertFalse(DB::table('role_user')->where(['user_id' => $garde->id, 'scope_kind' => 'gem', 'scope_id' => $id])->exists());
     }
 
+    private function give(User $user, string $roleKey, ?string $kind = null, ?int $scopeId = null): User
+    {
+        $user->roles()->attach(Role::where('key', $roleKey)->value('id'), ['scope_kind' => $kind, 'scope_id' => $scopeId]);
+
+        return $user->fresh();
+    }
+
+    public function test_patriarch_places_members_of_his_tribe_in_a_gem_from_the_member_page(): void
+    {
+        $patriarch = $this->give($this->member('+14185550450', $this->juda, 'Patri'), 'patriarche', 'tribe', $this->juda->id);
+        $paul = $this->member('+14185550451', $this->juda, 'Paul');
+        $other = $this->member('+14185550452', $this->levi, 'Autre');
+        $gem = Gem::create(['name' => 'GEM Juda', 'tribe_id' => $this->juda->id]);
+        $leviGem = Gem::create(['name' => 'GEM Lévi', 'tribe_id' => $this->levi->id]);
+        $this->assertFalse($patriarch->hasPermission('members.edit'), 'le patriarche n\'a pas le droit complet d\'appartenance');
+
+        Sanctum::actingAs($patriarch);
+        $this->getJson("/api/admin/members/{$paul->id}")->assertOk()
+            ->assertJsonPath('belonging_edit', ['status' => false, 'tribe' => false, 'departments' => false, 'gem' => true]);
+        $this->patchJson("/api/admin/members/{$paul->id}/belonging", ['tribe_id' => $this->juda->id, 'gem_id' => $gem->id, 'department_ids' => []])
+            ->assertOk();
+        $this->assertSame($gem->id, Profile::where('user_id', $paul->id)->value('gem_id'));
+        $this->assertSame(1, DB::table('audit_logs')->where('action', 'member.belonging_updated')->where('member_user_id', $paul->id)->count());
+
+        // Le GEM seulement : ni la tribu, ni les departements, ni un GEM d'une autre tribu, ni un membre d'une autre tribu.
+        $choir = \App\Models\Department::create(['name' => 'Chorale', 'slug' => 'chorale', 'is_active' => true]);
+        $this->patchJson("/api/admin/members/{$paul->id}/belonging", ['tribe_id' => $this->juda->id, 'gem_id' => $gem->id, 'department_ids' => [$choir->id]])
+            ->assertStatus(422)->assertJsonPath('errors.department_ids.0', 'Les départements de ce membre se changent par leurs responsables.');
+        $this->patchJson("/api/admin/members/{$paul->id}/belonging", ['tribe_id' => $this->levi->id, 'gem_id' => null])->assertStatus(422);
+        $this->patchJson("/api/admin/members/{$paul->id}/belonging", ['tribe_id' => $this->juda->id, 'gem_id' => $leviGem->id])->assertStatus(422);
+        $this->patchJson("/api/admin/members/{$other->id}/belonging", ['tribe_id' => $this->levi->id, 'gem_id' => $leviGem->id])->assertStatus(403);
+        $this->assertNull(Profile::where('user_id', $other->id)->value('gem_id'));
+        // Retirer du GEM.
+        $this->patchJson("/api/admin/members/{$paul->id}/belonging", ['tribe_id' => $this->juda->id, 'gem_id' => null])->assertOk();
+        $this->assertNull(Profile::where('user_id', $paul->id)->value('gem_id'));
+
+        // Un simple Garde ne compose pas les GEMs.
+        $garde = $this->give($this->member('+14185550453', $this->juda, 'Garde'), 'garde', 'gem', $gem->id);
+        Sanctum::actingAs($garde);
+        $this->patchJson("/api/admin/members/{$paul->id}/belonging", ['tribe_id' => $this->juda->id, 'gem_id' => $gem->id])->assertStatus(403);
+    }
+
+    public function test_patriarch_who_also_leads_a_department_can_place_members_in_his_tribe_gems(): void
+    {
+        // Comme en production : le role « Responsable de departement » donne members.edit (sur son departement).
+        $deptRole = Role::where('key', 'responsable_departement')->first();
+        $deptRole->permissions()->syncWithoutDetaching([DB::table('permissions')->where('key', 'members.edit')->value('id')]);
+        $choir = \App\Models\Department::create(['name' => 'Chorale', 'slug' => 'chorale', 'is_active' => true]);
+        $patriarch = $this->give($this->give($this->member('+14185550460', $this->juda, 'Patri'), 'patriarche', 'tribe', $this->juda->id),
+            'responsable_departement', 'department', $choir->id);
+        $this->assertTrue($patriarch->hasPermission('members.edit'));
+        $paul = $this->member('+14185550461', $this->juda, 'Paul');
+        $singer = $this->member('+14185550462', $this->juda, 'Chantre');
+        $singer->profile->departments()->attach($choir->id);
+        $leviSinger = $this->member('+14185550463', $this->levi, 'ChantreLevi');
+        $leviSinger->profile->departments()->attach($choir->id);
+        $gem = Gem::create(['name' => 'GEM Juda', 'tribe_id' => $this->juda->id]);
+        $leviGem = Gem::create(['name' => 'GEM Lévi', 'tribe_id' => $this->levi->id]);
+
+        Sanctum::actingAs($patriarch);
+        // Membre de sa tribu hors de son departement : refuse avant (« Action non autorisée sur ce membre »).
+        $this->getJson("/api/admin/members/{$paul->id}")
+            ->assertJsonPath('belonging_edit', ['status' => false, 'tribe' => false, 'departments' => false, 'gem' => true]);
+        $this->patchJson("/api/admin/members/{$paul->id}/belonging", ['tribe_id' => $this->juda->id, 'gem_id' => $gem->id, 'department_ids' => []])
+            ->assertOk();
+        // Membre de sa tribu ET de son departement : droit complet, et le GEM aussi.
+        $this->getJson("/api/admin/members/{$singer->id}")
+            ->assertJsonPath('belonging_edit', ['status' => true, 'tribe' => false, 'departments' => true, 'gem' => true]);
+        $this->patchJson("/api/admin/members/{$singer->id}/belonging", ['tribe_id' => $this->juda->id, 'gem_id' => $gem->id, 'department_ids' => [$choir->id]])
+            ->assertOk();
+        $this->assertSame(2, Profile::where('gem_id', $gem->id)->count());
+        // Membre de son departement mais d'une autre tribu : ses departements oui, son GEM non (rien ne se melange).
+        $this->getJson("/api/admin/members/{$leviSinger->id}")
+            ->assertJsonPath('belonging_edit', ['status' => true, 'tribe' => false, 'departments' => true, 'gem' => false]);
+        $this->patchJson("/api/admin/members/{$leviSinger->id}/belonging", ['tribe_id' => $this->levi->id, 'gem_id' => $leviGem->id, 'department_ids' => [$choir->id]])
+            ->assertStatus(422)->assertJsonPath('errors.gem_id.0', 'Le GEM se change par le patriarche ou l’AP de la tribu.');
+        $this->assertNull(Profile::where('user_id', $leviSinger->id)->value('gem_id'));
+
+        // Page GEMs : seulement sa tribu de patriarche et ses membres, jamais ceux de son departement d'une autre tribu.
+        $this->getJson('/api/admin/gems')->assertOk()->assertJsonCount(1, 'tribes')->assertJsonPath('tribes.0.id', $this->juda->id)
+            ->assertJsonCount(1, 'gems');
+        $this->getJson('/api/admin/gems/candidates?tribe_id='.$this->levi->id)->assertStatus(403);
+        $names = collect($this->getJson('/api/admin/gems/candidates?tribe_id='.$this->juda->id)->assertOk()->json('members'))->pluck('full_name');
+        $this->assertNotContains('ChantreLevi T', $names);
+        $this->putJson("/api/admin/gems/{$leviGem->id}/members", ['user_ids' => [$leviSinger->id]])->assertStatus(403);
+    }
+
+    public function test_gem_page_sets_the_members_of_a_gem(): void
+    {
+        $patriarch = $this->give($this->member('+14185550470', $this->juda, 'Patri'), 'patriarche', 'tribe', $this->juda->id);
+        $garde = $this->member('+14185550471', $this->juda, 'Garde');
+        $a = $this->member('+14185550472', $this->juda, 'Anne');
+        $b = $this->member('+14185550473', $this->juda, 'Bruno');
+        $otherGarde = $this->member('+14185550474', $this->juda, 'AutreGarde');
+        $levi = $this->member('+14185550475', $this->levi, 'Levi');
+        Sanctum::actingAs($patriarch);
+        $id = $this->postJson('/api/admin/gems', ['name' => 'GEM A', 'tribe_id' => $this->juda->id, 'leader_user_id' => $garde->id])->assertCreated()->json('gem.id');
+        $other = $this->postJson('/api/admin/gems', ['name' => 'GEM B', 'tribe_id' => $this->juda->id, 'leader_user_id' => $otherGarde->id])->json('gem.id');
+        $this->patchJson("/api/admin/members/{$b->id}/belonging", ['tribe_id' => $this->juda->id, 'gem_id' => $other])->assertOk();
+
+        // Anne arrive, Bruno vient du GEM B ; le Garde reste meme s'il n'est pas coche.
+        $this->putJson("/api/admin/gems/{$id}/members", ['user_ids' => [$a->id, $b->id]])->assertOk()
+            ->assertJsonPath('added', 2)->assertJsonPath('removed', 0);
+        $this->assertEqualsCanonicalizing([$garde->id, $a->id, $b->id], Profile::where('gem_id', $id)->pluck('user_id')->all());
+        $this->assertSame(1, Profile::where('gem_id', $other)->count(), 'Bruno a quitté le GEM B');
+        $candidates = collect($this->getJson('/api/admin/gems/candidates?tribe_id='.$this->juda->id)->assertOk()->json('members'));
+        $this->assertSame($id, $candidates->firstWhere('user_id', $a->id)['gem_id']);
+
+        // Retirer Bruno ; le Garde d'un autre GEM et un membre d'une autre tribu sont refuses.
+        $this->putJson("/api/admin/gems/{$id}/members", ['user_ids' => [$a->id]])->assertOk()->assertJsonPath('removed', 1);
+        $this->assertNull(Profile::where('user_id', $b->id)->value('gem_id'));
+        $this->putJson("/api/admin/gems/{$id}/members", ['user_ids' => [$a->id, $otherGarde->id]])->assertStatus(422);
+        $this->putJson("/api/admin/gems/{$id}/members", ['user_ids' => [$a->id, $levi->id]])->assertStatus(422);
+        $this->assertSame($other, Profile::where('user_id', $otherGarde->id)->value('gem_id'));
+        // Journal : Anne ajoutee, Bruno ajoute puis retire.
+        $this->assertSame(3, DB::table('audit_logs')->where('action', 'member.belonging_updated')->where('context', 'like', '%gem_page%')->count());
+
+        // Le patriarche d'une autre tribu ne touche pas a ce GEM.
+        $leviPatriarch = $this->give($this->member('+14185550476', $this->levi, 'PLevi'), 'patriarche', 'tribe', $this->levi->id);
+        Sanctum::actingAs($leviPatriarch);
+        $this->putJson("/api/admin/gems/{$id}/members", ['user_ids' => []])->assertStatus(403);
+    }
+
     public function test_member_cannot_change_tribe_directly_from_his_profile(): void
     {
         $member = $this->member('+14185550440', $this->juda, 'Marc');

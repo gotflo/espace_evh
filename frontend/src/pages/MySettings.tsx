@@ -10,12 +10,33 @@ import { APP_NAME } from '../config'
 import type { IconName } from '../utils/icons'
 import { isStandalone } from '../utils/install'
 
-const LINKS: Array<{ to: string; icon: IconName; label: string; hint: string }> = [
+interface SettingsLink { to: string; icon: IconName; label: string; hint: string }
+
+const ACCOUNT: SettingsLink[] = [
   { to: '/mon-profil', icon: 'profile', label: 'Mon profil', hint: 'Photo, coordonnées, tribu, famille' },
   { to: '/notifications', icon: 'bell', label: 'Mes notifications', hint: 'Toutes les alertes reçues' },
-  { to: '/guide', icon: 'help', label: 'Guide', hint: 'Comment utiliser l’application' },
+]
+
+const HELP: SettingsLink[] = [
+  { to: '/guide', icon: 'help', label: 'Guide', hint: 'Comment utiliser l’application, étape par étape, selon votre rôle' },
   { to: '/contact', icon: 'requests', label: 'Nous contacter', hint: 'Une question, un besoin, une prière' },
 ]
+
+function LinkList({ links }: { links: SettingsLink[] }) {
+  return (
+    <ul className="settings-links">
+      {links.map((l) => (
+        <li key={l.to}>
+          <Link to={l.to} className="settings-link">
+            <span className="settings-link-icon"><Icon name={l.icon} size={18} /></span>
+            <span className="settings-link-text"><strong>{l.label}</strong><small>{l.hint}</small></span>
+            <Icon name="chevron" size={16} className="settings-link-chevron" />
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 /**
  * Paramètres du membre, au meme endroit : installer l'application sur cet appareil (toujours disponible, sans jamais
@@ -40,7 +61,7 @@ export default function MySettings() {
   }
 
   return (
-    <AppLayout title="Paramètres" subtitle="Application, notifications et compte">
+    <AppLayout title="Paramètres" subtitle="Application, notifications, aide et compte">
       <div className="settings-grid">
         <section className="panel settings-app" id="application">
           <div className="panel-head">
@@ -60,19 +81,14 @@ export default function MySettings() {
           <NotificationPrefs defaultOpen />
         </div>
 
+        <section className="panel settings-account" id="aide">
+          <div className="panel-head"><h3>Aide</h3></div>
+          <LinkList links={HELP} />
+        </section>
+
         <section className="panel settings-account">
           <div className="panel-head"><h3>Mon compte</h3></div>
-          <ul className="settings-links">
-            {LINKS.map((l) => (
-              <li key={l.to}>
-                <Link to={l.to} className="settings-link">
-                  <span className="settings-link-icon"><Icon name={l.icon} size={18} /></span>
-                  <span className="settings-link-text"><strong>{l.label}</strong><small>{l.hint}</small></span>
-                  <Icon name="chevron" size={16} className="settings-link-chevron" />
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <LinkList links={ACCOUNT} />
           <button type="button" className="btn btn-ghost small mt" onClick={() => void onLogout()}>
             <Icon name="logout" size={16} /> Se déconnecter
           </button>

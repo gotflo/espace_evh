@@ -8,11 +8,14 @@ use App\Models\Profile;
 use App\Models\Role;
 use App\Models\Tribe;
 use App\Models\User;
+use App\Support\Audit;
 use App\Support\GemRules;
 use App\Support\LeaderRole;
 use App\Support\RoleGrants;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class GemController extends Controller
 {
@@ -36,12 +39,17 @@ class GemController extends Controller
     }
 
     /**
-     * Tribus que l'utilisateur peut gerer : null si toutes (view_all/PA, compte de gestion qui organise
-     * toute l'eglise sans fiche de membre), sinon ses tribus.
+     * Tribus dont l'utilisateur compose les GEMs : null si toutes (autorite pastorale qui gere les GEMs sans portee,
+     * compte de gestion qui organise toute l'eglise), sinon les tribus ou il a gems.manage (patriarche, AP). Les autres
+     * roles (responsable de departement, Garde...) n'ouvrent aucune tribu ici.
      */
     private function allowedTribeIds(User $user): ?array
     {
-        return $user->hasPermission('members.view_all') || $user->isPlatformManager() ? null : $user->scopeTribeIds();
+        if ($user->isPlatformManager() || $user->isChurchWideFor('gems.manage')) {
+            return null;
+        }
+
+        return $user->scopesFor('gems.manage')['tribe'];
     }
 
     /**
@@ -59,15 +67,72 @@ class GemController extends Controller
             ->get(['id', 'user_id', 'first_name', 'last_name', 'photo_path', 'gem_id']);
         // GEM dirige par chaque membre : une seule lecture (et non une par membre).
         $leads = Gem::whereNotNull('leader_user_id')->whereIn('leader_user_id', $profiles->pluck('user_id'))
-            ->orderBy('id')->get(['leader_user_id', 'name'])->groupBy('leader_user_id');
+            ->orderBy('id')->get(['id', 'leader_user_id', 'name'])->groupBy('leader_user_id');
 
         return response()->json(['members' => $profiles->map(fn (Profile $p) => [
             'user_id' => $p->user_id,
             'full_name' => $p->full_name,
             'photo_url' => $p->photo_url,
+            'gem_id' => $p->gem_id,
             'gem' => $p->gem?->name,
             'leads' => $leads->get($p->user_id, collect())->pluck('name')->values(),
+            'lead_gem_ids' => $leads->get($p->user_id, collect())->pluck('id')->map(fn ($id) => (int) $id)->values(),
         ])]);
+    }
+
+    /**
+     * Composition d'un GEM (page GEMs) : la liste complete de ses membres. Seuls des membres de la tribu du GEM ; un
+     * membre venant d'un autre GEM y est deplace ; le Garde reste toujours dans son GEM ; le Garde d'un autre GEM n'est
+     * pas deplace. Chaque changement est trace dans le journal.
+     */
+    public function members(Request $request, Gem $gem): JsonResponse
+    {
+        $actor = $request->user();
+        abort_unless($this->canManage($actor, $gem), 403, 'Ce GEM est hors de votre tribu.');
+        $data = $request->validate([
+            'user_ids' => ['present', 'array', 'max:300'],
+            'user_ids.*' => ['integer', 'distinct'],
+        ]);
+        $wanted = collect($data['user_ids'])->map(fn ($id) => (int) $id);
+        if ($gem->leader_user_id) {
+            $wanted->push((int) $gem->leader_user_id);
+        }
+        $wanted = $wanted->unique()->values();
+
+        $profiles = Profile::whereIn('user_id', $wanted)->get()->keyBy('user_id');
+        foreach ($wanted as $id) {
+            $p = $profiles->get($id);
+            if (! $p || ! $p->is_completed || (int) $p->tribe_id !== (int) $gem->tribe_id) {
+                throw ValidationException::withMessages(['user_ids' => ($p?->full_name ?: 'Ce membre')." n'appartient pas à la tribu de ce GEM."]);
+            }
+        }
+        $current = Profile::where('gem_id', $gem->id)->pluck('user_id')->map(fn ($id) => (int) $id);
+        $added = $wanted->diff($current)->values();
+        $removed = $current->diff($wanted)->values();
+
+        // Le Garde d'un autre GEM reste dans le sien.
+        foreach (Gem::where('id', '!=', $gem->id)->whereIn('leader_user_id', $added)->get() as $other) {
+            $p = $profiles->get((int) $other->leader_user_id);
+            throw ValidationException::withMessages(['user_ids' => "{$p?->full_name} est Garde du GEM {$other->name} : il ou elle reste dans son GEM."]);
+        }
+
+        DB::transaction(function () use ($gem, $added, $removed, $profiles, $actor) {
+            foreach ($added as $id) {
+                $p = $profiles->get($id);
+                $old = $p->gem_id;
+                $p->forceFill(['gem_id' => $gem->id])->save();
+                Audit::log('member.belonging_updated', $p, $id, ['gem_id' => $old], ['gem_id' => $gem->id], ['by' => 'gem_page'], $actor);
+            }
+            foreach (Profile::whereIn('user_id', $removed)->get() as $p) {
+                $p->forceFill(['gem_id' => null])->save();
+                Audit::log('member.belonging_updated', $p, (int) $p->user_id, ['gem_id' => $gem->id], ['gem_id' => null], ['by' => 'gem_page'], $actor);
+            }
+        });
+
+        return response()->json([
+            'message' => $added->isEmpty() && $removed->isEmpty() ? 'Aucun changement.' : 'Membres du GEM enregistrés.',
+            'added' => $added->count(), 'removed' => $removed->count(),
+        ]);
     }
 
     public function store(Request $request): JsonResponse

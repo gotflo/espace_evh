@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Gem;
 use App\Models\Profile;
+use App\Models\User;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -29,6 +30,20 @@ class GemRules
                 'leader_user_id' => "{$profile->full_name} n'appartient pas à la tribu de ce GEM : le Garde doit être choisi parmi les membres de la tribu.",
             ]);
         }
+    }
+
+    /**
+     * Peut-il placer des membres de cette tribu dans ses GEMs ? Celui qui compose les GEMs de la tribu (gems.manage :
+     * patriarche ou AP sur cette tribu, autorite pastorale partout), meme sans le droit de modifier toute l'appartenance
+     * (tribu, departements).
+     */
+    public static function canPlaceMembers(User $actor, ?int $tribeId): bool
+    {
+        if (! $tribeId || $actor->isPlatformManager() || ! $actor->hasPermission('gems.manage')) {
+            return false;
+        }
+
+        return $actor->isChurchWideFor('gems.manage') || in_array($tribeId, $actor->scopesFor('gems.manage')['tribe'], true);
     }
 
     /** Un membre ne peut etre place que dans un GEM de sa tribu. */

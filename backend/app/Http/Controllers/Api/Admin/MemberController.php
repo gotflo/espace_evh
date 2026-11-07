@@ -120,6 +120,8 @@ class MemberController extends Controller
             'completion' => $user->profile ? ProfileCompletion::for($user->profile) : null,
             'family' => FamilyService::overview($user),
             'can_manage' => $viewer->canManageMember($user),
+            // Appartenance modifiable : « full » (tribu, GEM, departements), « gem » (le GEM seulement) ou null.
+            'belonging_edit' => self::belongingRights($viewer, $user),
             'can_view_fiss' => $viewer->canViewFissOf($user),
             'can_view_meditations' => $viewer->canViewMeditationsOf($user),
             // Deja affiche par le role « Responsable de departement » sur ce departement : pas de doublon.
@@ -157,13 +159,16 @@ class MemberController extends Controller
     }
 
     /**
-     * Appartenance (tribu, GEM, departements). Le changement de TRIBU est reserve a l'autorite
-     * pastorale (members.view_all) ; les autres responsables passent par une demande de changement.
+     * Appartenance (tribu, GEM, departements) : chaque partie a sa propre regle, sans melange (voir belongingRights).
+     * - tribu : autorite pastorale ; les autres passent par la demande de changement du membre ;
+     * - GEM : celui qui compose les GEMs de la tribu du membre (patriarche ou AP de cette tribu, pasteurs) ;
+     * - departements : members.edit, et hors autorite pastorale seulement les departements dont on est responsable.
      */
     public function updateBelonging(Request $request, User $user): JsonResponse
     {
         $actor = $request->user();
-        abort_unless($actor->canManageMember($user, 'members.edit'), 403, 'Action non autorisée sur ce membre.');
+        $rights = self::belongingRights($actor, $user);
+        abort_unless(in_array(true, $rights, true), 403, 'Action non autorisée sur ce membre.');
 
         $data = $request->validate([
             'tribe_id' => ['nullable', 'exists:tribes,id'],
@@ -176,36 +181,44 @@ class MemberController extends Controller
         $profile = $user->profile;
         abort_unless($profile, 404, 'Profil introuvable.');
 
+        // --- Tribu
         $tribeId = array_key_exists('tribe_id', $data) ? ($data['tribe_id'] ? (int) $data['tribe_id'] : null) : $profile->tribe_id;
-        if ((int) $tribeId !== (int) $profile->tribe_id && $profile->tribe_id && ! $actor->hasPermission('members.view_all')) {
-            throw ValidationException::withMessages([
-                'tribe_id' => 'Le changement de tribu passe par une demande du membre, validée par les responsables des deux tribus.',
-            ]);
+        $sameTribe = (int) $tribeId === (int) $profile->tribe_id;
+        if (! $sameTribe && ! $rights['tribe']) {
+            throw ValidationException::withMessages(['tribe_id' => $profile->tribe_id
+                ? 'Le changement de tribu passe par une demande du membre, validée par les responsables des deux tribus.'
+                : 'La tribu de ce membre se choisit par un pasteur.']);
         }
-        GemRules::assertGemInTribe($data['gem_id'] ?? null, $tribeId);
 
+        // --- GEM (sans valeur : inchange, sauf changement de tribu qui fait quitter le GEM)
+        $gemId = array_key_exists('gem_id', $data)
+            ? ($data['gem_id'] ? (int) $data['gem_id'] : null)
+            : ($sameTribe ? $profile->gem_id : null);
+        if ($sameTribe && (int) $gemId !== (int) $profile->gem_id && ! $rights['gem']) {
+            throw ValidationException::withMessages(['gem_id' => 'Le GEM se change par le patriarche ou l’AP de la tribu.']);
+        }
+        GemRules::assertGemInTribe($gemId, $tribeId);
+
+        // --- Departements
         $currentDepts = $profile->departments()->pluck('departments.id')->map(fn ($id) => (int) $id)->sort()->values()->all();
         $wantedDepts = array_key_exists('department_ids', $data)
             ? collect($data['department_ids'] ?? [])->map(fn ($id) => (int) $id)->unique()->sort()->values()->all()
             : $currentDepts;
-        if (! $pastoral) {
-            // Hors autorite pastorale : seulement les departements de sa portee ; s'inscrire a un autre service
-            // passe par la demande du membre, validee par son responsable.
-            $scopes = $actor->scopesFor('members.edit');
-            $changed = array_merge(array_diff($wantedDepts, $currentDepts), array_diff($currentDepts, $wantedDepts));
-            if (array_diff($changed, $scopes['department'])) {
-                throw ValidationException::withMessages([
-                    'department_ids' => 'Vous ne pouvez changer que les départements dont vous êtes responsable : l\'inscription à un autre service passe par la demande du membre.',
-                ]);
-            }
-            if ((int) ($data['gem_id'] ?? null) !== (int) $profile->gem_id && ! in_array((int) $tribeId, $scopes['tribe'], true)) {
-                throw ValidationException::withMessages(['gem_id' => 'Le GEM se change par un responsable de la tribu.']);
-            }
+        $changed = array_values(array_merge(array_diff($wantedDepts, $currentDepts), array_diff($currentDepts, $wantedDepts)));
+        if ($changed && ! $rights['departments']) {
+            throw ValidationException::withMessages(['department_ids' => 'Les départements de ce membre se changent par leurs responsables.']);
+        }
+        // Hors autorite pastorale : seulement les departements de sa portee ; s'inscrire a un autre service
+        // passe par la demande du membre, validee par son responsable.
+        if ($changed && ! $pastoral && array_diff($changed, $actor->scopesFor('members.edit')['department'])) {
+            throw ValidationException::withMessages([
+                'department_ids' => 'Vous ne pouvez changer que les départements dont vous êtes responsable : l\'inscription à un autre service passe par la demande du membre.',
+            ]);
         }
 
         $before = ['tribe_id' => $profile->tribe_id, 'gem_id' => $profile->gem_id, 'department_ids' => $currentDepts];
-        $profile->update(['tribe_id' => $tribeId, 'gem_id' => $data['gem_id'] ?? null]);
-        if (array_key_exists('department_ids', $data)) {
+        $profile->update(['tribe_id' => $tribeId, 'gem_id' => $gemId]);
+        if ($changed) {
             $profile->departments()->sync($wantedDepts);
             foreach (Department::whereIn('id', array_diff($currentDepts, $wantedDepts))->get() as $left) {
                 DepartmentLeadership::leave($left, $user->id, $actor->id);
@@ -227,6 +240,29 @@ class MemberController extends Controller
             'message' => 'Appartenance mise à jour.',
             'profile' => $profile->fresh()->load('tribe', 'gem', 'departments'),
         ]);
+    }
+
+    /**
+     * Ce que l'utilisateur peut changer chez ce membre, chaque droit venant de sa propre source :
+     * - status, departments : members.edit sur ce membre (portee comprise : un responsable de departement, ses membres) ;
+     * - tribe : autorite pastorale (ou membre encore sans tribu, avec members.edit) ;
+     * - gem : composition des GEMs de la tribu du membre (patriarche, AP de cette tribu, pasteurs), jamais par un
+     *   role de departement.
+     *
+     * @return array{status: bool, tribe: bool, departments: bool, gem: bool}
+     */
+    public static function belongingRights(User $actor, User $member): array
+    {
+        $full = $actor->canManageMember($member, 'members.edit');
+        $pastoral = $full && $actor->hasPermission('members.view_all');
+        $tribeId = $member->profile?->tribe_id ? (int) $member->profile->tribe_id : null;
+
+        return [
+            'status' => $full,
+            'tribe' => $full && ($pastoral || $tribeId === null),
+            'departments' => $full,
+            'gem' => $pastoral || ($actor->canManageMember($member) && GemRules::canPlaceMembers($actor, $tribeId)),
+        ];
     }
 
     private function scopeName(?string $kind, ?int $id): ?string

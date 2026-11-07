@@ -536,6 +536,9 @@ export interface MemberDetailData {
   completion: ProfileCompletion | null
   family: FamilyOverview
   can_manage: boolean
+  /** Ce qui est modifiable chez ce membre, chaque droit a sa source : statut et departements (members.edit sur ce
+   *  membre), tribu (pasteurs), GEM (patriarche ou AP de sa tribu, pasteurs). */
+  belonging_edit?: { status: boolean; tribe: boolean; departments: boolean; gem: boolean } | null
   can_view_fiss: boolean
   /** Fiches de meditation lisibles (patriarche de sa tribu, pasteurs). */
   can_view_meditations: boolean
