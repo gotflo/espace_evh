@@ -372,3 +372,33 @@ html.app-shell #root > .app { height: 100%; min-height: 0; overflow-x: hidden; o
 /* Rapports mensuels recus (pasteurs) : tribus puis departements. */
 .lr-received-group + .lr-received-group { margin-top: 1rem; }
 .lr-received-title { margin: 0 0 0.5rem; font-size: 0.95rem; }
+
+/* Parametres : version et nouveautes de l'application. */
+.settings-version { display: flex; flex-direction: column; gap: 0.2rem; margin: 0 0 0.75rem; }
+.settings-version small { color: var(--text-soft); font-size: 0.82rem; }
+.settings-news-title { margin: 1rem 0 0.4rem; font-size: 0.9rem; }
+.settings-news { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.settings-news details { border: 1px solid var(--border-subtle); border-radius: 12px; padding: 0.55rem 0.8rem; }
+.settings-news summary { cursor: pointer; list-style: none; display: flex; align-items: flex-start; gap: 0.5rem; }
+.settings-news summary::-webkit-details-marker { display: none; }
+.settings-news-chevron { flex-shrink: 0; margin-top: 0.15rem; color: var(--text-soft); transition: transform 0.15s; }
+.settings-news details[open] .settings-news-chevron { transform: rotate(90deg); }
+.settings-news-head { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.settings-news-date { color: var(--text-soft); font-size: 0.8rem; }
+.settings-news ul { margin: 0.5rem 0 0.1rem; padding-left: 2.35rem; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; }
+
+/* Politique de confidentialite (page publique) : lecture confortable, toutes largeurs. */
+.legal-screen {
+  /* Theme clair de l'application connectee (le :root reste celui, sombre, des ecrans de connexion). */
+  --text: #17211f; --text-muted: #586863; --text-soft: #626e6b; --card-bg: #ffffff; --border-subtle: #e4e8ea;
+  min-height: 100vh; padding: 1.5rem 1rem 3rem; display: flex; justify-content: center; align-items: flex-start;
+  background: #f3f5f4; color: var(--text);
+}
+.legal-card { width: 100%; max-width: 760px; padding: 1.5rem 1.4rem; box-shadow: 0 10px 30px rgba(16, 40, 36, 0.08); backdrop-filter: none; color: var(--text); }
+.legal-title { font-size: 1.5rem; margin: 1rem 0 0.25rem; }
+.legal-updated { color: var(--text-soft); font-size: 0.85rem; margin: 0 0 1rem; }
+.legal-card section { margin-top: 1.1rem; }
+.legal-card h2 { font-size: 1.2rem; margin: 0 0 0.4rem; color: #0d5f57; }
+.legal-card p, .legal-card li { line-height: 1.55; overflow-wrap: anywhere; }
+.legal-card ul { padding-left: 1.15rem; margin: 0.3rem 0; display: flex; flex-direction: column; gap: 0.35rem; }
+@media (max-width: 640px) { .legal-screen { padding: 0.75rem 0.5rem 2rem; } .legal-card { padding: 1.1rem 1rem; } }

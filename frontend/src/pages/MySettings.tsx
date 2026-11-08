@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { AppLayout } from '../components/AppLayout'
 import { Icon } from '../components/Icon'
@@ -7,6 +7,7 @@ import { InstallGuide } from '../components/InstallGuide'
 import { NotificationPrefs } from '../components/NotificationPrefs'
 import { PushSettings } from '../components/PushSettings'
 import { APP_NAME } from '../config'
+import { APP_VERSIONS } from '../data/versions'
 import type { IconName } from '../utils/icons'
 import { isStandalone } from '../utils/install'
 
@@ -38,13 +39,16 @@ function LinkList({ links }: { links: SettingsLink[] }) {
   )
 }
 
+const longDate = (iso: string) => new Date(iso.length === 10 ? `${iso}T12:00` : iso)
+  .toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' })
+
 /**
  * Paramètres du membre, au meme endroit : installer l'application sur cet appareil (toujours disponible, sans jamais
- * insister ailleurs), notifications de cet appareil et choix par sujet, liens du compte et deconnexion.
+ * insister ailleurs), notifications de cet appareil et choix par sujet, liens du compte, version de l'application et
+ * ses nouveautes, politique de confidentialite. La deconnexion reste dans le menu (un seul bouton).
  */
 export default function MySettings() {
-  const { logout, isPlatformManager } = useAuth()
-  const navigate = useNavigate()
+  const { isPlatformManager } = useAuth()
   const location = useLocation()
   const standalone = isStandalone()
 
@@ -54,11 +58,6 @@ export default function MySettings() {
     if (!id) return
     requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'smooth' }))
   }, [location.hash])
-
-  async function onLogout() {
-    await logout()
-    navigate('/connexion', { replace: true })
-  }
 
   return (
     <AppLayout title="Paramètres" subtitle="Application, notifications, aide et compte">
@@ -89,12 +88,35 @@ export default function MySettings() {
           </section>
         )}
 
-        <section className="panel settings-account">
-          <div className="panel-head"><h3>Mon compte</h3></div>
-          {!isPlatformManager && <LinkList links={ACCOUNT} />}
-          <button type="button" className="btn btn-ghost small mt" onClick={() => void onLogout()}>
-            <Icon name="logout" size={16} /> Se déconnecter
-          </button>
+        {!isPlatformManager && (
+          <section className="panel settings-account">
+            <div className="panel-head"><h3>Mon compte</h3></div>
+            <LinkList links={ACCOUNT} />
+          </section>
+        )}
+
+        {/* Version de l'application : elle se met a jour toute seule ; ce qui a change, et la confidentialite. */}
+        <section className="panel settings-about" id="a-propos">
+          <div className="panel-head"><h3>À propos</h3></div>
+          <p className="settings-version">
+            <strong>Version du {longDate(__BUILD_TIME__)}</strong>
+            <small>L’application se met à jour toute seule : une nouvelle version se charge au prochain changement de page.</small>
+          </p>
+          <LinkList links={[{ to: '/confidentialite', icon: 'lock', label: 'Politique de confidentialité', hint: 'Vos renseignements, qui les voit, vos droits' }]} />
+          <h4 className="settings-news-title">Nouveautés</h4>
+          <ol className="settings-news">
+            {APP_VERSIONS.map((v, i) => (
+              <li key={v.date}>
+                <details open={i === 0}>
+                  <summary>
+                    <Icon name="chevron" size={16} className="settings-news-chevron" />
+                    <span className="settings-news-head"><small className="settings-news-date">{longDate(v.date)}</small><strong>{v.title}</strong></span>
+                  </summary>
+                  <ul>{v.items.map((it) => <li key={it}>{it}</li>)}</ul>
+                </details>
+              </li>
+            ))}
+          </ol>
         </section>
       </div>
     </AppLayout>

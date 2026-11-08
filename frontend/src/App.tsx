@@ -30,6 +30,7 @@ function page(load: () => Promise<{ default: ComponentType }>, admin = false, pa
 const Login = lazy(() => import('./pages/Login'))
 const ProfileSetup = lazy(() => import('./pages/ProfileSetup'))
 const Install = lazy(() => import('./pages/Install'))
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
 const MySettings = page(() => import('./pages/MySettings'), false, '/parametres')
 const MyVertumetre = page(() => import('./pages/MyVertumetre'), false, '/vertumetre')
 const Dashboard = page(() => import('./pages/Dashboard'), false, '/tableau-de-bord')
@@ -242,6 +243,8 @@ export default function App() {
       <Route path="/connexion" element={<PublicOnly><Login /></PublicOnly>} />
       {/* Lien a envoyer a qui n'arrive pas a installer l'application : ouvert a tous, connecte ou non. */}
       <Route path="/installer" element={<Install />} />
+      {/* Politique de confidentialite : lisible par tous, connecte ou non (liee depuis Parametres). */}
+      <Route path="/confidentialite" element={<PrivacyPolicy />} />
       <Route path="/profil" element={<RequireAuth memberSpace><ProfileSetup /></RequireAuth>} />
       {/* Pages connectees : cadre persistant (menus affiches une fois, seul le contenu change). */}
       <Route element={<ShellLayout />}>
