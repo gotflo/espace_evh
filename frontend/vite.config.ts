@@ -36,8 +36,6 @@ function contentSecurityPolicy(): Plugin {
 // ce qui evite les problemes de CORS. En production, Laravel sert le build et /api est local.
 export default defineConfig({
   plugins: [react(), contentSecurityPolicy()],
-  // Date de construction de l'application : la version affichee dans Parametres (« À propos »).
-  define: { __BUILD_TIME__: JSON.stringify(new Date().toISOString()) },
   server: {
     proxy: {
       '/api': 'http://127.0.0.1:8000',

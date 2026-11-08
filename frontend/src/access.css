@@ -379,12 +379,11 @@ html.app-shell #root > .app { height: 100%; min-height: 0; overflow-x: hidden; o
 .settings-news-title { margin: 1rem 0 0.4rem; font-size: 0.9rem; }
 .settings-news { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
 .settings-news details { border: 1px solid var(--border-subtle); border-radius: 12px; padding: 0.55rem 0.8rem; }
-.settings-news summary { cursor: pointer; list-style: none; display: flex; align-items: flex-start; gap: 0.5rem; }
+.settings-news summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 0.5rem; }
 .settings-news summary::-webkit-details-marker { display: none; }
-.settings-news-chevron { flex-shrink: 0; margin-top: 0.15rem; color: var(--text-soft); transition: transform 0.15s; }
+.settings-news-chevron { flex-shrink: 0; color: var(--text-soft); transition: transform 0.15s; }
 .settings-news details[open] .settings-news-chevron { transform: rotate(90deg); }
 .settings-news-head { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
-.settings-news-date { color: var(--text-soft); font-size: 0.8rem; }
 .settings-news ul { margin: 0.5rem 0 0.1rem; padding-left: 2.35rem; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; }
 
 /* Politique de confidentialite (page publique) : lecture confortable, toutes largeurs. */
