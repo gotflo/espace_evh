@@ -241,6 +241,8 @@ class ChurchJourneysMembersTest extends TestCase
             ->assertJsonPath('form.requests_left', 0)->json('form.pending_request.id');
         $this->assertSame(2, UserNotification::where('user_id', $this->patriarch->id)->where('type', 'fiss_request')->count());
         $this->deleteJson("/api/me/fiss/edit-requests/{$second}")->assertOk()->assertJsonPath('message', 'Demande annulée.');
+        // Le patriarche, prevenu de la demande, l'est aussi de son annulation (une fois, personne d'autre).
+        $this->assertNotifiedExactly('Demande annulée : Marie Fidèle', [$this->patriarch], 'fiss_request');
         $this->getJson('/api/me/fiss')->assertOk()->assertJsonPath('current.requests_left', 1)->assertJsonPath('current.pending_request', null);
         $this->as($this->patriarch);
         $this->assertSame([], $this->getJson('/api/admin/validations')->assertOk()->json('fiss'));
@@ -255,7 +257,7 @@ class ChurchJourneysMembersTest extends TestCase
         foreach (['fiss.created', 'fiss.locked', 'fiss.edit_requested', 'fiss.edit_approved', 'fiss.unlocked', 'fiss.modified', 'fiss.edit_cancelled'] as $action) {
             $this->assertContains($action, $actions);
         }
-        $this->assertSame(3, UserNotification::count());
+        $this->assertSame(4, UserNotification::count());
         $this->assertSame(0, OutboundMessage::count(), 'la FISS ne part jamais par courriel');
     }
 

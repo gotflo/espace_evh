@@ -37,7 +37,7 @@ const emptySpiritual: SpiritualProfileData = {
 }
 
 export default function MyProfile() {
-  const { profile, setProfile, roles } = useAuth()
+  const { profile, myGem, setProfile, roles } = useAuth()
   const [tab, setTab] = useState<Tab>(() => (window.location.hash === '#famille' ? 'famille' : 'identite'))
   const [completion, setCompletion] = useState<ProfileCompletion | null>(null)
   const [tribes, setTribes] = useState<Tribe[]>([])
@@ -162,6 +162,7 @@ export default function MyProfile() {
             {profile?.matricule && <span className="chip">{profile.matricule}</span>}
             <span className="chip">{mainRole}</span>
             {profile?.tribe?.name && <span className="chip">Tribu {profile.tribe.name}</span>}
+            {myGem && <span className="chip">{myGem.label}</span>}
           </div>
         </div>
       </section>
@@ -226,6 +227,24 @@ export default function MyProfile() {
               <p className="helper">Choisissez avec soin : un changement ultérieur passe par une demande validée par les responsables.</p>
             </div>
           )}
+          {/* GEM : le patriarche ou l'AP de la tribu y place le membre ; il voit son GEM et son Garde. */}
+          <div className="field"><label>Mon GEM</label>
+            {myGem ? (
+              <div className="my-gem">
+                <strong className="my-gem-name">{myGem.label}</strong>
+                {myGem.garde ? (
+                  <span className="my-gem-garde">
+                    {myGem.garde.photo_url
+                      ? <img className="mini-avatar" src={myGem.garde.photo_url} alt="" width={34} height={34} loading="lazy" decoding="async" />
+                      : <span className="mini-avatar" aria-hidden>{(myGem.garde.name[0] ?? '?').toUpperCase()}</span>}
+                    <span className="my-gem-garde-text">
+                      {myGem.garde.is_me ? 'Vous êtes le Garde de ce GEM.' : <>Garde : <strong>{myGem.garde.name}</strong></>}
+                    </span>
+                  </span>
+                ) : <span className="helper">Pas encore de Garde nommé.</span>}
+              </div>
+            ) : <p className="helper">Aucun GEM pour le moment.</p>}
+          </div>
           {/* Services : demande depuis « Service », validee par le responsable du departement. */}
           <div className="field"><label>Mes services</label>
             <p className="helper service-hint">

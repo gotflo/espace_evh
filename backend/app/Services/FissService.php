@@ -6,6 +6,7 @@ use App\Models\FissEditRequest;
 use App\Models\SpiritualHealthForm;
 use App\Models\User;
 use App\Support\Audit;
+use App\Support\CancelledRequest;
 use App\Support\French;
 use App\Support\Recipients;
 use Illuminate\Support\Carbon;
@@ -154,6 +155,12 @@ class FissService
         abort_unless($req->status === 'pending', 409, 'Cette demande a déjà été traitée.');
         $req->forceFill(['status' => 'cancelled'])->save();
         Audit::log('fiss.edit_cancelled', $req, $member->id, ['status' => 'pending'], ['status' => 'cancelled']);
+
+        $member->loadMissing('profile');
+        $name = $member->profile?->full_name ?: (string) $member->phone;
+        $period = $req->form?->period ? ' '.French::de(self::periodLabel($req->form->period)) : '';
+        CancelledRequest::notify('fiss_edit_request_id', $req->id, $req->created_at, $member, 'fiss_request',
+            "Demande annulée : {$name}", "{$name} a annulé sa demande de modification de la FISS{$period}. Plus rien à faire.");
     }
 
     /** Automatisme : fenetre de modification expiree sans modification => fiche reverrouillee. */

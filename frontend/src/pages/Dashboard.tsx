@@ -26,7 +26,7 @@ import { useAppearance } from '../appearance'
 const WELCOME_MS = 6000
 
 export default function Dashboard() {
-  const { profile, roles, hasPermission, moduleOn } = useAuth()
+  const { profile, myGem, roles, hasPermission, moduleOn } = useAuth()
   const texts = useAppearance().appearance.texts
   const navigate = useNavigate()
   const canViewMembers = hasPermission('members.view_all') || hasPermission('members.view_scope')
@@ -181,6 +181,10 @@ export default function Dashboard() {
               <div className="panel-head"><h3>Mon appartenance</h3></div>
               <div className="detail-list">
                 <div className="detail-line"><span>Tribu</span><strong>{profile?.tribe?.name ?? 'Aucune'}</strong></div>
+                <div className="detail-line"><span>GEM</span><strong>{myGem?.label ?? 'Aucun'}</strong></div>
+                {myGem?.garde && (
+                  <div className="detail-line"><span>Garde</span><strong>{myGem.garde.is_me ? 'Vous' : myGem.garde.name}</strong></div>
+                )}
                 <div className="detail-line">
                   <span>Départements</span>
                   <strong>{profile?.departments && profile.departments.length > 0

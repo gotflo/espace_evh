@@ -251,6 +251,9 @@ class MemberController extends Controller
             }
         }
         GemRules::afterTribeChange($profile->fresh(), $actor->id);
+        if (! $sameTribe && $before['gem_id'] && (int) $before['gem_id'] !== (int) $gemId) {
+            GemRules::tellGardeOfTribeDeparture((int) $before['gem_id'], $profile->fresh(), $actor->id);
+        }
         $after = ['tribe_id' => $profile->tribe_id, 'gem_id' => $profile->fresh()->gem_id, 'department_ids' => $profile->departments()->pluck('departments.id')->sort()->values()->all()];
         [$old, $new] = Audit::diff($before, $after);
         if ($new) {

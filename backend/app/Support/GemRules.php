@@ -4,7 +4,9 @@ namespace App\Support;
 
 use App\Models\Gem;
 use App\Models\Profile;
+use App\Models\Tribe;
 use App\Models\User;
+use App\Services\Notifier;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -72,13 +74,32 @@ class GemRules
     }
 
     /**
+     * Un membre quitte son GEM parce qu'il change de tribu : son Garde en est prevenu (sauf s'il est l'auteur
+     * du changement, ou si c'est lui qui change de tribu).
+     */
+    public static function tellGardeOfTribeDeparture(int $gemId, Profile $profile, int $actorId): void
+    {
+        $gem = Gem::find($gemId);
+        $garde = (int) ($gem?->leader_user_id ?? 0);
+        if (! $gem || ! $garde || in_array($garde, [(int) $profile->user_id, $actorId], true)) {
+            return;
+        }
+        $name = $profile->full_name ?: 'Un membre';
+        $tribe = $profile->tribe_id ? Tribe::whereKey($profile->tribe_id)->value('name') : null;
+        Notifier::send([$garde], 'member', "Départ de votre GEM : {$name}",
+            $name.($tribe ? " rejoint la tribu {$tribe}" : ' change de tribu').' et quitte le '.$gem->label().'.', '/admin/rapport-gem');
+    }
+
+    /**
      * Apres un changement de tribu : le membre quitte son GEM s'il est d'une autre tribu,
      * et perd la responsabilite (Garde) des GEMs de son ancienne tribu.
      */
     public static function afterTribeChange(Profile $profile, int $actorId): void
     {
         if ($profile->gem_id && ! Gem::whereKey($profile->gem_id)->where('tribe_id', $profile->tribe_id)->exists()) {
+            $left = (int) $profile->gem_id;
             $profile->forceFill(['gem_id' => null])->save();
+            self::tellGardeOfTribeDeparture($left, $profile, $actorId);
         }
 
         $led = Gem::where('leader_user_id', $profile->user_id)

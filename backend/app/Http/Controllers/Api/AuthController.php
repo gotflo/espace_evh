@@ -363,6 +363,29 @@ class AuthController extends Controller
         return $this->accountPayload($user) + ['settings' => PlatformSettings::client()];
     }
 
+    /** @return array{id: int, name: string, label: string, garde: array{name: string, photo_url: ?string, is_me: bool}|null}|null */
+    private function myGem(?Profile $profile): ?array
+    {
+        $gem = $profile?->gem_id ? Gem::find($profile->gem_id, ['id', 'name', 'leader_user_id']) : null;
+        if (! $gem) {
+            return null;
+        }
+        $garde = $gem->leader_user_id
+            ? Profile::where('user_id', $gem->leader_user_id)->first(['id', 'user_id', 'first_name', 'last_name', 'photo_path'])
+            : null;
+
+        return [
+            'id' => $gem->id,
+            'name' => $gem->name,
+            'label' => $gem->label(),
+            'garde' => $garde ? [
+                'name' => $garde->full_name,
+                'photo_url' => $garde->photo_url,
+                'is_me' => (int) $gem->leader_user_id === (int) $profile->user_id,
+            ] : null,
+        ];
+    }
+
     private function accountPayload(User $user): array
     {
         // Compte de gestion principal : pas de fiche de membre ni de role, permissions de gestion seulement.
@@ -400,6 +423,8 @@ class AuthController extends Controller
             // « Content de vous revoir » avec les nouveautes depuis cette date.
             'user' => $user->only(['id', 'phone']) + ['last_seen_at' => $user->last_seen_at?->toIso8601String()],
             'profile' => $user->profile,
+            // Son GEM et son Garde (nom et photo seulement), affiches dans Mon profil et l'accueil.
+            'gem' => $this->myGem($user->profile),
             // Inscription terminee (tribu comprise) : sinon l'application reste sur l'ecran d'inscription.
             'profile_completed' => Registration::isComplete($user),
             'registration' => [

@@ -4,11 +4,13 @@ import { forgetPushOnThisDevice } from '../push'
 import { setUnread } from '../notifications'
 import { rememberPreviousVisit } from '../utils/visit'
 import { clearAccountDrafts, setDraftAccount } from '../utils/drafts'
-import type { AppSettings, AuthPayload, Membership, ModuleName, Profile, User, UserRole } from '../types'
+import type { AppSettings, AuthPayload, Membership, ModuleName, MyGem, Profile, User, UserRole } from '../types'
 
 interface AuthState {
   user: User | null
   profile: Profile | null
+  /** Son GEM et son Garde (null : dans aucun GEM). */
+  myGem: MyGem | null
   roles: UserRole[]
   permissions: string[]
   isSuperAdmin: boolean
@@ -42,6 +44,7 @@ const AuthContext = createContext<AuthState | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfileState] = useState<Profile | null>(null)
+  const [myGem, setMyGem] = useState<MyGem | null>(null)
   const [roles, setRoles] = useState<UserRole[]>([])
   const [permissions, setPermissions] = useState<string[]>([])
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
@@ -62,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     rememberPreviousVisit(p.user?.last_seen_at)
     setUser(p.user)
     setProfileState(p.profile)
+    setMyGem(p.gem ?? null)
     setRoles(p.roles ?? [])
     setPermissions(p.permissions ?? [])
     setIsSuperAdmin(!!p.is_super_admin)
@@ -74,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => {
     signedIn.current = false
     setDraftAccount(null)
-    setUser(null); setProfileState(null); setRoles([]); setPermissions([]); setIsSuperAdmin(false); setIsPlatformManager(false)
+    setUser(null); setProfileState(null); setMyGem(null); setRoles([]); setPermissions([]); setIsSuperAdmin(false); setIsPlatformManager(false)
     setMembership({ status: 'approved', submitted: true })
   }, [])
 
@@ -152,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthState = {
     user, profile, roles, permissions, isSuperAdmin, isPlatformManager,
+    myGem,
     loading,
     unreachable,
     retryNow,

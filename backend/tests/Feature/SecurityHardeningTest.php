@@ -265,7 +265,10 @@ class SecurityHardeningTest extends TestCase
             $this->deleteJson("/api/me/services/{$choir->id}")->assertOk();
         }
         $this->postJson("/api/me/services/{$choir->id}/join")->assertStatus(429);
-        $this->assertSame(1, UserNotification::where('user_id', $leader->id)->count());
+        // Au plus un avis de demande par jour, et l'avis d'annulation de cette seule demande annoncee.
+        $this->assertSame(1, UserNotification::where('user_id', $leader->id)->where('title', 'like', 'Inscription au service%')->count());
+        $this->assertSame(1, UserNotification::where('user_id', $leader->id)->where('title', 'like', 'Demande annulée%')->count());
+        $this->assertSame(2, UserNotification::where('user_id', $leader->id)->count());
         $this->assertSame(3, DepartmentJoinRequest::count());
     }
 

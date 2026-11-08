@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\VertumetreEditRequest;
 use App\Models\VertumetreForm;
 use App\Support\Audit;
+use App\Support\CancelledRequest;
 use App\Support\French;
 use App\Support\VertumetreCatalog;
 use Illuminate\Support\Facades\DB;
@@ -132,6 +133,12 @@ class VertumetreService
         abort_unless($req->status === 'pending', 409, 'Cette demande a déjà été traitée.');
         $req->forceFill(['status' => 'cancelled'])->save();
         Audit::log('vertumetre.edit_cancelled', $req, $member->id, ['status' => 'pending'], ['status' => 'cancelled']);
+
+        $member->loadMissing('profile');
+        $name = $member->profile?->full_name ?: (string) $member->phone;
+        $period = $req->form?->period ? ' '.French::de(FissService::periodLabel($req->form->period)) : '';
+        CancelledRequest::notify('vertumetre_edit_request_id', $req->id, $req->created_at, $member, 'fiss_request',
+            "Demande annulée : {$name}", "{$name} a annulé sa demande de modification du Vertumètre{$period}. Plus rien à faire.");
     }
 
     /** Automatisme : fenetre de modification expiree sans modification => reponse reverrouillee. */

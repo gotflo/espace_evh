@@ -87,9 +87,20 @@ export interface Membership {
 export type ModuleName = 'vertumetre' | 'resolutions' | 'assignments' | 'exercises' | 'appointments' | 'spiritual'
 export interface AppSettings { modules: Partial<Record<ModuleName, boolean>>; push_prompt_snooze_days: number }
 
+/** GEM du membre et son Garde (nom et photo seulement). */
+export interface MyGem {
+  id: number
+  name: string
+  /** « GEM Béthel » (sans doubler un nom qui commence deja par GEM). */
+  label: string
+  garde: { name: string; photo_url: string | null; is_me: boolean } | null
+}
+
 export interface AuthPayload {
   user: User
   profile: Profile | null
+  /** Son GEM (absent pour le compte de gestion). */
+  gem?: MyGem | null
   profile_completed: boolean
   /** Notifications non lues (lecture du compte /me seulement). */
   unread?: number

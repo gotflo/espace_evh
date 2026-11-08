@@ -401,6 +401,7 @@ export const GUIDE_CHAPTERS: GuideChapter[] = [
           { title: 'Quatre onglets', text: 'Identité, Famille, Infos personnelles, Vie spirituelle.' },
           { title: 'Complétez votre profil', text: 'La carte indique ce qui manque : un profil complet aide vos responsables à vous accompagner.' },
           { title: 'Changer de tribu', text: 'Une demande depuis Mon profil, validée par les responsables des deux tribus.' },
+          { title: 'Votre GEM et votre Garde', text: 'Dans l’onglet Identité : le GEM où vous êtes et le nom de votre Garde.' },
         ],
         link: { to: '/mon-profil', label: 'Ouvrir mon profil' },
       },

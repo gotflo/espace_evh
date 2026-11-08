@@ -6,6 +6,7 @@ use App\Models\Department;
 use App\Models\DepartmentJoinRequest;
 use App\Models\User;
 use App\Support\Audit;
+use App\Support\CancelledRequest;
 use App\Support\Recipients;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -92,8 +93,11 @@ class DepartmentJoinService
         return $request;
     }
 
-    /** Le fidele retire sa demande en attente. */
-    public static function cancel(User $member, Department $department): bool
+    /**
+     * La demande en attente est retiree : par le fidele lui-meme ($byMember, ses responsables en sont avertis),
+     * ou parce qu'un responsable l'a ajoute directement au service (elle n'a plus d'objet, rien a annoncer).
+     */
+    public static function cancel(User $member, Department $department, bool $byMember = false): bool
     {
         $request = DepartmentJoinRequest::where('user_id', $member->id)->where('department_id', $department->id)->where('status', 'pending')->first();
         if (! $request) {
@@ -101,6 +105,14 @@ class DepartmentJoinService
         }
         $request->update(['status' => 'cancelled', 'decided_at' => now()]);
         Audit::log('service_join.cancelled', $request, $member->id, [], ['department' => $department->name]);
+        if ($byMember) {
+            $member->loadMissing('profile');
+            $name = $member->profile?->full_name ?: (string) $member->phone;
+            CancelledRequest::notify('department_join_request_id', $request->id, $request->created_at, $member, 'service',
+                "Demande annulée : {$name}", "{$name} a retiré sa demande d'inscription au service {$department->name}. Plus rien à faire.");
+            CancelledRequest::mail(["service-request:{$request->id}:"], "request-cancelled:service:{$request->id}", $member,
+                "sa demande d'inscription au service {$department->name}", null);
+        }
 
         return true;
     }

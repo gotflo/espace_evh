@@ -89,7 +89,7 @@ class MyServiceController extends Controller
         abort_unless($profile, 422);
 
         // Demande encore en attente : elle est simplement retiree.
-        if (DepartmentJoinService::cancel($user, $department)) {
+        if (DepartmentJoinService::cancel($user, $department, byMember: true)) {
             return response()->json(['message' => "Votre demande pour le service {$department->name} est retirée."]);
         }
 

@@ -35,7 +35,7 @@ class Messenger
 
     /** Attendus aussitot : validation d'un compte, inscription a un service, demande de suppression, changement de tribu. */
     private const URGENT_KINDS = ['membership_request', 'membership_patriarch', 'membership_approved', 'membership_rejected', 'service_request', 'deletion_request',
-        'tribe_change_request', 'tribe_change_step', 'tribe_change_approved', 'tribe_change_rejected', 'tribe_change_info'];
+        'tribe_change_request', 'tribe_change_step', 'tribe_change_approved', 'tribe_change_rejected', 'tribe_change_info', 'request_cancelled'];
 
     /** Motif enregistre quand aucun envoi de courriel n'est configure sur le serveur. */
     public const MAIL_NOT_CONFIGURED = 'Non envoyé : aucun envoi de courriel configuré sur le serveur (MAIL_MAILER).';

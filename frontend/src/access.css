@@ -100,6 +100,14 @@
 .ex-closed-note { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.8rem; }
 .status-pill.pending { background: rgba(240, 160, 25, 0.16); color: #8a4b00; }
 .service-hint { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+/* Mon profil : son GEM et son Garde (noms longs : retour a la ligne, jamais de debordement). */
+.my-gem {
+  display: flex; flex-direction: column; gap: 0.5rem; min-width: 0;
+  padding: 0.75rem 0.9rem; border: 1px solid var(--border-subtle); border-radius: 12px;
+}
+.my-gem-name { overflow-wrap: anywhere; }
+.my-gem-garde { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+.my-gem-garde-text { min-width: 0; overflow-wrap: anywhere; }
 .res-watch { display: flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; font-weight: 600; color: var(--text-muted); margin-top: 0.25rem; font-style: normal; }
 .res-watch .watch-bar { flex: 1; max-width: 90px; }
 

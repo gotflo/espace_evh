@@ -7,6 +7,7 @@ use App\Models\TribeChangeApproval;
 use App\Models\TribeChangeRequest;
 use App\Models\User;
 use App\Support\Audit;
+use App\Support\CancelledRequest;
 use App\Support\GemRules;
 use App\Support\Recipients;
 use Illuminate\Support\Facades\DB;
@@ -144,6 +145,16 @@ class TribeChangeService
         abort_unless($req->status === 'pending', 409, 'Cette demande a déjà été traitée.');
         $req->forceFill(['status' => 'cancelled', 'completed_at' => now()])->save();
         Audit::log('tribe_change.cancelled', $req, $member->id);
+
+        // Valideurs et patriarches deja prevenus : la demande n'attend plus rien d'eux.
+        $req->loadMissing('fromTribe', 'toTribe');
+        $member->loadMissing('profile');
+        $name = $member->profile?->full_name ?: (string) $member->phone;
+        $move = ($req->fromTribe?->name ? "De la tribu {$req->fromTribe->name} vers la tribu " : 'Vers la tribu ').$req->toTribe?->name;
+        CancelledRequest::notify('tribe_change_request_id', $req->id, $req->created_at, $member, 'tribe_change',
+            "Demande annulée : {$name}", "{$name} a annulé sa demande de changement de tribu ({$move}). Plus rien à faire.");
+        CancelledRequest::mail(["tribe-change-request:{$req->id}:", "tribe-change-info:{$req->id}:requested:"],
+            "request-cancelled:tribe:{$req->id}", $member, 'sa demande de changement de tribu', $move.'.');
     }
 
     /**
