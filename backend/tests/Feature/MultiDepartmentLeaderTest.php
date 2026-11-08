@@ -206,6 +206,33 @@ class MultiDepartmentLeaderTest extends TestCase
         $this->assertTrue(collect($this->getJson('/api/admin/validations')->json('services'))->firstWhere('member.user_id', $this->jean->id)['can_open']);
     }
 
+    public function test_the_pending_count_badge_matches_the_validations_list_and_drops_after_a_decision(): void
+    {
+        $zoe = $this->person('Zoé', 'Nouvelle', $this->levi);
+        $choir = DepartmentJoinRequest::create(['user_id' => $zoe->id, 'department_id' => $this->chorale->id, 'status' => 'pending']);
+        DepartmentJoinRequest::create(['user_id' => $this->jean->id, 'department_id' => $this->accueil->id, 'status' => 'pending']);
+
+        // Meme nombre que l'ecran Validations, pour chacun (responsables, patriarche, simple fidele).
+        foreach ([$this->rachel, $this->simon, $this->paul, $this->laban, $this->jean, $this->chloe] as $user) {
+            $this->as($user);
+            $this->assertSame($this->getJson('/api/admin/validations')->assertOk()->json('count'),
+                $this->getJson('/api/admin/validations/count')->assertOk()->json('count'), "compteur de {$user->profile->full_name}");
+        }
+        $this->as($this->rachel);
+        $this->getJson('/api/admin/validations/count')->assertJsonPath('count', 2)->assertJsonPath('by.services', 2);
+        $this->as($this->simon);
+        $this->getJson('/api/admin/validations/count')->assertJsonPath('by.services', 1);
+        $this->as($this->chloe);
+        $this->getJson('/api/admin/validations/count')->assertJsonPath('count', 0);
+
+        // Une demande traitee : la pastille baisse.
+        $this->as($this->rachel);
+        $this->postJson("/api/admin/validations/services/{$choir->id}", ['decision' => 'approved'])->assertOk();
+        $this->getJson('/api/admin/validations/count')->assertJsonPath('count', 1)->assertJsonPath('by.services', 1);
+        $this->as($this->simon);
+        $this->getJson('/api/admin/validations/count')->assertJsonPath('count', 0);
+    }
+
     public function test_the_monthly_reminder_names_each_department(): void
     {
         $this->travelTo(Carbon::parse('2026-11-02 10:00'));

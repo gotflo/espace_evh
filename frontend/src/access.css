@@ -401,3 +401,20 @@ html.app-shell #root > .app { height: 100%; min-height: 0; overflow-x: hidden; o
 .legal-card p, .legal-card li { line-height: 1.55; overflow-wrap: anywhere; }
 .legal-card ul { padding-left: 1.15rem; margin: 0.3rem 0; display: flex; flex-direction: column; gap: 0.35rem; }
 @media (max-width: 640px) { .legal-screen { padding: 0.75rem 0.5rem 2rem; } .legal-card { padding: 1.1rem 1rem; } }
+
+/* Validations : pastille rouge du menu et bandeau de l'accueil (demandes en attente). */
+.nav-badge {
+  margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; flex-shrink: 0;
+  background: #d62828; color: #fff; font-size: 0.72rem; font-weight: 700; display: grid; place-items: center; line-height: 1;
+}
+.validations-reminder-icon { position: relative; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: #fff; color: #b42323; flex-shrink: 0; }
+.validations-reminder-count {
+  position: absolute; top: -6px; right: -8px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
+  background: #d62828; color: #fff; font-size: 0.7rem; font-weight: 700; display: grid; place-items: center; border: 2px solid #fff;
+}
+.validations-reminder small { overflow-wrap: anywhere; }
+@media (max-width: 420px) { .validations-reminder .fiss-reminder-cta { display: none; } }
+
+/* Parametres : Deconnexion, en rouge (le seul bouton de deconnexion de l'application). */
+.btn.settings-logout { color: #c62828; border-color: rgba(198, 40, 40, 0.4); }
+.btn.settings-logout:hover { color: #a51d1d; background: rgba(214, 40, 40, 0.08); border-color: rgba(198, 40, 40, 0.6); }

@@ -25,14 +25,55 @@ use Illuminate\Http\Request;
  */
 class ValidationController extends Controller
 {
+    /**
+     * Nombre de demandes que cet utilisateur peut traiter, par sorte (meme calcul que la liste, sans les details) :
+     * pastille rouge du menu « Validations » et rappel de l'accueil.
+     */
+    public function count(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $by = [
+            'services' => DepartmentJoinService::pendingFor($user)->count(),
+            'fiss' => $user->hasPermission('fiss.review') ? $this->pendingFiss($user)->count() : 0,
+            'vertumetre' => $user->hasPermission('fiss.review') ? $this->pendingVertumetre($user)->count() : 0,
+            'tribes' => $user->hasPermission('tribes.transfer') ? $this->pendingTribes($user)->count() : 0,
+            'deletions' => $user->isSuperAdmin() ? MemberDeletionRequest::where('status', 'pending')->count() : 0,
+            'memberships' => MembershipService::canApprove($user)
+                ? User::where('approval_status', User::PENDING)->whereNotNull('approval_requested_at')->count() : 0,
+        ];
+
+        return response()->json(['count' => array_sum($by), 'by' => $by]);
+    }
+
+    /** @return \Illuminate\Support\Collection<int, FissEditRequest> */
+    private function pendingFiss(User $user)
+    {
+        return FissEditRequest::where('status', 'pending')->with('requester.profile.tribe', 'form')->oldest()->get()
+            ->filter(fn (FissEditRequest $r) => $r->requester && FissService::canReview($user, $r->requester))->values();
+    }
+
+    /** @return \Illuminate\Support\Collection<int, VertumetreEditRequest> */
+    private function pendingVertumetre(User $user)
+    {
+        return VertumetreEditRequest::where('status', 'pending')->with('requester.profile.tribe', 'form')->oldest()->get()
+            ->filter(fn (VertumetreEditRequest $r) => $r->requester && FissService::canReview($user, $r->requester))->values();
+    }
+
+    /** @return \Illuminate\Support\Collection<int, array{req: TribeChangeRequest, sides: array<string>}> */
+    private function pendingTribes(User $user)
+    {
+        return TribeChangeRequest::where('status', 'pending')->with('member.profile', 'fromTribe', 'toTribe', 'approvals.approver.profile')->oldest()->get()
+            ->map(fn (TribeChangeRequest $r) => ['req' => $r, 'sides' => TribeChangeService::sidesFor($user, $r)])
+            ->filter(fn ($x) => $x['sides'] !== [])->values();
+    }
+
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
 
         $fiss = [];
         if ($user->hasPermission('fiss.review')) {
-            $fiss = FissEditRequest::where('status', 'pending')->with('requester.profile.tribe', 'form')->oldest()->get()
-                ->filter(fn (FissEditRequest $r) => $r->requester && FissService::canReview($user, $r->requester))
+            $fiss = $this->pendingFiss($user)
                 ->map(fn (FissEditRequest $r) => [
                     'id' => $r->id,
                     'member' => ['user_id' => $r->user_id, 'name' => $r->requester->profile?->full_name ?: $r->requester->phone, 'tribe' => $r->requester->profile?->tribe?->name],
@@ -46,17 +87,14 @@ class ValidationController extends Controller
 
         $tribes = [];
         if ($user->hasPermission('tribes.transfer')) {
-            $tribes = TribeChangeRequest::where('status', 'pending')->with('member.profile', 'fromTribe', 'toTribe', 'approvals.approver.profile')->oldest()->get()
-                ->map(fn (TribeChangeRequest $r) => ['req' => $r, 'sides' => TribeChangeService::sidesFor($user, $r)])
-                ->filter(fn ($x) => $x['sides'] !== [])
+            $tribes = $this->pendingTribes($user)
                 ->map(fn ($x) => $this->presentTribe($x['req'], $x['sides']))->values()->all();
         }
 
         // Vertumetre : memes valideurs que la FISS.
         $vertumetre = [];
         if ($user->hasPermission('fiss.review')) {
-            $vertumetre = VertumetreEditRequest::where('status', 'pending')->with('requester.profile.tribe', 'form')->oldest()->get()
-                ->filter(fn (VertumetreEditRequest $r) => $r->requester && FissService::canReview($user, $r->requester))
+            $vertumetre = $this->pendingVertumetre($user)
                 ->map(fn (VertumetreEditRequest $r) => [
                     'id' => $r->id,
                     'member' => ['user_id' => $r->user_id, 'name' => $r->requester->profile?->full_name ?: $r->requester->phone, 'tribe' => $r->requester->profile?->tribe?->name],

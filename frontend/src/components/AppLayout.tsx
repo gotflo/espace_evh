@@ -1,6 +1,6 @@
 import { createContext, Suspense, useContext, useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { NavLink, Outlet, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigationType } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { NotificationBell } from './NotificationBell'
 import { OfflineBanner } from './OfflineBanner'
@@ -14,6 +14,7 @@ import { usePulse } from '../pulse'
 import { enterAppShell, shellOn } from '../utils/iosViewport'
 import { rememberPageScroll, restorePageScroll, scrollPageTo } from '../utils/pageScroll'
 import { mainRoleLabel } from '../utils/roles'
+import { canValidateWith, useValidationsCount } from '../utils/validationsCount'
 
 /**
  * Cadre persistant : menu lateral, en-tete et barre du bas sont affiches une seule fois pour
@@ -91,8 +92,7 @@ export function AppLayout({ title, subtitle, actions, children }: {
 }
 
 function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNode; children: ReactNode }) {
-  const { profile, user, roles, hasPermission, isPlatformManager, logout, moduleOn } = useAuth()
-  const navigate = useNavigate()
+  const { profile, user, roles, hasPermission, isPlatformManager, moduleOn } = useAuth()
   const canViewMembers = hasPermission('members.view_all') || hasPermission('members.view_scope')
   const canManageRoles = hasPermission('roles.manage')
   const canAccounts = hasPermission('accounts.view')
@@ -105,7 +105,7 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
   const canAnnounce = hasPermission('announcements.publish')
   const canEvents = hasPermission('events.manage')
   const canRequests = hasPermission('requests.handle')
-  const canValidate = hasPermission('fiss.review') || hasPermission('tribes.transfer') || hasPermission('members.approve') || hasPermission('departments.approve')
+  const canValidate = canValidateWith(hasPermission)
   const canReports = hasPermission('reports.view')
   const canAudit = hasPermission('audit.view')
   const canVerses = hasPermission('verses.view')
@@ -134,6 +134,8 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
   const mainRole = mainRoleLabel(roles)
   const [menuOpen, setMenuOpen] = useState(false)
   const unread = useUnreadCount()
+  // Demandes a valider : pastille rouge sur « Validations » (et sur « Menu » au telephone, ou ce lien est range).
+  const toValidate = useValidationsCount(canValidate).count
   // Lien clique : fine barre de progression tant que la page suivante n'est pas affichee
   // (l'ancienne reste visible pendant ce temps, sans ecran blanc).
   const location = useLocation()
@@ -166,11 +168,6 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
   function onLinkIntent(e: { target: EventTarget }) {
     const href = (e.target as Element).closest?.('a[href]')?.getAttribute('href')
     if (href?.startsWith('/')) warmRoute(href)
-  }
-
-  async function onLogout() {
-    await logout()
-    navigate('/connexion', { replace: true })
   }
 
   return (
@@ -219,7 +216,12 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
           {canLeaderReports && <NavLink to="/admin/rapports-mensuels" className="nav-item"><Icon path={ICONS.clipboard} /><span>Rapports mensuels</span></NavLink>}
           {canGrowth && <NavLink to="/admin/devoirs-rm" className="nav-item"><Icon path={ICONS.target} /><span>{canTrack ? 'Suivi du mois' : 'Devoirs (DS)'}</span></NavLink>}
           {canAppointments && <NavLink to="/admin/rendez-vous" className="nav-item"><Icon path={ICONS.clock} /><span>Rendez-vous</span></NavLink>}
-          {canValidate && <NavLink to="/admin/validations" className="nav-item"><Icon path={ICONS.validate} /><span>Validations</span></NavLink>}
+          {canValidate && (
+            <NavLink to="/admin/validations" className="nav-item">
+              <Icon path={ICONS.validate} /><span>Validations</span>
+              {toValidate > 0 && <span className="nav-badge" aria-label={`${toValidate} en attente`}>{toValidate > 99 ? '99+' : toValidate}</span>}
+            </NavLink>
+          )}
           {canAttendance && <NavLink to="/admin/presences" className="nav-item"><Icon path={ICONS.attendance} /><span>Présences</span></NavLink>}
           {canRequests && <NavLink to="/admin/demandes" className="nav-item"><Icon path={ICONS.requests} /><span>Demandes</span></NavLink>}
           {canAnnounce && <NavLink to="/admin/annonces" className="nav-item"><Icon path={ICONS.announce} /><span>Annonces</span></NavLink>}
@@ -260,7 +262,6 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
               </div>
             </NavLink>
           )}
-          <button className="nav-item nav-logout" onClick={onLogout}><Icon path={ICONS.logout} /><span>Déconnexion</span></button>
         </div>
       </aside>
 
@@ -297,7 +298,10 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
           <span className="bottom-icon"><Icon path={ICONS.bell} />{unread > 0 && <span className="bottom-badge">{unread > 9 ? '9+' : unread}</span>}</span>
           <span>Alertes</span>
         </NavLink>
-        <button className={`bottom-item ${menuOpen ? 'active' : ''}`} onClick={() => setMenuOpen(true)}><Icon path={ICONS.menu} /><span>Menu</span></button>
+        <button className={`bottom-item ${menuOpen ? 'active' : ''}`} onClick={() => setMenuOpen(true)}>
+          <span className="bottom-icon"><Icon path={ICONS.menu} />{toValidate > 0 && <span className="bottom-badge" aria-label={`${toValidate} demande(s) à valider`}>{toValidate > 9 ? '9+' : toValidate}</span>}</span>
+          <span>Menu</span>
+        </button>
       </nav>
     </div>
   )

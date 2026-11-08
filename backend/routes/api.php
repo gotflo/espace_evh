@@ -295,6 +295,7 @@ Route::middleware(['auth:sanctum', 'throttle:300,1', EnsureNotBlocked::class, Tr
 
         // Centre de validation : demandes de modification de FISS, changements de tribu.
         Route::get('/validations', [ValidationController::class, 'index']);
+        Route::get('/validations/count', [ValidationController::class, 'count']);
         Route::post('/validations/fiss/{editRequest}', [ValidationController::class, 'decideFiss'])->middleware('permission:fiss.review');
         Route::post('/validations/tribe/{tribeRequest}', [ValidationController::class, 'decideTribe'])->middleware('permission:tribes.transfer');
         Route::post('/validations/vertumetre/{editRequest}', [ValidationController::class, 'decideVertumetre'])->middleware('permission:fiss.review');

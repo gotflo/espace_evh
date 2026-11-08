@@ -22,6 +22,7 @@ import { NewMembersPanel } from '../components/NewMembersPanel'
 import type { Stats } from '../types'
 import { useAppearance } from '../appearance'
 import { shortRole } from '../utils/roles'
+import { ValidationsReminder } from '../components/ValidationsReminder'
 
 /** Duree d'affichage du mot de bienvenue (ms). */
 const WELCOME_MS = 6000
@@ -101,6 +102,8 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Demandes a valider : tout en haut, pour sauter aux yeux. */}
+      <ValidationsReminder />
       <WelcomeBack />
       <VerseBanner />
       <EmailInvite />

@@ -10,6 +10,7 @@ import type { MembershipRequest, ServiceJoinRequest, ValidationFissItem, Validat
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { Icon } from '../../components/Icon'
 import { de } from '../../utils/french'
+import { refreshValidationsCount } from '../../utils/validationsCount'
 
 interface BlockedPhone { id: number; phone: string; member_name: string | null; reason: string | null; created_at: string | null }
 
@@ -184,7 +185,8 @@ export default function Validations() {
   // liste connue reste affichee, sinon message et « Réessayer ».
   const load = useCallback(() => {
     setLoadError('')
-    api<ValidationsData>('/admin/validations').then(setData)
+    // La pastille du menu et le bandeau de l'accueil suivent la liste (demande traitee : le nombre baisse aussitot).
+    api<ValidationsData>('/admin/validations').then((d) => { setData(d); void refreshValidationsCount() })
       .catch((err) => setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.'))
   }, [])
   useEffect(() => { load() }, [load])

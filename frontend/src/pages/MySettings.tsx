@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { AppLayout } from '../components/AppLayout'
 import { Icon } from '../components/Icon'
@@ -7,7 +7,7 @@ import { InstallGuide } from '../components/InstallGuide'
 import { NotificationPrefs } from '../components/NotificationPrefs'
 import { PushSettings } from '../components/PushSettings'
 import { APP_NAME } from '../config'
-import { APP_VERSION, APP_VERSIONS } from '../data/versions'
+import { APP_VERSION, versionsFor } from '../data/versions'
 import type { IconName } from '../utils/icons'
 import { isStandalone } from '../utils/install'
 
@@ -45,9 +45,17 @@ function LinkList({ links }: { links: SettingsLink[] }) {
  * ses nouveautes, politique de confidentialite. La deconnexion reste dans le menu (un seul bouton).
  */
 export default function MySettings() {
-  const { isPlatformManager } = useAuth()
+  const { isPlatformManager, hasPermission, logout } = useAuth()
+  const navigate = useNavigate()
+  // Nouveautes : seulement les lignes qui concernent cette personne (un fidele ne voit pas la gestion).
+  const versions = versionsFor(hasPermission)
   const location = useLocation()
   const standalone = isStandalone()
+
+  async function onLogout() {
+    await logout()
+    navigate('/connexion', { replace: true })
+  }
 
   // Lien direct (#application, #notifications) : la rubrique vient a l'ecran.
   useEffect(() => {
@@ -85,12 +93,14 @@ export default function MySettings() {
           </section>
         )}
 
-        {!isPlatformManager && (
-          <section className="panel settings-account">
-            <div className="panel-head"><h3>Mon compte</h3></div>
-            <LinkList links={ACCOUNT} />
-          </section>
-        )}
+        {/* Mon compte : la deconnexion est ici, pour tous (un seul bouton dans l'application). */}
+        <section className="panel settings-account">
+          <div className="panel-head"><h3>Mon compte</h3></div>
+          {!isPlatformManager && <LinkList links={ACCOUNT} />}
+          <button type="button" className="btn btn-ghost small mt settings-logout" onClick={() => void onLogout()}>
+            <Icon name="logout" size={16} /> Déconnexion
+          </button>
+        </section>
 
         {/* Version de l'application : elle se met a jour toute seule ; ce qui a change, et la confidentialite. */}
         <section className="panel settings-about" id="a-propos">
@@ -99,7 +109,7 @@ export default function MySettings() {
           <LinkList links={[{ to: '/confidentialite', icon: 'lock', label: 'Politique de confidentialité', hint: 'Vos renseignements, qui les voit, vos droits' }]} />
           <h4 className="settings-news-title">Nouveautés</h4>
           <ol className="settings-news">
-            {APP_VERSIONS.map((v, i) => (
+            {versions.map((v, i) => (
               <li key={v.version}>
                 <details open={i === 0}>
                   <summary>
