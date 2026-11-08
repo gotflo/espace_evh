@@ -8,7 +8,7 @@ const UPDATED = '8 novembre 2026'
 
 /**
  * Politique de confidentialite (page publique « /confidentialite », liee depuis Parametres) : ce que l'application
- * recueille, pourquoi, qui le voit, avec qui c'est partage, combien de temps, et les droits de chacun.
+ * recueille, pourquoi, qui le voit, combien de temps, et les droits de chacun.
  * Le texte decrit le fonctionnement reel de l'application : a mettre a jour si ce fonctionnement change.
  */
 export default function PrivacyPolicy() {
@@ -58,16 +58,6 @@ export default function PrivacyPolicy() {
             <li>L’administration de la plateforme gère l’application sans accès aux renseignements confidentiels (fiches, suivi spirituel).</li>
           </ul>
           <p>Les autres membres ne voient de vous que ce qui est utile à la vie de l’église (par exemple votre nom dans un service ou un événement), jamais vos fiches ni votre suivi.</p>
-        </section>
-
-        <section>
-          <h2>Avec qui ils sont partagés</h2>
-          <p>Uniquement avec les prestataires nécessaires au fonctionnement de l’application, pour ce seul usage :</p>
-          <ul>
-            <li><strong>Hostinger</strong> : hébergement de l’application et envoi des courriels de l’église ;</li>
-            <li><strong>Twilio</strong> : envoi du code de connexion par SMS (votre numéro de téléphone seulement) ;</li>
-            <li>les <strong>services de notification</strong> de votre téléphone ou de votre navigateur (Google, Apple, Mozilla), qui transmettent les notifications de façon chiffrée.</li>
-          </ul>
         </section>
 
         <section>
