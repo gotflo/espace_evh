@@ -81,7 +81,7 @@ class NewMemberController extends Controller
             ->whereIn('profiles.user_id', $candidates)
             ->whereRaw(self::ARRIVAL.' >= ?', [$since])
             ->where('profiles.user_id', '!=', $viewer->id)
-            ->with(['tribe:id,name', 'welcomer.profile:id,user_id,first_name,last_name', 'user:id,phone'])
+            ->with(['tribe:id,name', 'departments:id,name', 'welcomer.profile:id,user_id,first_name,last_name', 'user:id,phone'])
             ->orderByRaw(self::ARRIVAL.' desc');
     }
 
@@ -104,6 +104,8 @@ class NewMemberController extends Controller
             'photo_url' => $p->photo_url,
             'phone' => $p->user?->phone,
             'tribe' => $p->tribe?->name,
+            // Ses services : un responsable de plusieurs departements voit tout de suite lequel l'accueille.
+            'departments' => $p->relationLoaded('departments') ? $p->departments->pluck('name')->values()->all() : [],
             'is_completed' => (bool) $p->is_completed,
             'registered_at' => self::arrivedAt($p)?->toIso8601String(),
             'days_ago' => ($at = self::arrivedAt($p)) ? (int) floor($at->copy()->startOfDay()->diffInDays(now()->startOfDay())) : null,

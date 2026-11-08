@@ -591,7 +591,7 @@ function AgendaList({ items, onOpen, details }: { items: CalendarItem[]; onOpen:
             </span>
             {i.kind === 'event' && (
               <span className="agenda-meta">
-                {CAT_LABEL[i.category]}{i.location ? ` · ${i.location}` : ''}{i.my_response === 'present' ? ' · ✓ Inscrit' : ''}
+                {CAT_LABEL[i.category]}{i.location ? ` · ${i.location}` : ''}{i.target && i.target !== 'Toute l’église' && i.target !== "Toute l'église" ? ` · ${i.target}` : ''}{i.my_response === 'present' ? ' · ✓ Inscrit' : ''}
                 {details && i.description ? ` — ${i.description.slice(0, 120)}` : ''}
               </span>
             )}

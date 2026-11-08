@@ -26,12 +26,18 @@ export function useAudienceOptions(kind: AudienceKind): AudienceOptions | null {
   return opts
 }
 
-/** Selection par defaut : toute l'eglise si autorise, sinon toutes ses tribus (ou GEMs / departements). */
+/**
+ * Selection par defaut, seulement quand elle ne peut pas melanger deux groupes : toute l'eglise si autorise ; sa
+ * tribu (ses GEMs en font partie) ; son seul GEM ; son seul departement. Responsable de plusieurs departements, ou
+ * d'une tribu ET d'un service : rien n'est coche d'office, la personne choisit (meme regle que le serveur).
+ */
 export function defaultScopes(o: AudienceOptions): AudienceScope[] {
   if (o.church) return [{ type: 'church', id: null }]
-  if (o.tribes.length) return o.tribes.map((t) => ({ type: 'tribe', id: t.id }))
-  if (o.gems.length) return o.gems.map((g) => ({ type: 'gem', id: g.id }))
-  return o.departments.map((d) => ({ type: 'department', id: d.id }))
+  const tribe = o.tribes.length === 1 ? o.tribes[0] : null
+  if (tribe && o.departments.length === 0 && o.gems.every((g) => g.tribe_id === tribe.id)) return [{ type: 'tribe', id: tribe.id }]
+  if (o.tribes.length === 0 && o.gems.length === 1 && o.departments.length === 0) return [{ type: 'gem', id: o.gems[0].id }]
+  if (o.tribes.length === 0 && o.gems.length === 0 && o.departments.length === 1) return [{ type: 'department', id: o.departments[0].id }]
+  return []
 }
 
 const key = (s: AudienceScope) => `${s.type}:${s.id ?? ''}`
@@ -84,6 +90,9 @@ export function AudiencePicker({ kind, value, onChange }: { kind: AudienceKind; 
         />
       )}
       {nothing && <div className="scope-note">Vous n'avez pas de périmètre de diffusion. Demandez le rôle « Communication (toute l'église) ».</div>}
+      {!church && !nothing && value.length === 0 && (
+        <p className="helper audience-choose">Choisissez à qui s’adresse cette publication : rien n’est coché d’office quand vous avez plusieurs groupes.</p>
+      )}
       {!opts.church && !nothing && <p className="helper">Seuls les groupes de votre périmètre sont proposés. Plusieurs choix possibles.</p>}
     </div>
   )

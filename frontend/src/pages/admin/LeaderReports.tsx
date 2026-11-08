@@ -194,8 +194,16 @@ export default function LeaderReports() {
               {data.received.length === 0 ? (
                 <p className="helper">Aucune tribu ni aucun département dans votre périmètre.</p>
               ) : (
+                // Pasteurs : les tribus puis les departements, chacun avec ses rapports recus (jamais une seule liste melangee).
+                (['tribe', 'department'] as const).map((kind) => ({ kind, rows: data.received.filter((r) => r.kind === kind) }))
+                  .filter((g) => g.rows.length > 0)
+                  .map((g, _i, groups) => (
+                <div key={g.kind} className="lr-received-group">
+                {groups.length > 1 && (
+                  <h4 className="lr-received-title">{g.kind === 'tribe' ? 'Tribus' : 'Départements'} <span className="count-soft">{g.rows.filter((r) => r.status === 'submitted').length} reçu(s) sur {g.rows.length}</span></h4>
+                )}
                 <div className="panel lr-received">
-                  {data.received.map((r) => (
+                  {g.rows.map((r) => (
                     <button key={`${r.kind}:${r.scope_id}`} className="lr-row" disabled={!r.report_id} onClick={() => r.report_id && openReport(r.report_id)}>
                       <span className="lr-row-main">
                         <strong>{KIND_LABEL[r.kind]} {r.scope_name}</strong>
@@ -210,6 +218,8 @@ export default function LeaderReports() {
                     </button>
                   ))}
                 </div>
+                </div>
+                  ))
               )}
             </section>
           )}

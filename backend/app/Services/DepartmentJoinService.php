@@ -167,17 +167,22 @@ class DepartmentJoinService
             'Votre inscription est validée. Vous recevrez désormais les annonces et les événements de ce département.', '/servir');
         // Les responsables du departement sont informes (la demande ne les attend plus).
         Notifier::send(array_values(array_diff(Recipients::departmentLeaders($department), array_filter([$actor?->id, $member->id]))), 'service',
-            "Nouveau serviteur : {$name}", $actor
+            "Nouveau serviteur au service {$department->name} : {$name}", $actor
                 ? "{$name} a rejoint le service {$department->name}."
                 : "{$name} a rejoint le service {$department->name} (demande validée automatiquement, sans réponse dans le délai).",
             "/admin/membres/{$member->id}");
     }
 
-    /** @return array<string, mixed> */
-    public static function present(DepartmentJoinRequest $r): array
+    /**
+     * @param  User|null  $viewer  responsable qui consulte : sa fiche ne s'ouvre que s'il peut deja voir ce membre
+     *                             (sinon le nom reste du texte, sans lien vers une page refusee)
+     * @return array<string, mixed>
+     */
+    public static function present(DepartmentJoinRequest $r, ?User $viewer = null): array
     {
         return [
             'id' => $r->id,
+            'can_open' => $viewer && $r->member ? $viewer->canViewMember($r->member) : false,
             'department' => ['id' => $r->department_id, 'name' => $r->department?->name],
             'member' => [
                 'user_id' => $r->user_id,

@@ -588,6 +588,8 @@ export interface Stats {
   fiss_filled: number | null
   fiss_rate: number | null
   by_tribe: { name: string; total: number }[]
+  /** Plusieurs groupes suivis (tribu, GEM, departements) : les chiffres de chacun (vide sinon). */
+  groups?: { type: 'tribe' | 'gem' | 'department'; id: number; name: string; total: number; active: number }[]
   recent: NewMember[]
   new_members: NewMemberCounts
 }
@@ -599,6 +601,8 @@ export interface NewMember {
   photo_url: string | null
   phone: string | null
   tribe: string | null
+  /** Ses services (departements) */
+  departments?: string[]
   is_completed: boolean
   registered_at: string | null
   days_ago: number | null
@@ -714,6 +718,8 @@ export interface ServiceItem {
   leader_photo_url: string | null
   joined: boolean
   joined_at: string | null
+  /** Il en est responsable */
+  i_lead?: boolean
   /** Demande envoyee, en attente du responsable du service. */
   pending?: boolean
   next_event: { title: string; starts_at: string } | null
@@ -809,6 +815,8 @@ export interface ValidationsData {
 }
 export interface ServiceJoinRequest {
   id: number
+  /** Sa fiche peut s'ouvrir (sinon le nom reste du texte) */
+  can_open?: boolean
   department: { id: number; name: string | null }
   member: { user_id: number; name: string | null; tribe: string | null; photo_url: string | null }
   created_at: string | null

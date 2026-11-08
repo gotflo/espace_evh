@@ -192,7 +192,7 @@ function OrgSection({ title, addLabel, items, endpoint, canCreate, canManage, sh
               {it.name}
               {showLeaders && (
                 <small className="org-leaders">
-                  {it.leaders && it.leaders.length > 0 ? `Responsable(s) : ${it.leaders.map((l) => l.name).join(', ')}` : 'Aucun responsable'}
+                  {it.leaders && it.leaders.length > 0 ? `Respo : ${it.leaders.map((l) => l.name).join(', ')}` : 'Aucun responsable'}
                   {(it.can_edit ?? canManage) && <button className="btn-link" onClick={() => setEditing(editing === it.id ? null : it.id)}>Modifier</button>}
                 </small>
               )}

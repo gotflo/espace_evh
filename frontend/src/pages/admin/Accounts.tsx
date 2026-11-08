@@ -9,6 +9,7 @@ import { useLatestRequest } from '../../utils/latestRequest'
 import { SkeletonCard } from '../../components/Skeleton'
 import { toast } from '../../toast'
 import type { ManagedRole } from '../../types'
+import { shortRole } from '../../utils/roles'
 
 interface AccountRole { assignment_id: number; key: string; name: string; scope_kind: string | null; scope_name: string | null }
 interface Account {
@@ -204,11 +205,11 @@ export default function Accounts() {
                 <div className="role-chips acc-roles">
                   {a.roles.map((r) => (
                     <span key={r.assignment_id} className={`role-chip ${r.key === 'super_admin' ? 'badge-gold' : ''}`}>
-                      {r.name}{r.scope_name ? ` · ${r.scope_name}` : ''}
+                      {shortRole(r.name)}{r.scope_name ? ` · ${r.scope_name}` : ''}
                       {canRemove(a, r) && <button className="role-chip-x" onClick={() => removeRole(a, r)} aria-label={`Retirer ${r.name}`}>×</button>}
                     </span>
                   ))}
-                  {a.led_departments.map((d) => <span key={d} className="role-chip">Responsable · {d}</span>)}
+                  {a.led_departments.map((d) => <span key={d} className="role-chip">Respo · {d}</span>)}
                   {a.roles.length === 0 && a.led_departments.length === 0 && <span className="helper">Aucune fonction.</span>}
                 </div>
                 {openId === a.id && <AssignRole account={a} roles={roles} reference={reference} onDone={load} />}

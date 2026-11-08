@@ -279,7 +279,7 @@ class LeaderReportsTest extends TestCase
         $this->artisan('app:tick', ['--only' => 'leader-reports'])->assertSuccessful();
         $this->artisan('app:tick', ['--only' => 'leader-reports'])->assertSuccessful(); // idempotent
         $first = $reminders($patriarch)->sole();
-        $this->assertSame('Rapport de septembre 2026 à remplir', $first->title);
+        $this->assertSame('Rapport de septembre 2026 à remplir · Tribu Juda', $first->title);
         $this->assertSame("/admin/rapports-mensuels?remplir=tribe:{$this->juda->id}&mois=2026-09", $first->url);
         $this->assertSame("/admin/rapports-mensuels?remplir=department:{$this->chorale->id}&mois=2026-09", $reminders($leader)->sole()->url);
 
@@ -295,6 +295,6 @@ class LeaderReportsTest extends TestCase
         $this->artisan('app:tick', ['--only' => 'leader-reports'])->assertSuccessful();
         $this->artisan('app:tick', ['--only' => 'leader-reports'])->assertSuccessful();
         $this->assertCount(1, $reminders($patriarch));
-        $this->assertSame(['Rapport de septembre 2026 à remplir', 'Rappel : rapport de septembre 2026 à remplir'], $reminders($leader)->pluck('title')->all());
+        $this->assertSame(['Rapport de septembre 2026 à remplir · Chorale', 'Rappel : rapport de septembre 2026 à remplir · Chorale'], $reminders($leader)->pluck('title')->all());
     }
 }

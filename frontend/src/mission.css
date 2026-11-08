@@ -23,6 +23,10 @@
 .toolbar-row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
 .toolbar-row .select { width: auto; min-width: min(100%, 170px); max-width: 100%; }
 .toolbar-row .search-input { flex: 1; min-width: min(100%, 200px); }
+/* Telephone : menus et recherche sur toute la largeur, alignes les uns sous les autres. */
+@media (max-width: 640px) {
+  .toolbar-row .select { flex: 1 1 100%; width: 100%; }
+}
 
 /* ---------- Liste des membres : alertes ---------- */
 .member-flags { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.2rem; }

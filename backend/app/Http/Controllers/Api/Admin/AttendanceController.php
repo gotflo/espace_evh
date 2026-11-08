@@ -37,7 +37,7 @@ class AttendanceController extends Controller
             'department_id' => ['nullable', 'integer'],
         ]);
         $date = $request->query('date') ?: now()->toDateString();
-        $department = $this->department($request);
+        $department = $this->sheetDepartment($request, 'attendance.view');
         $event = $this->eventName($request->query('event') ?: 'Culte', $department);
         $kind = $request->query('kind') === 'repetition' ? 'repetition' : 'culte';
 
@@ -99,7 +99,7 @@ class AttendanceController extends Controller
         ]);
 
         $kind = $data['kind'] ?? 'culte';
-        $department = $this->department($request);
+        $department = $this->sheetDepartment($request, 'attendance.record');
         $data['event'] = $this->eventName($data['event'], $department);
         $rosterIds = $this->rosterQuery($request->user(), $department, 'attendance.record')->pluck('profiles.user_id');
         $inRoster = $rosterIds->flip();
@@ -172,13 +172,42 @@ class AttendanceController extends Controller
             ->get(['profiles.id', 'profiles.user_id', 'profiles.first_name', 'profiles.last_name', 'profiles.tribe_id', 'profiles.photo_path']);
     }
 
-    /** Requete des membres de l'appel, sans rien charger : l'enregistrement n'a besoin que de leurs identifiants. */
+    /**
+     * Requete des membres de l'appel, sans rien charger : l'enregistrement n'a besoin que de leurs identifiants.
+     * Sans departement choisi, une portee restreinte ne garde que sa tribu, ses GEMs et les fideles confies :
+     * les membres de ses departements ont chacun leur feuille (« Culte · Chorale »), jamais melanges a la tribu.
+     */
     private function rosterQuery(User $user, ?Department $department, string $permission): Builder
     {
         $query = Profile::query()->has('user')
             ->when($department, fn ($q) => $q->whereHas('departments', fn ($d) => $d->whereKey($department->id)));
+        if (! $department && ! $user->isChurchWideFor($permission)) {
+            $s = $user->scopesFor($permission);
+            $query->where(fn ($w) => $w->whereIn('tribe_id', $s['tribe'] ?: [0])
+                ->orWhereIn('gem_id', $s['gem'] ?: [0])->orWhereIn('user_id', $s['member'] ?: [0]));
+        }
 
         return MemberScope::manageableProfiles($query, $user, $permission);
+    }
+
+    /**
+     * Departement de la feuille : celui choisi ; pour un responsable de departement(s) seulement (ni tribu, ni GEM),
+     * son unique departement, et s'il en a plusieurs il choisit (un appel par departement, jamais un melange).
+     */
+    private function sheetDepartment(Request $request, string $permission): ?Department
+    {
+        $department = $this->department($request);
+        $user = $request->user();
+        if ($department || $user->isChurchWideFor($permission)) {
+            return $department;
+        }
+        $s = $user->scopesFor($permission);
+        if ($s['tribe'] || $s['gem'] || $s['member'] || ! $s['department']) {
+            return null;
+        }
+        abort_unless(count($s['department']) === 1, 422, 'Choisissez le département de cet appel : vous êtes responsable de plusieurs départements.');
+
+        return Department::find($s['department'][0]);
     }
 
     /**

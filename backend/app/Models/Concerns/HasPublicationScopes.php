@@ -70,6 +70,8 @@ trait HasPublicationScopes
             $parts[] = (count($t) > 1 ? 'Tribus ' : 'Tribu ').implode(', ', $t);
         }
         if ($g = $names('gem')) {
+            // « GEM Béthel », jamais « GEM GEM Béthel » pour un GEM dont le nom commence deja par GEM.
+            $g = array_map(fn ($n) => preg_replace('/^gem\s+/iu', '', (string) $n), $g);
             $parts[] = (count($g) > 1 ? 'GEMs ' : 'GEM ').implode(', ', $g);
         }
         if ($d = $names('department')) {

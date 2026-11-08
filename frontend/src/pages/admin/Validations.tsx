@@ -6,7 +6,7 @@ import { AppLayout } from '../../components/AppLayout'
 import { LoadError } from '../../components/LoadError'
 import { SkeletonCard } from '../../components/Skeleton'
 import { usePulse } from '../../pulse'
-import type { MembershipRequest, ValidationFissItem, ValidationsData, ValidationTribeItem } from '../../types'
+import type { MembershipRequest, ServiceJoinRequest, ValidationFissItem, ValidationTribeItem, ValidationsData } from '../../types'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { Icon } from '../../components/Icon'
 import { de } from '../../utils/french'
@@ -161,6 +161,17 @@ function DeletionDecisionBanner({ params, onClose }: { params: URLSearchParams; 
   )
 }
 
+/** Inscriptions regroupees par service (ordre d'arrivee conserve dans chaque groupe), services par ordre alphabetique. */
+function byDepartment(list: ServiceJoinRequest[]): [ServiceJoinRequest['department'], ServiceJoinRequest[]][] {
+  const groups = new Map<number, [ServiceJoinRequest['department'], ServiceJoinRequest[]]>()
+  for (const r of list) {
+    const g = groups.get(r.department.id)
+    if (g) g[1].push(r)
+    else groups.set(r.department.id, [r.department, [r]])
+  }
+  return [...groups.values()].sort((a, b) => (a[0].name ?? '').localeCompare(b[0].name ?? '', 'fr'))
+}
+
 export default function Validations() {
   const navigate = useNavigate()
   const { isSuperAdmin } = useAuth()
@@ -262,13 +273,19 @@ export default function Validations() {
       {data && (data.services?.length ?? 0) > 0 && (
         <section className="mb-section" id="services">
           <h3 className="ex-group">Inscriptions aux services <span className="count-soft">{data.services!.length}</span></h3>
+          {/* Responsable de plusieurs services : une liste par service, jamais melangees. */}
+          {byDepartment(data.services!).map(([department, requests], _i, groups) => (
+          <div key={department.id} className="validation-dept">
+          {groups.length > 1 && <h4 className="validation-dept-title">{department.name} <span className="count-soft">{requests.length}</span></h4>}
           <div className="validation-grid">
-            {data.services!.map((r) => (
+            {requests.map((r) => (
               <article key={r.id} className="validation-card">
                 <div className="validation-head">
                   {r.member.photo_url ? <img className="mini-avatar" src={r.member.photo_url} alt="" width={34} height={34} loading="lazy" decoding="async" /> : <span className="validation-icon"><Icon name="serve" size={20} /></span>}
                   <div>
-                    <button className="btn-link strong" onClick={() => navigate(`/admin/membres/${r.member.user_id}`)}>{r.member.name}</button>
+                    {r.can_open !== false
+                      ? <button className="btn-link strong" onClick={() => navigate(`/admin/membres/${r.member.user_id}`)}>{r.member.name}</button>
+                      : <strong>{r.member.name}</strong>}
                     <small>{r.member.tribe ? `Tribu ${r.member.tribe}` : 'Sans tribu'}{r.created_at ? ` · ${ago(r.created_at)}` : ''}</small>
                   </div>
                 </div>
@@ -280,6 +297,8 @@ export default function Validations() {
               </article>
             ))}
           </div>
+          </div>
+          ))}
         </section>
       )}
       {data && (data.deletions?.length ?? 0) > 0 && (

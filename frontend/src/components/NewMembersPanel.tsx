@@ -82,7 +82,7 @@ export function NewMembersPanel() {
               <span className="newcomer-text">
                 <strong>{m.full_name}{m.days_ago !== null && m.days_ago <= 2 && <span className="new-tag">Nouveau</span>}</strong>
                 <small>
-                  {ago(m.days_ago)}{m.tribe ? ` · ${m.tribe}` : ''}
+                  {ago(m.days_ago)}{m.tribe ? ` · ${m.tribe}` : ''}{m.departments?.length ? ` · ${m.departments.join(', ')}` : ''}
                   {!m.is_completed && ' · profil incomplet'}
                   {m.welcomed && ` · accueilli${m.welcomed_by ? ` par ${m.welcomed_by}` : ''}`}
                 </small>

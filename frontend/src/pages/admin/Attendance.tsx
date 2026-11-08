@@ -25,17 +25,27 @@ export default function Attendance() {
   const canRecord = hasPermission('attendance.record')
   const seesAll = hasPermission('members.view_all')
 
-  // Departements : un responsable de plusieurs departements fait l'appel de chacun separement.
+  // Departements : un responsable de plusieurs departements fait l'appel de chacun separement (ordre alphabetique).
   const myDepartments = useMemo(() => roles.filter((r) => r.scope_kind === 'department' && r.scope_id)
-    .reduce<Department[]>((list, r) => (list.some((d) => d.id === r.scope_id) ? list : [...list, { id: r.scope_id!, name: r.scope_name ?? '' }]), []), [roles])
+    .reduce<Department[]>((list, r) => (list.some((d) => d.id === r.scope_id) ? list : [...list, { id: r.scope_id!, name: r.scope_name ?? '' }]), [])
+    .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'fr')), [roles])
+  // Sans departement choisi : sa tribu ou son GEM seulement (le serveur ne melange jamais ses departements).
+  const baseGroups = useMemo(() => roles.filter((r) => (r.scope_kind === 'tribe' || r.scope_kind === 'gem') && r.scope_id && hasPermission('attendance.view'))
+    .map((r) => (r.scope_kind === 'tribe' ? `Tribu ${r.scope_name ?? ''}` : `GEM ${r.scope_name ?? ''}`).trim())
+    .filter((label, i, all) => all.indexOf(label) === i), [roles, hasPermission])
   const [allDepartments, setAllDepartments] = useState<Department[]>([])
   useEffect(() => { if (seesAll) getReference().then((r) => setAllDepartments(r.departments)).catch(() => {}) }, [seesAll])
   const departments = seesAll ? allDepartments : myDepartments
+  // Responsable de departement(s) seulement : toujours une feuille par departement, le premier par defaut.
+  const departmentOnly = !seesAll && baseGroups.length === 0 && myDepartments.length > 0
 
   const [date, setDate] = useState(today)
   const [event, setEvent] = useState('Culte')
   const [kind, setKind] = useState<'culte' | 'repetition'>('culte')
-  const [departmentId, setDepartmentId] = useState('')
+  const [departmentId, setDepartmentId] = useState(() => (departmentOnly ? String(myDepartments[0].id) : ''))
+  useEffect(() => {
+    if (departmentOnly && !departmentId) setDepartmentId(String(myDepartments[0].id))
+  }, [departmentOnly, departmentId, myDepartments])
   const scopeQuery = departmentId ? `&department_id=${departmentId}` : ''
   const [members, setMembers] = useState<AttendanceMember[]>([])
   const [loading, setLoading] = useState(true)
@@ -150,7 +160,7 @@ export default function Attendance() {
           <div className="field mt" style={{ marginBottom: 0 }}>
             <label htmlFor="attendance-department">Département</label>
             <select id="attendance-department" className="select" value={departmentId} onChange={(e) => { const id = e.target.value; switchSheet(() => setDepartmentId(id)) }}>
-              <option value="">{seesAll ? 'Toute l’église' : 'Tout mon périmètre'}</option>
+              {!departmentOnly && <option value="">{seesAll ? 'Toute l’église' : (baseGroups.join(' · ') || 'Mon périmètre')}</option>}
               {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>

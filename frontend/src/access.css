@@ -101,10 +101,8 @@
 .status-pill.pending { background: rgba(240, 160, 25, 0.16); color: #8a4b00; }
 .service-hint { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
 /* Mon profil : son GEM et son Garde (noms longs : retour a la ligne, jamais de debordement). */
-.my-gem {
-  display: flex; flex-direction: column; gap: 0.5rem; min-width: 0;
-  padding: 0.75rem 0.9rem; border: 1px solid var(--border-subtle); border-radius: 12px;
-}
+.my-gem { min-width: 0; }
+.my-gem-current { min-width: 0; }
 .my-gem-name { overflow-wrap: anywhere; }
 .my-gem-garde { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
 .my-gem-garde-text { min-width: 0; overflow-wrap: anywhere; }
@@ -354,3 +352,23 @@ html.app-shell #root > .app { height: 100%; min-height: 0; overflow-x: hidden; o
   /* Boutons repartis sur deux lignes : leurs zones ne se recouvrent pas. */
   .ms-trigger, .reh-status-btns { row-gap: 20px; }
 }
+
+/* Validations : une liste par service pour un responsable de plusieurs services. */
+.validation-dept + .validation-dept { margin-top: 1rem; }
+.validation-dept-title { margin: 0 0 0.5rem; font-size: 0.95rem; overflow-wrap: anywhere; }
+.audience-choose { color: var(--accent); }
+
+/* Accueil : chiffres par groupe (tribu, GEM, departement) pour qui en suit plusieurs. */
+.dash-groups { margin-bottom: 1rem; }
+.dash-group-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 0.5rem; }
+.dash-group {
+  width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; text-align: left;
+  padding: 0.65rem 0.8rem; border: 1px solid var(--border-subtle); border-radius: 12px; background: transparent; cursor: pointer; font: inherit; color: inherit;
+}
+.dash-group:hover { border-color: var(--border); }
+.dash-group-name { font-weight: 600; overflow-wrap: anywhere; }
+.dash-group-figures { font-size: 0.82rem; color: var(--text-soft); }
+
+/* Rapports mensuels recus (pasteurs) : tribus puis departements. */
+.lr-received-group + .lr-received-group { margin-top: 1rem; }
+.lr-received-title { margin: 0 0 0.5rem; font-size: 0.95rem; }

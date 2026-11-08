@@ -175,7 +175,9 @@ class Notifier
                 'body' => $body ? mb_substr($body, 0, 240) : '',
                 'url' => $url ?: '/tableau-de-bord',
                 'type' => $type,
-                'tag' => $type.'-'.$now->timestamp,
+                // Etiquette propre a chaque alerte : deux rappels du meme type la meme seconde (un par departement)
+                // restent deux notifications sur le telephone au lieu de se remplacer.
+                'tag' => $type.'-'.$now->timestamp.'-'.substr(md5($title), 0, 8),
             ], $urgency);
         }
 

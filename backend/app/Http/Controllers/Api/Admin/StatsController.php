@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Department;
+use App\Models\Gem;
 use App\Models\Profile;
 use App\Models\SpiritualHealthForm;
+use App\Models\Tribe;
 use App\Support\MemberScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -55,7 +58,35 @@ class StatsController extends Controller
             ->limit(6)->get()
             ->map(fn (Profile $p) => NewMemberController::present($p))->values();
 
+        // Plusieurs groupes suivis (tribu, GEM, departements) : les chiffres de chacun, jamais seulement le total melange.
+        $groups = [];
+        if (! $viewAll) {
+            $ids = $user->scopesFor('members.view_scope');
+            $isActive = fn ($u) => $u->where(fn ($w) => $w->where('activity_override', 'active')
+                ->orWhere(fn ($x) => $x->whereNull('activity_override')->where('activity_status', 'active')));
+            $count = function (callable $filter) use ($scope, $isActive) {
+                return [
+                    'total' => $filter($scope(Profile::query()))->count(),
+                    'active' => $filter($scope(Profile::query()))->whereHas('user', $isActive)->count(),
+                ];
+            };
+            foreach (Tribe::whereIn('id', $ids['tribe'] ?: [0])->orderBy('name')->get(['id', 'name']) as $t) {
+                $groups[] = ['type' => 'tribe', 'id' => $t->id, 'name' => "Tribu {$t->name}"] + $count(fn ($q) => $q->where('tribe_id', $t->id));
+            }
+            foreach (Gem::whereIn('id', $ids['gem'] ?: [0])->orderBy('name')->get(['id', 'name']) as $g) {
+                $groups[] = ['type' => 'gem', 'id' => $g->id, 'name' => $g->label()] + $count(fn ($q) => $q->where('gem_id', $g->id));
+            }
+            foreach (Department::whereIn('id', $ids['department'] ?: [0])->orderBy('name')->get(['id', 'name']) as $d) {
+                $groups[] = ['type' => 'department', 'id' => $d->id, 'name' => $d->name]
+                    + $count(fn ($q) => $q->whereHas('departments', fn ($x) => $x->whereKey($d->id)));
+            }
+            if (count($groups) < 2) {
+                $groups = [];
+            }
+        }
+
         return response()->json([
+            'groups' => $groups,
             'total' => $total,
             'active' => $active,
             'inactive' => $total - $active,

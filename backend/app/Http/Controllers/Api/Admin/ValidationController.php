@@ -94,7 +94,7 @@ class ValidationController extends Controller
 
         // Inscriptions aux services : le responsable du departement (ou les autorites des departements).
         $services = DepartmentJoinService::pendingFor($user)
-            ->map(fn ($r) => DepartmentJoinService::present($r))->values()->all();
+            ->map(fn ($r) => DepartmentJoinService::present($r, $user))->values()->all();
 
         return response()->json([
             'fiss' => $fiss, 'tribes' => $tribes, 'vertumetre' => $vertumetre, 'deletions' => $deletions,

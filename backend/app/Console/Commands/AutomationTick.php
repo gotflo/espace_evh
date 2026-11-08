@@ -481,7 +481,8 @@ class AutomationTick extends Command
             foreach ($scope['user_ids'] as $userId) {
                 $key = "leader-report:{$period}:{$scope['kind']}:{$scope['scope_id']}:{$userId}:{$stage}";
                 $sent += $this->sendOnce($key, fn () => Notifier::send([$userId], 'leader_report',
-                    ($late ? 'Rappel : rapport' : 'Rapport').' '.French::de($month).' à remplir',
+                    ($late ? 'Rappel : rapport' : 'Rapport').' '.French::de($month).' à remplir · '
+                        .($scope['kind'] === 'tribe' ? 'Tribu '.$scope['scope_name'] : $scope['scope_name']),
                     ucfirst($what).' · un questionnaire guidé, quelques minutes suffisent.',
                     "/admin/rapports-mensuels?remplir={$scope['kind']}:{$scope['scope_id']}&mois={$period}",
                     ['period' => $period, 'kind' => $scope['kind'], 'scope_id' => $scope['scope_id']], $late ? 'high' : 'normal'));

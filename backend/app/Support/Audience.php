@@ -70,8 +70,9 @@ class Audience
     }
 
     /**
-     * Valide la selection de l'auteur. Selection vide => sa portee par defaut
-     * (toute l'eglise s'il y est autorise, sinon toutes ses tribus / GEMs / departements).
+     * Valide la selection de l'auteur. Selection vide => sa portee par defaut, seulement si elle ne melange rien :
+     * toute l'eglise s'il y est autorise, sa tribu (ses GEMs en font partie), son seul GEM ou son seul departement.
+     * Plusieurs groupes distincts (deux departements, une tribu et un service...) : il doit choisir.
      *
      * @param  array<int, array{type?: string, id?: int|null}>|null  $input
      * @return array<int, array{type: string, id: int|null}>
@@ -112,13 +113,24 @@ class Audience
         if ($options['church']) {
             return [['type' => 'church', 'id' => null]];
         }
-        foreach (['tribe' => $allowed['tribe'], 'gem' => self::scopeIds($author, $permission)['gem'], 'department' => $allowed['department']] as $type => $ids) {
-            if ($ids) {
-                return array_map(fn ($id) => ['type' => $type, 'id' => (int) $id], $ids);
-            }
+        $tribes = $allowed['tribe'];
+        $gems = $allowed['gem'];
+        $departments = $allowed['department'];
+        if (! $tribes && ! $gems && ! $departments) {
+            abort(403, "Vous n'avez pas de périmètre de diffusion (tribu, GEM ou département). Demandez le rôle « Communication (toute l'église) ».");
+        }
+        $gemTribes = array_values(array_unique(array_map(fn ($g) => (int) $g['tribe_id'], $options['gems'])));
+        if (count($tribes) === 1 && ! $departments && array_diff($gemTribes, $tribes) === []) {
+            return [['type' => 'tribe', 'id' => (int) $tribes[0]]];
+        }
+        if (! $tribes && count($gems) === 1 && ! $departments) {
+            return [['type' => 'gem', 'id' => (int) $gems[0]]];
+        }
+        if (! $tribes && ! $gems && count($departments) === 1) {
+            return [['type' => 'department', 'id' => (int) $departments[0]]];
         }
 
-        abort(403, "Vous n'avez pas de périmètre de diffusion (tribu, GEM ou département). Demandez le rôle « Communication (toute l'église) ».");
+        throw ValidationException::withMessages(['scopes' => 'Choisissez à qui s’adresse cette publication : vous avez plusieurs groupes (tribu, GEM ou départements).']);
     }
 
     /** Lit la selection envoyee (tableau, ou JSON pour les envois multipart avec image). */

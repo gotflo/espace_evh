@@ -322,7 +322,8 @@
 }
 .serve-card:hover { box-shadow: 0 8px 22px rgba(16, 40, 36, 0.08); transform: translateY(-2px); }
 .serve-card.joined { border-color: rgba(30, 158, 90, 0.45); background: #f8fcf9; }
-.serve-card-head { display: flex; align-items: center; gap: 0.7rem; }
+.serve-card-head { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
+.serve-card-head .status-pill { flex-shrink: 0; margin-left: auto; }
 .serve-initial {
   width: 42px; height: 42px; border-radius: 12px; background: #0d5f57; color: #fff; display: grid; place-items: center;
   font-weight: 700; font-size: 1.1rem; flex-shrink: 0;
@@ -334,7 +335,9 @@
 .serve-meta { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; color: var(--text-muted); }
 .serve-leader { display: inline-flex; align-items: center; gap: 0.4rem; }
 .serve-leader img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; }
-.serve-actions { margin-top: auto; display: flex; justify-content: flex-end; }
+.serve-actions { margin-top: auto; display: flex; justify-content: flex-end; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+/* Responsable : « Ses membres » a gauche, « Quitter » a droite, sur la meme ligne. */
+.serve-actions.two { justify-content: space-between; }
 .serve-toolbar { margin-top: 0.4rem; }
 .serve-search { max-width: 280px; }
 .serve-empty { margin-bottom: 1.4rem; }

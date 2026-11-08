@@ -55,6 +55,9 @@ class MemberController extends Controller
         if ($dept = $request->query('department_id')) {
             $query->whereHas('departments', fn ($d) => $d->where('departments.id', $dept));
         }
+        if ($gem = $request->query('gem_id')) {
+            $query->where('gem_id', $gem);
+        }
         $status = $request->query('status');
         if ($status === 'active' || $status === 'inactive') {
             // Statut effectif : force manuellement, sinon statut stocke.

@@ -44,7 +44,7 @@ class MyServiceController extends Controller
             ->groupBy('dept')->map(fn ($list) => $list->first());
 
         return response()->json([
-            'services' => $departments->map(function (Department $d) use ($mine, $next, $pending) {
+            'services' => $departments->map(function (Department $d) use ($mine, $next, $pending, $user) {
                 $upcoming = $next->get($d->id);
 
                 return [
@@ -55,6 +55,8 @@ class MyServiceController extends Controller
                     'leader' => $d->leaders->map(fn ($l) => $l->profile?->full_name)->filter()->implode(', ') ?: null,
                     'leader_photo_url' => $d->leaders->first()?->profile?->photo_url,
                     'joined' => $mine->has($d->id),
+                    // Il en est responsable : marque comme tel, et averti avant de le quitter.
+                    'i_lead' => $d->leaders->contains('id', $user->id),
                     // Demande envoyee, en attente du responsable du service.
                     'pending' => ! $mine->has($d->id) && $pending->has($d->id),
                     'joined_at' => $mine->get($d->id) ? substr((string) $mine->get($d->id), 0, 10) : null,

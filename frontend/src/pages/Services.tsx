@@ -6,6 +6,7 @@ import { AppLayout } from '../components/AppLayout'
 import { SkeletonCard } from '../components/Skeleton'
 import { LoadError } from '../components/LoadError'
 import type { ServiceItem } from '../types'
+import { Link } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 import { ModalLayer } from '../components/ModalLayer'
 
@@ -38,7 +39,12 @@ export default function Services() {
   }
 
   async function leave(s: ServiceItem) {
-    if (!confirm(s.pending ? `Retirer votre demande pour le service ${s.name} ?` : `Quitter le service ${s.name} ? Ses responsables seront prévenus.`)) return
+    const question = s.pending
+      ? `Retirer votre demande pour le service ${s.name} ?`
+      : s.i_lead
+        ? `Quitter le service ${s.name} ? Vous en êtes responsable : en le quittant, vous ne le serez plus. Ses autres responsables seront prévenus.`
+        : `Quitter le service ${s.name} ? Ses responsables seront prévenus.`
+    if (!confirm(question)) return
     setBusy(s.id)
     try {
       await api(`/me/services/${s.id}`, { method: 'DELETE' })
@@ -123,7 +129,7 @@ function ServiceCard({ s, busy, onJoin, onLeave }: { s: ServiceItem; busy: boole
           <h4>{s.name}</h4>
           <span className="serve-count">{s.members_count} serviteur(s)</span>
         </div>
-        {s.joined && <span className="status-pill on">Je sers ici</span>}
+        {s.joined && <span className="status-pill on">{s.i_lead ? 'Respo' : 'Je sers ici'}</span>}
         {s.pending && <span className="status-pill pending">En attente</span>}
       </div>
       {s.description && <p className="serve-desc">{s.description}</p>}
@@ -131,7 +137,7 @@ function ServiceCard({ s, busy, onJoin, onLeave }: { s: ServiceItem; busy: boole
         {s.leader && (
           <span className="serve-leader">
             {s.leader_photo_url ? <img src={s.leader_photo_url} alt="" width={20} height={20} loading="lazy" decoding="async" /> : <Icon name="profile" size={20} />}
-            Responsable : {s.leader}
+            Respo : {s.leader}
           </span>
         )}
         {s.next_event && (
@@ -139,7 +145,8 @@ function ServiceCard({ s, busy, onJoin, onLeave }: { s: ServiceItem; busy: boole
         )}
         {s.joined && s.joined_at && <span>Depuis le {new Date(s.joined_at + 'T00:00').toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' })}</span>}
       </div>
-      <div className="serve-actions">
+      <div className={`serve-actions ${s.i_lead && s.joined ? 'two' : ''}`}>
+        {s.i_lead && <Link className="btn btn-ghost small" to={`/admin/membres?groupe=department:${s.id}`}>Ses membres</Link>}
         {s.joined
           ? <button className="btn-link" disabled={busy} onClick={onLeave}>{busy ? <span className="spinner" /> : 'Quitter ce service'}</button>
           : s.pending

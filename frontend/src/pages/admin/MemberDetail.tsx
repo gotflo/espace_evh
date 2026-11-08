@@ -17,6 +17,7 @@ import { MemberDeletion } from '../../components/MemberDeletion'
 import { Icon } from '../../components/Icon'
 import { useDirty } from '../../utils/dirty'
 import { LoadError } from '../../components/LoadError'
+import { shortRole } from '../../utils/roles'
 
 /** Une fiche par membre : changer de membre (lien d'un proche) repart de zero, sans afficher les donnees du precedent. */
 export default function MemberDetail() {
@@ -231,7 +232,7 @@ function MemberDetailView() {
           <div className="role-chips">
             {data.roles.map((r) => (
               <span key={r.assignment_id} className={`role-chip ${r.key === 'super_admin' ? 'badge-gold' : ''}`}>
-                {r.name}{r.scope_name ? ` · ${r.scope_name}` : ''}
+                {shortRole(r.name)}{r.scope_name ? ` · ${r.scope_name}` : ''}
                 {r.can_remove && <button className="role-chip-x" onClick={() => removeRole(r.assignment_id)} aria-label="Retirer">×</button>}
               </span>
             ))}

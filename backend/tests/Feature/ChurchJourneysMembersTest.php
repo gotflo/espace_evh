@@ -511,7 +511,7 @@ class ChurchJourneysMembersTest extends TestCase
 
         // Retour : « Bienvenue au service » pour Jean ; l'autre responsable est informe ; la seconde decision est refusee.
         $this->assertNotifiedExactly('Bienvenue au service Chorale', [$jean], 'service');
-        $this->assertNotifiedExactly('Nouveau serviteur : Jean Nouveau', [$this->choirCoLeader], 'service');
+        $this->assertNotifiedExactly('Nouveau serviteur au service Chorale : Jean Nouveau', [$this->choirCoLeader], 'service');
         $this->as($this->choirCoLeader);
         $this->assertSame([], $this->getJson('/api/admin/validations')->assertOk()->json('services'));
         $this->postJson("/api/admin/validations/services/{$request->id}", ['decision' => 'rejected'])->assertStatus(409);
@@ -543,7 +543,7 @@ class ChurchJourneysMembersTest extends TestCase
         $this->postJson("/api/admin/validations/services/{$lucRequest->id}", ['decision' => 'rejected'])->assertOk()->assertJsonPath('message', 'Demande refusée.');
         $this->assertNotifiedExactly('Inscription au service Chorale', [$luc], 'service');
         $this->assertStringContainsString("n'a pas été retenue", $this->noteFor($luc, 'Inscription au service Chorale')->body);
-        $this->assertSame(0, UserNotification::where('title', 'Nouveau serviteur : Luc Candidat')->count());
+        $this->assertSame(0, UserNotification::where('title', 'Nouveau serviteur au service Chorale : Luc Candidat')->count());
         $this->assertFalse($luc->profile->fresh()->departments()->whereKey($this->chorale->id)->exists());
         $this->assertSame(3, OutboundMessage::count(), 'un courriel par responsable (qui l\'accepte) et par demande, rien a la decision');
 

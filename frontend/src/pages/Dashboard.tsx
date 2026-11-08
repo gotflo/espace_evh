@@ -21,6 +21,7 @@ import { Skeleton } from '../components/Skeleton'
 import { NewMembersPanel } from '../components/NewMembersPanel'
 import type { Stats } from '../types'
 import { useAppearance } from '../appearance'
+import { shortRole } from '../utils/roles'
 
 /** Duree d'affichage du mot de bienvenue (ms). */
 const WELCOME_MS = 6000
@@ -142,6 +143,22 @@ export default function Dashboard() {
               </button>
             </div>
           )}
+          {/* Plusieurs groupes (deux departements, une tribu et un service...) : chacun a ses chiffres et sa liste. */}
+          {stats && (stats.groups?.length ?? 0) > 1 && (
+            <section className="panel dash-groups">
+              <div className="panel-head"><h3>Par groupe</h3></div>
+              <ul className="dash-group-list">
+                {stats.groups!.map((g) => (
+                  <li key={`${g.type}:${g.id}`}>
+                    <button type="button" className="dash-group" onClick={() => navigate(`/admin/membres?groupe=${g.type}:${g.id}`)}>
+                      <span className="dash-group-name">{g.name}</span>
+                      <span className="dash-group-figures">{g.total} membre(s) · {g.active} actif(s)</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <div className="dash-main">
             <div className="dash-col dash-main-col">
@@ -171,7 +188,7 @@ export default function Dashboard() {
               <div className="badges">
                 {roles.map((r) => (
                   <span key={`${r.key}-${r.scope_kind ?? ''}-${r.scope_id ?? ''}`} className={`badge ${r.key === 'super_admin' ? 'badge-gold' : ''}`}>
-                    {r.name}{r.scope_name ? ` · ${r.scope_name}` : ''}
+                    {shortRole(r.name)}{r.scope_name ? ` · ${r.scope_name}` : ''}
                   </span>
                 ))}
                 {roles.length === 0 && <span className="helper">Aucune fonction pour le moment.</span>}

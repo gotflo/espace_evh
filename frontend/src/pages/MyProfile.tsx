@@ -14,6 +14,7 @@ import { PersonName } from '../components/PersonName'
 import { Icon } from '../components/Icon'
 import { LoadError } from '../components/LoadError'
 import { useDirty } from '../utils/dirty'
+import { mainRoleLabel } from '../utils/roles'
 
 const CIVILITY = [['dr', 'Dr'], ['reverend', 'Révérend'], ['pasteur', 'Pasteur'], ['m', 'M.'], ['mme', 'Mme'], ['mlle', 'Mlle']]
 const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
@@ -145,7 +146,7 @@ export default function MyProfile() {
   }
 
   const initials = ((firstName[0] ?? '') + (lastName[0] ?? '')).toUpperCase()
-  const mainRole = roles[0]?.name ?? 'Fidèle'
+  const mainRole = mainRoleLabel(roles)
 
   return (
     <AppLayout title="Mon profil" subtitle="Vos informations personnelles et spirituelles">
@@ -230,8 +231,11 @@ export default function MyProfile() {
           {/* GEM : le patriarche ou l'AP de la tribu y place le membre ; il voit son GEM et son Garde. */}
           <div className="field"><label>Mon GEM</label>
             {myGem ? (
-              <div className="my-gem">
-                <strong className="my-gem-name">{myGem.label}</strong>
+              <div className="tribe-box my-gem">
+                <div className="tribe-current my-gem-current">
+                  <span className="tribe-badge"><Icon name="gem" size={20} /></span>
+                  <strong className="my-gem-name">{myGem.label}</strong>
+                </div>
                 {myGem.garde ? (
                   <span className="my-gem-garde">
                     {myGem.garde.photo_url

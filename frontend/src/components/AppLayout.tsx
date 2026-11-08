@@ -13,6 +13,7 @@ import { PushSettings } from './PushSettings'
 import { usePulse } from '../pulse'
 import { enterAppShell, shellOn } from '../utils/iosViewport'
 import { rememberPageScroll, restorePageScroll, scrollPageTo } from '../utils/pageScroll'
+import { mainRoleLabel } from '../utils/roles'
 
 /**
  * Cadre persistant : menu lateral, en-tete et barre du bas sont affiches une seule fois pour
@@ -130,7 +131,7 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
     || canLeaderReports || canAudit || canVerses || canSchedule || canResources || canGrowth
 
   const initials = ((profile?.first_name?.[0] ?? '') + (profile?.last_name?.[0] ?? '')).toUpperCase()
-  const mainRole = roles[0]?.name ?? 'Fidèle'
+  const mainRole = mainRoleLabel(roles)
   const [menuOpen, setMenuOpen] = useState(false)
   const unread = useUnreadCount()
   // Lien clique : fine barre de progression tant que la page suivante n'est pas affichee
