@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { api, ApiError } from '../../api/client'
+import { api, ApiError, prefetch } from '../../api/client'
 import { getReference } from '../../api/reference'
 import { useAuth } from '../../auth/AuthContext'
 import { AppLayout } from '../../components/AppLayout'
@@ -72,6 +72,19 @@ function MemberDetailView() {
     })
   }, [id, resetBelonging])
 
+  // Panneaux qui se chargent a l'ouverture : lus en un seul appel, en meme temps que la fiche (au lieu de huit
+  // appels lances apres elle). Seulement ceux que ce role peut voir ; le serveur verifie chacun comme d'habitude.
+  // (la liste est comparee comme texte : un simple rafraichissement du compte ne relance rien)
+  const bundleParts = [
+    ...(hasPermission('spiritual.view') ? ['fiss', 'spiritual'] : []),
+    ...(hasPermission('spiritual.view') ? (['resolutions', 'assignments', 'vertumetre'] as const).filter((m) => moduleOn(m)) : []),
+    ...(hasPermission('meditations.view') && moduleOn('meditation') ? ['meditations'] : []),
+    ...(hasPermission('evaluations.manage') ? ['evaluations'] : []),
+    'deletion',
+  ].join(',')
+  useEffect(() => {
+    if (id) prefetch(bundleParts.split(',').map((p) => `/admin/members/${id}/${p}`), '/admin/bundle')
+  }, [id, bundleParts])
   useEffect(() => { load() }, [load])
 
   useEffect(() => {

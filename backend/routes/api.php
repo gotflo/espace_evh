@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\Admin\AssignmentController;
 use App\Http\Controllers\Api\Admin\AttendanceController;
 use App\Http\Controllers\Api\Admin\AudienceController;
 use App\Http\Controllers\Api\Admin\AuditLogController;
+use App\Http\Controllers\Api\Admin\BundleController;
 use App\Http\Controllers\Api\Admin\EvaluationController;
 use App\Http\Controllers\Api\Admin\EventController;
 use App\Http\Controllers\Api\Admin\ExerciseController;
@@ -345,16 +346,16 @@ Route::middleware(['auth:sanctum', 'throttle:300,1', EnsureNotBlocked::class, Tr
         Route::delete('/appointment-availability/windows/{window}', [AppointmentController::class, 'removeWindow'])->middleware('module:appointments');
         Route::post('/appointment-availability/blocks', [AppointmentController::class, 'block'])->middleware('module:appointments');
         Route::delete('/appointment-availability/blocks/{block}', [AppointmentController::class, 'unblock'])->middleware('module:appointments');
-        Route::get('/members/{user}/vertumetre', [VertumetreController::class, 'member']);
+        Route::get('/members/{user}/vertumetre', [VertumetreController::class, 'member'])->middleware('module:vertumetre');
         Route::get('/members/{user}/fiss-history', [ValidationController::class, 'fissHistory']);
 
         // Mes RM et Mon devoir : lecture par les pasteurs et les responsables de la tribu (droits verifies
         // dans les controleurs, meme confidentialite que la FISS).
         Route::get('/resolutions', [ResolutionController::class, 'index']);
-        Route::get('/members/{user}/resolutions', [ResolutionController::class, 'member']);
+        Route::get('/members/{user}/resolutions', [ResolutionController::class, 'member'])->middleware('module:resolutions');
         Route::get('/assignments', [AssignmentController::class, 'index']);
         Route::get('/assignments/{assignment}/responses', [AssignmentController::class, 'responses'])->whereNumber('assignment');
-        Route::get('/members/{user}/assignments', [AssignmentController::class, 'member']);
+        Route::get('/members/{user}/assignments', [AssignmentController::class, 'member'])->middleware('module:assignments');
 
         // Rapports (tribu, mes tribus, eglise) et liste detaillee des membres.
         Route::middleware('permission:reports.view')->group(function () {
@@ -390,6 +391,8 @@ Route::middleware(['auth:sanctum', 'throttle:300,1', EnsureNotBlocked::class, Tr
         Route::post('/members/{user}/welcome', [NewMemberController::class, 'welcome']);
         Route::delete('/members/{user}/welcome', [NewMemberController::class, 'unwelcome']);
 
+        // Ouverture d'un ecran en un seul appel : chaque lecture garde ses propres regles (voir BundleController).
+        Route::get('/bundle', BundleController::class)->middleware('throttle:120,1,admin-bundle');
         Route::get('/members', [MemberController::class, 'index']);
         Route::get('/members/{user}', [MemberController::class, 'show']);
         Route::patch('/members/{user}/status', [MemberController::class, 'setActivity'])

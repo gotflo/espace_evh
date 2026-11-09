@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
 import type { MonthlyResolution, ResolutionKey, ResolutionOutcome, VertumetreForm, VertumetreSection } from '../types'
 import { VertumetreAnswers } from './VertumetreAnswers'
 
@@ -20,11 +21,18 @@ export function MemberGrowth({ userId }: { userId: string }) {
   const [rm, setRm] = useState<RmData | null>(null)
   const [ds, setDs] = useState<DsData | null>(null)
   const [vt, setVt] = useState<{ sections: VertumetreSection[]; forms: VertumetreForm[] } | null>(null)
+  const { moduleOn } = useAuth()
+  const rmOn = moduleOn('resolutions')
+  const dsOn = moduleOn('assignments')
+  const vtOn = moduleOn('vertumetre')
   useEffect(() => {
-    api<RmData>(`/admin/members/${userId}/resolutions`, { toast: false }).then(setRm).catch(() => setRm(null))
-    api<DsData>(`/admin/members/${userId}/assignments`, { toast: false }).then(setDs).catch(() => setDs(null))
-    api<{ sections: VertumetreSection[]; forms: VertumetreForm[] }>(`/admin/members/${userId}/vertumetre`, { toast: false }).then(setVt).catch(() => setVt(null))
-  }, [userId])
+    if (rmOn) api<RmData>(`/admin/members/${userId}/resolutions`, { toast: false }).then(setRm).catch(() => setRm(null))
+    else setRm(null)
+    if (dsOn) api<DsData>(`/admin/members/${userId}/assignments`, { toast: false }).then(setDs).catch(() => setDs(null))
+    else setDs(null)
+    if (vtOn) api<{ sections: VertumetreSection[]; forms: VertumetreForm[] }>(`/admin/members/${userId}/vertumetre`, { toast: false }).then(setVt).catch(() => setVt(null))
+    else setVt(null)
+  }, [userId, rmOn, dsOn, vtOn])
 
   return (
     <>

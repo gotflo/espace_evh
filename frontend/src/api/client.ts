@@ -125,26 +125,33 @@ export function api<T = unknown>(path: string, opts: Options = {}): Promise<T> {
 }
 
 /**
- * Plusieurs lectures d'un meme ecran en un seul appel (/me/home) : chaque chemin est mis
- * « en cours » tout de suite, et les blocs qui le demandent ensuite recoivent la reponse
- * groupee. Si le serveur ne connait pas cet appel ou omet un chemin, ce chemin est lu seul.
- * A appeler pendant le premier rendu de l'ecran, avant les effets de ses blocs.
+ * Plusieurs lectures d'un meme ecran en un seul appel (/me/home pour l'accueil, /admin/bundle pour la
+ * gestion) : chaque chemin est mis « en cours » tout de suite, et les blocs qui le demandent ensuite
+ * recoivent la reponse groupee. Un refus (403) est rendu tel quel au bloc, comme son appel seul ; si le
+ * serveur ne connait pas cet appel ou omet un chemin, ce chemin est lu seul.
+ * A appeler avant les effets des blocs de l'ecran (premier rendu, ou des l'arrivee sur l'ecran).
  */
-export function prefetch(paths: string[]) {
+export function prefetch(paths: string[], via = '/me/home') {
   const token = auth.get()
   if (!token) return
   const fresh = (k: string) => cache.has(k) && Date.now() - (cachedAt.get(k) ?? 0) < FRESH_MS
   const todo = paths.filter((p) => !inflight.has(`${token} ${p}`) && !fresh(`${token} ${p}`))
   if (!todo.length) return
   const query = todo.map((p) => `paths[]=${encodeURIComponent(p)}`).join('&')
-  const bundle = send<{ responses: Record<string, { status: number; body?: unknown }> }>(`/me/home?${query}`, 'GET', {})
+  const bundle = send<{ responses: Record<string, { status: number; body?: unknown }> }>(`${via}?${query}`, 'GET', {})
   for (const path of todo) {
     const key = `${token} ${path}`
     const promise = bundle
       .then(
         (r) => {
           const one = r.responses?.[path]
-          return one?.status === 200 ? one.body : send(path, 'GET', {})
+          if (one?.status === 200) return one.body
+          // Refus (droit, portee, module) : meme erreur que l'appel seul, sans le refaire.
+          if (one?.status === 403) {
+            const body = (one.body ?? {}) as { message?: string; errors?: Record<string, string[]> }
+            throw new ApiError(403, body.message || 'Accès refusé.', body.errors ?? {})
+          }
+          return send(path, 'GET', {})
         },
         // Serveur sans /me/home (version precedente) : lectures une par une. Serveur sature ou
         // injoignable : pas de repli (6 requetes de plus aggraveraient la file) ; chaque bloc

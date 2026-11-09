@@ -23,6 +23,7 @@ import type { Stats } from '../types'
 import { useAppearance } from '../appearance'
 import { shortRole } from '../utils/roles'
 import { ValidationsReminder } from '../components/ValidationsReminder'
+import { canValidateWith } from '../utils/validationsCount'
 
 /** Duree d'affichage du mot de bienvenue (ms). */
 const WELCOME_MS = 6000
@@ -37,6 +38,18 @@ export default function Dashboard() {
 
   // Les lectures des blocs ci-dessous partent en un seul appel, avant leurs propres effets.
   useState(() => prefetch(dashboardData(moduleOn('exercises'))))
+  // Responsables : les blocs de gestion de l'accueil (demandes a valider, chiffres, nouveaux, demandes, rapports)
+  // aussi en un seul appel, au lieu de cinq qui attendent leur tour chez l'hebergeur. Le serveur verifie chacun.
+  useState(() => {
+    const leader = [
+      ...(canValidateWith(hasPermission) ? ['/admin/validations/count'] : []),
+      ...(canViewMembers ? ['/admin/stats', '/admin/new-members?filter=to_welcome'] : []),
+      ...(canRequests ? ['/admin/requests'] : []),
+      ...(moduleOn('leader_reports') && roles.some((r) => (r.key === 'patriarche' && r.scope_kind === 'tribe') || r.key === 'department_leader') ? ['/admin/leader-reports'] : []),
+      ...(moduleOn('gem_reports') && roles.some((r) => r.key === 'garde' && r.scope_kind === 'gem') ? ['/admin/gem-reports'] : []),
+    ]
+    if (leader.length > 1) prefetch(leader, '/admin/bundle')
+  })
 
   const [stats, setStats] = useState<Stats | null>(() => (canViewMembers ? peek<Stats>('/admin/stats') ?? null : null))
   const [welcome, setWelcome] = useState(false)
