@@ -7,11 +7,12 @@ import { InstallGuide } from '../components/InstallGuide'
 import { NotificationPrefs } from '../components/NotificationPrefs'
 import { PushSettings } from '../components/PushSettings'
 import { APP_NAME } from '../config'
-import { APP_VERSION, versionsFor } from '../data/versions'
+import { APP_VERSION, PLATFORM, versionsFor } from '../data/versions'
+import type { ModuleName } from '../types'
 import type { IconName } from '../utils/icons'
 import { isStandalone } from '../utils/install'
 
-interface SettingsLink { to: string; icon: IconName; label: string; hint: string }
+interface SettingsLink { to: string; icon: IconName; label: string; hint: string; module?: ModuleName }
 
 const ACCOUNT: SettingsLink[] = [
   { to: '/mon-profil', icon: 'profile', label: 'Mon profil', hint: 'Photo, coordonnées, tribu, famille' },
@@ -19,8 +20,8 @@ const ACCOUNT: SettingsLink[] = [
 ]
 
 const HELP: SettingsLink[] = [
-  { to: '/guide', icon: 'help', label: 'Guide', hint: 'Comment utiliser l’application, étape par étape, selon votre rôle' },
-  { to: '/contact', icon: 'requests', label: 'Nous contacter', hint: 'Une question, un besoin, une prière' },
+  { to: '/guide', icon: 'help', label: 'Guide', hint: 'Comment utiliser l’application, étape par étape, selon votre rôle', module: 'guide' },
+  { to: '/contact', icon: 'requests', label: 'Nous contacter', hint: 'Une question, un besoin, une prière', module: 'contact' },
 ]
 
 function LinkList({ links }: { links: SettingsLink[] }) {
@@ -45,10 +46,12 @@ function LinkList({ links }: { links: SettingsLink[] }) {
  * ses nouveautes, politique de confidentialite. La deconnexion reste dans le menu (un seul bouton).
  */
 export default function MySettings() {
-  const { isPlatformManager, hasPermission, logout } = useAuth()
+  const { isPlatformManager, hasPermission, logout, moduleOn } = useAuth()
+  // Aide : seulement les rubriques ouvertes (Guide, Nous contacter) ; la section disparait si les deux sont coupees.
+  const help = HELP.filter((l) => !l.module || moduleOn(l.module))
   const navigate = useNavigate()
   // Nouveautes : seulement les lignes qui concernent cette personne (un fidele ne voit pas la gestion).
-  const versions = versionsFor(hasPermission)
+  const versions = versionsFor((k) => (k === PLATFORM ? isPlatformManager : hasPermission(k)))
   const location = useLocation()
   const standalone = isStandalone()
 
@@ -86,10 +89,10 @@ export default function MySettings() {
           {!isPlatformManager && <NotificationPrefs defaultOpen />}
         </div>
 
-        {!isPlatformManager && (
+        {!isPlatformManager && help.length > 0 && (
           <section className="panel settings-account" id="aide">
             <div className="panel-head"><h3>Aide</h3></div>
-            <LinkList links={HELP} />
+            <LinkList links={help} />
           </section>
         )}
 

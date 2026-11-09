@@ -1,0 +1,74 @@
+/*
+ * Micro-animations de l'application : discretes et courtes (moins d'une seconde, cascade du menu comprise),
+ * uniquement l'opacite et de petits deplacements (calcules par la carte graphique, sans recalcul de la page).
+ * Aucune pour qui a demande a son appareil de reduire les animations. Chaque effet peut disparaitre sans rien
+ * casser : rien n'est masque ni deplace en dehors de l'animation elle-meme.
+ */
+
+@keyframes motion-nav-in { from { opacity: 0; transform: translateX(-18px); } to { opacity: 1; transform: none; } }
+@keyframes motion-tab-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes motion-tab-pop { 0% { transform: scale(1); } 45% { transform: scale(1.12); } 100% { transform: scale(1); } }
+@keyframes motion-badge-pop { from { transform: scale(0.4); opacity: 0; } 70% { transform: scale(1.12); opacity: 1; } to { transform: scale(1); opacity: 1; } }
+@keyframes motion-row-reveal { from { opacity: 0.35; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: no-preference) {
+  /* 1. Toucher : leger enfoncement des boutons, onglets et cartes cliquables (reprend leurs transitions existantes). */
+  .btn { transition: transform 0.15s, box-shadow 0.2s, opacity 0.2s, background-color 0.15s, color 0.15s, border-color 0.15s; }
+  .btn:not(:disabled):active { transform: scale(0.97); box-shadow: none; }
+  .bottom-item { transition: color 0.15s, transform 0.12s ease; }
+  .bottom-item:active { transform: scale(0.92); }
+  .app .nav-item { transition: background 0.15s, color 0.15s, transform 0.12s ease; }
+  .app .nav-item:active { transform: scale(0.98); }
+  .settings-link { transition: background 0.15s, transform 0.12s ease; }
+  .settings-link:active, .dash-group:active, .fiss-reminder-btn:active { transform: scale(0.985); }
+  .dash-group { transition: border-color 0.15s, transform 0.12s ease; }
+  .chip-toggle, .pill-choice { transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.12s ease; }
+  .chip-toggle:active, .pill-choice:active { transform: scale(0.95); }
+
+  /*
+   * 2. Telephone : a l'ouverture du menu, le tiroir glisse (0,25 s) puis ses lignes viennent s'aligner en cascade
+   * rapide ; a l'arrivee de la barre d'onglets du bas (ouverture de l'application), ses onglets montent l'un apres
+   * l'autre. La barre reste en place d'une page a l'autre : l'effet ne se rejoue pas a chaque page.
+   */
+  @media (max-width: 860px) {
+    .sidebar.open .sidebar-nav > * { animation: motion-nav-in 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) 0.12s backwards; }
+    .sidebar.open .sidebar-nav > :nth-child(2) { animation-delay: 0.16s; }
+    .sidebar.open .sidebar-nav > :nth-child(3) { animation-delay: 0.20s; }
+    .sidebar.open .sidebar-nav > :nth-child(4) { animation-delay: 0.24s; }
+    .sidebar.open .sidebar-nav > :nth-child(5) { animation-delay: 0.28s; }
+    .sidebar.open .sidebar-nav > :nth-child(6) { animation-delay: 0.32s; }
+    .sidebar.open .sidebar-nav > :nth-child(7) { animation-delay: 0.36s; }
+    .sidebar.open .sidebar-nav > :nth-child(8) { animation-delay: 0.40s; }
+    .sidebar.open .sidebar-nav > :nth-child(9) { animation-delay: 0.44s; }
+    .sidebar.open .sidebar-nav > :nth-child(10) { animation-delay: 0.48s; }
+    .sidebar.open .sidebar-nav > :nth-child(11) { animation-delay: 0.52s; }
+    .sidebar.open .sidebar-nav > :nth-child(12) { animation-delay: 0.56s; }
+    .sidebar.open .sidebar-nav > :nth-child(n + 13) { animation-delay: 0.56s; }
+    .sidebar.open .sidebar-foot { animation: motion-nav-in 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) 0.56s backwards; }
+
+    .bottom-nav > .bottom-item { animation: motion-tab-in 0.48s cubic-bezier(0.22, 0.61, 0.36, 1) 0.06s backwards; }
+    .bottom-nav > .bottom-item:nth-child(2) { animation-delay: 0.13s; }
+    .bottom-nav > .bottom-item:nth-child(3) { animation-delay: 0.20s; }
+    .bottom-nav > .bottom-item:nth-child(4) { animation-delay: 0.27s; }
+    .bottom-nav > .bottom-item:nth-child(5) { animation-delay: 0.34s; }
+  }
+
+  /* 3. Onglet du bas qui devient actif : petite impulsion de l'icone. */
+  .bottom-item.active svg { animation: motion-tab-pop 0.32s ease; }
+
+  /* 4. Pastilles rouges (alertes, demandes a valider) : apparition vive et breve. */
+  .bottom-badge, .nav-badge, .validations-reminder-count { animation: motion-badge-pop 0.32s cubic-bezier(0.3, 1.3, 0.5, 1); }
+
+  /*
+   * 5. Defilement : les lignes des listes montent doucement en entrant a l'ecran (navigateurs qui le font
+   * nativement ; ailleurs elles s'affichent simplement). Seulement l'entree par le bas : rien au depart, rien en
+   * remontant. « backwards » : une fois entree, la ligne retrouve ses propres effets (survol...).
+   */
+  @supports (animation-timeline: view()) {
+    .member-row, .validation-card, .serve-card, .agenda-row, .lr-row, .dash-group, .newcomer-row, .settings-news > li {
+      animation: motion-row-reveal linear backwards;
+      animation-timeline: view();
+      animation-range: entry 0% entry 45%;
+    }
+  }
+}

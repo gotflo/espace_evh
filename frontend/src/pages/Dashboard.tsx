@@ -105,7 +105,7 @@ export default function Dashboard() {
       {/* Demandes a valider : tout en haut, pour sauter aux yeux. */}
       <ValidationsReminder />
       <WelcomeBack />
-      <VerseBanner />
+      {moduleOn('verse') && <VerseBanner />}
       <EmailInvite />
       <MonthJourney />
 

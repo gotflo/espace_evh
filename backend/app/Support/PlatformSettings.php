@@ -40,6 +40,18 @@ class PlatformSettings
                 'help' => 'Prise de rendez-vous par les membres et organisation par le protocole.'],
             'module.spiritual' => ['type' => 'bool', 'default' => true, 'label' => 'Ma vie spirituelle',
                 'help' => 'Journal personnel du membre (témoignages, étapes de la foi).'],
+            'module.meditation' => ['type' => 'bool', 'default' => true, 'label' => 'Méditation',
+                'help' => 'Fiches de méditation des membres, lues par leur patriarche et les pasteurs.'],
+            'module.contact' => ['type' => 'bool', 'default' => true, 'label' => 'Nous contacter',
+                'help' => 'Questions, besoins et sujets de prière envoyés par les membres à leurs responsables.'],
+            'module.verse' => ['type' => 'bool', 'default' => true, 'label' => 'Verset du moment',
+                'help' => 'Le verset affiché en haut de l’accueil (préparé dans Versets).'],
+            'module.guide' => ['type' => 'bool', 'default' => true, 'label' => 'Guide de l’application',
+                'help' => 'Le guide illustré, dans Paramètres.'],
+            'module.gem_reports' => ['type' => 'bool', 'default' => true, 'label' => 'Rapport de GEM',
+                'help' => 'Rapport de la semaine des Gardes (présences au culte et à la rencontre), et ses rappels.'],
+            'module.leader_reports' => ['type' => 'bool', 'default' => true, 'label' => 'Rapports mensuels des responsables',
+                'help' => 'Rapport du mois des patriarches et des responsables de service, et ses rappels.'],
         ]],
         'membres' => ['Rappels aux membres', 'Messages envoyés automatiquement aux fidèles (application, et courriel quand il est prévu).', [
             'automation.fiss' => ['type' => 'bool', 'default' => true, 'step' => 'fiss', 'label' => 'Fiche de santé spirituelle (FISS)',
@@ -66,6 +78,18 @@ class PlatformSettings
                 'help' => 'Invitation à ajouter une adresse courriel, puis un seul rappel trois semaines plus tard.'],
             'automation.absences' => ['type' => 'bool', 'default' => true, 'step' => 'absences', 'label' => 'Membres absents',
                 'help' => 'Après quelques jours sans ouvrir l’application : un message au membre, la liste à son patriarche et à son AP.'],
+        ]],
+        'responsables' => ['Rappels aux responsables', 'Messages envoyés automatiquement aux patriarches, Gardes, responsables de service et pasteurs.', [
+            'automation.leader_reports' => ['type' => 'bool', 'default' => true, 'step' => 'leader-reports', 'label' => 'Rapport mensuel à remplir',
+                'help' => 'Rappel aux patriarches et aux responsables de service en début de mois, puis relance avant la fin du mois.'],
+            'automation.gem_reports' => ['type' => 'bool', 'default' => true, 'step' => 'gem-reports', 'label' => 'Rapport de GEM de la semaine',
+                'help' => 'Rappel au Garde le dimanche soir ou le lundi, puis relance le mardi.'],
+            'automation.monthly_report' => ['type' => 'bool', 'default' => true, 'step' => 'monthly-report', 'label' => 'Bilan du mois aux pasteurs',
+                'help' => 'Les chiffres du mois écoulé, envoyés aux personnes qui lisent les rapports.'],
+            'automation.followups' => ['type' => 'bool', 'default' => true, 'step' => 'followups', 'label' => 'Suivi des membres',
+                'help' => 'Nouvel inscrit à accueillir, demande sans réponse, et le lundi la liste des membres devenus inactifs.'],
+            'automation.service_joins' => ['type' => 'bool', 'default' => true, 'step' => 'service-joins', 'label' => 'Inscriptions aux services en attente',
+                'help' => 'Relance du responsable d’un service quand une inscription attend sa réponse (et validation automatique si elle est réglée).'],
         ]],
         'aide' => ['Ce que la plateforme fait pour les membres', 'Des tâches faites automatiquement, pour ne pas surcharger les fidèles ni leurs responsables.', [
             'automation.rm_auto_renew' => ['type' => 'bool', 'default' => false, 'step' => 'rm-renew', 'module' => 'module.resolutions', 'label' => 'Renouveler les RM oubliées',
@@ -125,6 +149,8 @@ class PlatformSettings
         'assignments' => 'module.assignments',
         'tasks' => 'module.exercises',
         'appointments' => 'module.appointments',
+        'gem-reports' => 'module.gem_reports',
+        'leader-reports' => 'module.leader_reports',
     ];
 
     /** @return array<string, array<string, mixed>> */
@@ -173,6 +199,10 @@ class PlatformSettings
     public static function stepEnabled(string $step): bool
     {
         if (isset(self::MODULE_STEPS[$step]) && ! self::enabled(self::MODULE_STEPS[$step])) {
+            return false;
+        }
+        // Suspendu pour une periode (centre de notifications) : reprend de lui-meme apres la date de fin.
+        if (AutomationPauses::pausedToday($step)) {
             return false;
         }
         foreach (self::definitions() as $key => $def) {

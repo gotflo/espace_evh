@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\NotificationCenter;
 use App\Services\Notifier;
 use Illuminate\Console\Command;
 
@@ -20,6 +21,13 @@ class PushOutbox extends Command
     public function handle(): int
     {
         $started = microtime(true);
+        // Notifications personnalisees programmees dont l'heure est venue : parties a la minute pres (puis envoyees
+        // par le rattrapage ci-dessous). Une erreur ici n'empeche jamais l'envoi des autres notifications.
+        try {
+            NotificationCenter::sendDue();
+        } catch (\Throwable $e) {
+            report($e);
+        }
         try {
             $sent = Notifier::flushOutbox();
         } catch (\Throwable $e) {

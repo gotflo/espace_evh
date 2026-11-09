@@ -252,7 +252,7 @@ export default function Guide() {
                 <p>{f.a}</p>
               </details>
             ))}
-            <p className="helper">Une autre question ? Écrivez à un responsable depuis <Link to="/contact">Nous contacter</Link>.</p>
+            {moduleOn('contact') && <p className="helper">Une autre question ? Écrivez à un responsable depuis <Link to="/contact">Nous contacter</Link>.</p>}
           </section>
         )}
       </div>

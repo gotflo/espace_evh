@@ -25,7 +25,7 @@ class Event extends Model
 
     protected $fillable = [
         'title', 'description', 'image_path', 'category', 'starts_at', 'ends_at', 'all_day',
-        'recurrence', 'recurrence_until', 'location', 'is_personal', 'remind_all', 'muted', 'created_by',
+        'recurrence', 'recurrence_until', 'location', 'is_personal', 'remind_all', 'muted', 'muted_from', 'muted_until', 'created_by',
     ];
 
     protected $casts = [
@@ -36,7 +36,27 @@ class Event extends Model
         'is_personal' => 'boolean',
         'remind_all' => 'boolean',
         'muted' => 'boolean', // rappels coupes : aucun message automatique pour cet evenement
+        'muted_from' => 'date:Y-m-d', // rappels coupes pendant une periode (ex. jeune de 40 jours), puis repris d'eux-memes
+        'muted_until' => 'date:Y-m-d',
     ];
+
+    /**
+     * Rappels coupes pour l'occurrence de ce jour : coupure sans fin (muted), ou jour compris dans la periode
+     * muted_from..muted_until (bornes incluses ; une borne absente = ouverte de ce cote).
+     */
+    public function isMutedOn(\DateTimeInterface|string $day): bool
+    {
+        if ($this->muted) {
+            return true;
+        }
+        if (! $this->muted_from && ! $this->muted_until) {
+            return false;
+        }
+        $date = $day instanceof \DateTimeInterface ? $day->format('Y-m-d') : substr($day, 0, 10);
+
+        return (! $this->muted_from || $date >= $this->muted_from->toDateString())
+            && (! $this->muted_until || $date <= $this->muted_until->toDateString());
+    }
 
     public function getImageUrlAttribute(): ?string
     {

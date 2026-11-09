@@ -28,6 +28,7 @@ use App\Http\Controllers\Api\Admin\ResolutionController;
 use App\Http\Controllers\Api\Admin\RoleController;
 use App\Http\Controllers\Api\Admin\ServiceScheduleController;
 use App\Http\Controllers\Api\Admin\SettingsController;
+use App\Http\Controllers\Api\Admin\NotificationCenterController;
 use App\Http\Controllers\Api\Admin\SpiritualController;
 use App\Http\Controllers\Api\Admin\StatsController;
 use App\Http\Controllers\Api\Admin\ValidationController;
@@ -191,8 +192,8 @@ Route::middleware(['auth:sanctum', 'throttle:300,1', EnsureNotBlocked::class, Tr
     Route::delete('/me/events/{event}', [MyEventController::class, 'destroy']);
 
     // --- Espace fidele : mes demandes aux responsables ---
-    Route::get('/me/requests', [MyRequestController::class, 'index']);
-    Route::post('/me/requests', [MyRequestController::class, 'store'])->middleware('throttle:member-requests');
+    Route::get('/me/requests', [MyRequestController::class, 'index'])->middleware('module:contact');
+    Route::post('/me/requests', [MyRequestController::class, 'store'])->middleware('throttle:member-requests')->middleware('module:contact');
 
     // --- Espace fidele : apercu gamifie (assiduite, vertumetre, ponctualite) ---
     Route::get('/me/overview', [MyOverviewController::class, 'index']);
@@ -257,9 +258,9 @@ Route::middleware(['auth:sanctum', 'throttle:300,1', EnsureNotBlocked::class, Tr
     Route::post('/me/spiritual/milestones', [MySpiritualController::class, 'toggleMilestone'])->middleware('module:spiritual');
 
     // --- Espace fidele : mes fiches de meditation (personnelles) ---
-    Route::get('/me/meditations', [MyMeditationController::class, 'index']);
-    Route::post('/me/meditations', [MyMeditationController::class, 'store'])->middleware('throttle:member-writes');
-    Route::get('/me/meditations/{sheet}', [MyMeditationController::class, 'show'])->whereNumber('sheet');
+    Route::get('/me/meditations', [MyMeditationController::class, 'index'])->middleware('module:meditation');
+    Route::post('/me/meditations', [MyMeditationController::class, 'store'])->middleware('throttle:member-writes')->middleware('module:meditation');
+    Route::get('/me/meditations/{sheet}', [MyMeditationController::class, 'show'])->whereNumber('sheet')->middleware('module:meditation');
 
     // --- Espace fidele : mes exercices ---
     Route::get('/me/exercises', [MyExerciseController::class, 'index'])->middleware('module:exercises');
@@ -278,6 +279,20 @@ Route::middleware(['auth:sanctum', 'throttle:300,1', EnsureNotBlocked::class, Tr
         // Reglages de la plateforme (rappels automatiques, horaires d'envoi, limites).
         Route::get('/settings', [SettingsController::class, 'index'])->middleware('permission:settings.manage');
         Route::put('/settings', [SettingsController::class, 'update'])->middleware('permission:settings.manage');
+        // Centre de notifications, pour le compte de gestion seulement (aucun role ne l'ouvre) : rappels automatiques
+        // (activer, suspendre pour une periode), rappels des evenements, relances manuelles, notifications
+        // personnalisees envoyees tout de suite ou programmees.
+        Route::middleware('platform.manager')->prefix('notification-center')->group(function () {
+            Route::get('/', [NotificationCenterController::class, 'index']);
+            Route::put('/automations/{key}', [NotificationCenterController::class, 'toggle']);
+            Route::put('/automations/{key}/pause', [NotificationCenterController::class, 'pause']);
+            Route::put('/events/{event}', [NotificationCenterController::class, 'muteEvent'])->whereNumber('event');
+            Route::post('/launch/{launcher}', [NotificationCenterController::class, 'launch'])->middleware('throttle:publish');
+            Route::post('/preview', [NotificationCenterController::class, 'preview']);
+            Route::post('/messages', [NotificationCenterController::class, 'store'])->middleware('throttle:publish');
+            Route::put('/messages/{notification}', [NotificationCenterController::class, 'update'])->whereNumber('notification');
+            Route::delete('/messages/{notification}', [NotificationCenterController::class, 'cancel'])->whereNumber('notification');
+        });
         // Apparence : image de l'accueil et photos de l'ecran de connexion (envoi, cadrage, ordre, retour a l'origine).
         Route::middleware('permission:settings.manage')->prefix('appearance')->group(function () {
             Route::get('/', [AdminAppearanceController::class, 'index']);
@@ -352,15 +367,15 @@ Route::middleware(['auth:sanctum', 'throttle:300,1', EnsureNotBlocked::class, Tr
 
         // Rapports mensuels des responsables (patriarche : tribu ; responsables : departement).
         // Droits verifies dans le controleur : auteurs, AP de la tribu, autorites pastorales.
-        Route::get('/leader-reports', [LeaderReportController::class, 'index']);
-        Route::get('/leader-reports/form', [LeaderReportController::class, 'form']);
-        Route::put('/leader-reports', [LeaderReportController::class, 'save']);
-        Route::get('/leader-reports/{report}', [LeaderReportController::class, 'show'])->whereNumber('report');
-        Route::get('/leader-reports/{report}/export', [LeaderReportController::class, 'export'])->whereNumber('report');
+        Route::get('/leader-reports', [LeaderReportController::class, 'index'])->middleware('module:leader_reports');
+        Route::get('/leader-reports/form', [LeaderReportController::class, 'form'])->middleware('module:leader_reports');
+        Route::put('/leader-reports', [LeaderReportController::class, 'save'])->middleware('module:leader_reports');
+        Route::get('/leader-reports/{report}', [LeaderReportController::class, 'show'])->whereNumber('report')->middleware('module:leader_reports');
+        Route::get('/leader-reports/{report}/export', [LeaderReportController::class, 'export'])->whereNumber('report')->middleware('module:leader_reports');
 
         // Rapport hebdomadaire des Gardes (presences du GEM), transmis au patriarche et a l'AP.
-        Route::get('/gem-reports', [GemReportController::class, 'index']);
-        Route::put('/gem-reports/{gem}', [GemReportController::class, 'save']);
+        Route::get('/gem-reports', [GemReportController::class, 'index'])->middleware('module:gem_reports');
+        Route::put('/gem-reports/{gem}', [GemReportController::class, 'save'])->middleware('module:gem_reports');
 
         // Annuaire des responsables et fiche d'un Garde (pasteurs : tous ; AP, patriarches : leurs tribus).
         Route::get('/leaders', [LeaderDirectoryController::class, 'index']);
@@ -390,9 +405,9 @@ Route::middleware(['auth:sanctum', 'throttle:300,1', EnsureNotBlocked::class, Tr
             ->middleware('permission:spiritual.view');
         // Fiches de meditation : patriarche de la tribu et pasteurs (PR, PA), en lecture seule.
         Route::get('/members/{user}/meditations', [MeditationController::class, 'index'])
-            ->middleware('permission:meditations.view');
+            ->middleware('permission:meditations.view')->middleware('module:meditation');
         Route::get('/members/{user}/meditations/{sheet}', [MeditationController::class, 'show'])
-            ->whereNumber('sheet')->middleware('permission:meditations.view');
+            ->whereNumber('sheet')->middleware('permission:meditations.view')->middleware('module:meditation');
         Route::middleware('permission:spiritual.record')->group(function () {
             Route::post('/members/{user}/spiritual/entries', [SpiritualController::class, 'storeEntry']);
             Route::delete('/members/{user}/spiritual/entries/{entry}', [SpiritualController::class, 'destroyEntry']);

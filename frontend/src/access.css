@@ -418,3 +418,28 @@ html.app-shell #root > .app { height: 100%; min-height: 0; overflow-x: hidden; o
 /* Parametres : Deconnexion, en rouge (le seul bouton de deconnexion de l'application). */
 .btn.settings-logout { color: #c62828; border-color: rgba(198, 40, 40, 0.4); }
 .btn.settings-logout:hover { color: #a51d1d; background: rgba(214, 40, 40, 0.08); border-color: rgba(198, 40, 40, 0.6); }
+
+/* Centre de notifications (administration). */
+.nc-tabs { margin-bottom: 1rem; }
+.nc-section { margin-bottom: 1rem; }
+.nc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.nc-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem 1rem; padding: 0.85rem 0; border-top: 1px solid var(--border-subtle); }
+.nc-row:first-child { border-top: none; }
+.nc-row-main { display: flex; flex-direction: column; gap: 0.15rem; flex: 1 1 260px; min-width: 0; }
+.nc-row-main strong, .nc-row-main small { overflow-wrap: anywhere; }
+.nc-row-main small { color: var(--text-soft); font-size: 0.82rem; }
+.nc-row-actions { display: flex; align-items: center; gap: 0.5rem 0.75rem; flex-wrap: wrap; flex: 0 1 auto; min-width: 0; max-width: 100%; }
+.nc-row-actions .btn-link { white-space: normal; text-align: left; }
+.nc-state { align-self: flex-start; margin-top: 0.25rem; font-size: 0.76rem; font-weight: 600; padding: 0.15rem 0.55rem; border-radius: 999px; }
+.nc-state.on { background: rgba(30, 158, 90, 0.12); color: #17784a; }
+.nc-state.off { background: rgba(98, 110, 107, 0.12); color: #4b5855; }
+.nc-state.paused { background: rgba(217, 154, 0, 0.14); color: #8a6100; }
+.nc-period { flex-basis: 100%; display: flex; flex-direction: column; gap: 0.6rem; padding: 0.75rem; border-radius: 12px; background: var(--field-bg); }
+.nc-period-dates { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 0.6rem; }
+.nc-period-dates label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.82rem; font-weight: 600; color: var(--text-muted); }
+.nc-period-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+/* Telephone : les quatre onglets du centre restent tous visibles (deux par ligne), sans defilement cache. */
+@media (max-width: 600px) {
+  .nc-tabs.filter-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; gap: 0.45rem; }
+  .nc-tabs .chip-toggle { justify-content: center; text-align: center; white-space: normal; min-width: 0; }
+}

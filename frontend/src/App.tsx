@@ -73,6 +73,7 @@ const PlatformHome = page(() => import('./pages/admin/PlatformHome'), true, '/ad
 const Accounts = page(() => import('./pages/admin/Accounts'), true, '/admin/comptes')
 const Resources = page(() => import('./pages/admin/Resources'), true, '/admin/ressources')
 const Settings = page(() => import('./pages/admin/Settings'), true, '/admin/reglages')
+const NotificationCenter = page(() => import('./pages/admin/NotificationCenter'), true, '/admin/notifications')
 const AppearancePage = page(() => import('./pages/admin/Appearance'), true, '/admin/apparence')
 
 // Ouverture de l'application deja connecte : la page demandee se telecharge pendant la
@@ -118,7 +119,7 @@ function Home() {
 }
 
 /** Route reservee aux connectes, avec permission(s) optionnelle(s). */
-function RequireAuth({ children, requireComplete = false, anyPermission, memberSpace = false, module }: {
+function RequireAuth({ children, requireComplete = false, anyPermission, memberSpace = false, module, platformManager = false }: {
   children: ReactNode
   requireComplete?: boolean
   anyPermission?: string[]
@@ -126,6 +127,8 @@ function RequireAuth({ children, requireComplete = false, anyPermission, memberS
   memberSpace?: boolean
   /** Page d'un module activable (Gestion > Reglages) : fermee quand il est desactive. */
   module?: ModuleName
+  /** Outil de l'administration de la plateforme : le compte de gestion seulement (aucun role ne l'ouvre). */
+  platformManager?: boolean
 }) {
   const { loading, isAuthenticated, profileCompleted, hasPermission, isPlatformManager, moduleOn } = useAuth()
   const location = useLocation()
@@ -139,6 +142,9 @@ function RequireAuth({ children, requireComplete = false, anyPermission, memberS
   if (requireComplete && !profileCompleted) return <Navigate to="/profil" replace />
   if (module && !moduleOn(module)) {
     return <RedirectWithMessage to={isPlatformManager ? '/admin/gestion' : '/tableau-de-bord'} message="Ce module n'est pas activé sur la plateforme." />
+  }
+  if (platformManager && !isPlatformManager) {
+    return <RedirectWithMessage to="/tableau-de-bord" message="Cette page est réservée à l’administration de la plateforme." />
   }
   if (anyPermission && !anyPermission.some((p) => hasPermission(p))) {
     return <RedirectWithMessage to={isPlatformManager ? '/admin/gestion' : '/tableau-de-bord'} message="Cette page est réservée aux responsables concernés." />
@@ -253,7 +259,7 @@ export default function App() {
         <Route path="/mon-profil" element={<RequireAuth requireComplete memberSpace><MyProfile /></RequireAuth>} />
         <Route path="/ma-vie-spirituelle" element={<RequireAuth module="spiritual" requireComplete memberSpace><MySpiritual /></RequireAuth>} />
         <Route path="/ma-fiche" element={<RequireAuth requireComplete memberSpace><MyFiss /></RequireAuth>} />
-        <Route path="/meditation" element={<RequireAuth requireComplete memberSpace><MyMeditation /></RequireAuth>} />
+        <Route path="/meditation" element={<RequireAuth module="meditation" requireComplete memberSpace><MyMeditation /></RequireAuth>} />
         <Route path="/mes-resolutions" element={<RequireAuth module="resolutions" requireComplete memberSpace><MyResolutions /></RequireAuth>} />
         <Route path="/mes-resolutions/ressource/:id" element={<RequireAuth module="resolutions" requireComplete memberSpace><ResourceVideo /></RequireAuth>} />
         <Route path="/mon-devoir" element={<RequireAuth module="assignments" requireComplete memberSpace><MyAssignments /></RequireAuth>} />
@@ -262,8 +268,8 @@ export default function App() {
         {/* Devoirs et RM : publication (PR, PA), suivi (pasteurs, patriarches, AP) ; l'API verifie la tribu. */}
         <Route path="/admin/devoirs-rm" element={<RequireAuth requireComplete anyPermission={['assignments.publish', 'spiritual.view']}><Growth /></RequireAuth>} />
         <Route path="/admin/horaires" element={<RequireAuth requireComplete anyPermission={['schedule.view']}><ServiceTimes /></RequireAuth>} />
-        <Route path="/contact" element={<RequireAuth requireComplete memberSpace><Contact /></RequireAuth>} />
-        <Route path="/guide" element={<RequireAuth requireComplete memberSpace><Guide /></RequireAuth>} />
+        <Route path="/contact" element={<RequireAuth module="contact" requireComplete memberSpace><Contact /></RequireAuth>} />
+        <Route path="/guide" element={<RequireAuth module="guide" requireComplete memberSpace><Guide /></RequireAuth>} />
         <Route path="/calendrier" element={<RequireAuth requireComplete memberSpace><Calendar /></RequireAuth>} />
         <Route path="/servir" element={<RequireAuth requireComplete memberSpace><Services /></RequireAuth>} />
         <Route path="/exercices" element={<RequireAuth module="exercises" requireComplete memberSpace><MyExercisesPage /></RequireAuth>} />
@@ -283,12 +289,13 @@ export default function App() {
         <Route path="/admin/validations" element={<RequireAuth requireComplete anyPermission={['fiss.review', 'tribes.transfer', 'members.approve', 'departments.approve']}><Validations /></RequireAuth>} />
         <Route path="/admin/rapports" element={<RequireAuth requireComplete anyPermission={['reports.view']}><Reports /></RequireAuth>} />
         {/* Patriarches et responsables de departement n'ont pas de permission commune : l'API decide. */}
-        <Route path="/admin/rapports-mensuels" element={<RequireAuth requireComplete><LeaderReports /></RequireAuth>} />
-        <Route path="/admin/rapport-gem" element={<RequireAuth requireComplete><GemReport /></RequireAuth>} />
+        <Route path="/admin/rapports-mensuels" element={<RequireAuth module="leader_reports" requireComplete><LeaderReports /></RequireAuth>} />
+        <Route path="/admin/rapport-gem" element={<RequireAuth module="gem_reports" requireComplete><GemReport /></RequireAuth>} />
         <Route path="/admin/responsables" element={<RequireAuth requireComplete anyPermission={MEMBER_PERMS}><Leaders /></RequireAuth>} />
         <Route path="/admin/versets" element={<RequireAuth requireComplete anyPermission={['verses.view']}><Verses /></RequireAuth>} />
         <Route path="/admin/ressources" element={<RequireAuth requireComplete anyPermission={['resources.view']}><Resources /></RequireAuth>} />
         <Route path="/admin/reglages" element={<RequireAuth requireComplete anyPermission={['settings.manage']}><Settings /></RequireAuth>} />
+        <Route path="/admin/notifications" element={<RequireAuth requireComplete platformManager><NotificationCenter /></RequireAuth>} />
         <Route path="/admin/apparence" element={<RequireAuth requireComplete anyPermission={['settings.manage']}><AppearancePage /></RequireAuth>} />
         <Route path="/admin/gestion" element={<RequireAuth requireComplete anyPermission={['platform.manage']}><PlatformHome /></RequireAuth>} />
         <Route path="/admin/comptes" element={<RequireAuth requireComplete anyPermission={['accounts.view']}><Accounts /></RequireAuth>} />

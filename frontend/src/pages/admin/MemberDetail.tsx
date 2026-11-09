@@ -28,7 +28,7 @@ export default function MemberDetail() {
 function MemberDetailView() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { hasPermission } = useAuth()
+  const { hasPermission, moduleOn } = useAuth()
   const canAssign = hasPermission('roles.assign')
   const canEdit = hasPermission('members.edit')
   // Composer les GEMs de sa tribu (patriarche, AP) : choisir le GEM d'un membre, meme sans members.edit.
@@ -354,7 +354,7 @@ function MemberDetailView() {
       {canFissHistory && data.can_view_fiss && id && <MemberFissHistory userId={id} />}
       {canViewSpiritual && data.can_view_fiss && id && <MemberGrowth userId={id} />}
       {/* Fiches de meditation : patriarche de la tribu et pasteurs seulement (le serveur decide). */}
-      {data.can_view_meditations && id && <MemberMeditationPanel userId={id} />}
+      {data.can_view_meditations && moduleOn('meditation') && id && <MemberMeditationPanel userId={id} />}
       {ab.exercises_view && id && <MemberExercises userId={id} />}
       {canViewSpiritual && id && <SpiritualPanel userId={id} canRecord={ab.spiritual_record} />}
       {ab.evaluations_view && id && <EvaluationsPanel userId={id} canManage={ab.evaluations_manage} />}

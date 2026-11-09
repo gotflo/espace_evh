@@ -26,6 +26,7 @@ use App\Services\LeaderReportService;
 use App\Services\MemberMessages;
 use App\Services\Messenger;
 use App\Services\Monitoring\Monitor;
+use App\Services\NotificationCenter;
 use App\Services\Notifier;
 use App\Services\ReportService;
 use App\Services\TribeChangeService;
@@ -57,7 +58,7 @@ class AutomationTick extends Command
     /** Cle de cache du dernier passage complet (heure, duree, resultat de chaque etape). */
     public const STATUS_KEY = 'automation:last-run';
 
-    protected $signature = 'app:tick {--only= : activity | event-reminders | service-digest | birthdays | weddings | tasks | fiss | vertumetre | profiles | email-invites | monthly-report | leader-reports | gem-reports | resolutions | assignments | appointments | followups | service-joins | rm-renew | absences | tribe-changes | push-outbox | send-outbox | prune}';
+    protected $signature = 'app:tick {--only= : activity | event-reminders | service-digest | birthdays | weddings | tasks | fiss | vertumetre | profiles | email-invites | monthly-report | leader-reports | gem-reports | resolutions | assignments | appointments | followups | service-joins | rm-renew | absences | tribe-changes | scheduled-notifications | push-outbox | send-outbox | prune}';
 
     protected $description = 'Activité des membres, rappels, anniversaires, FISS, profils, relances et nettoyage.';
 
@@ -95,6 +96,8 @@ class AutomationTick extends Command
             // Changements de tribu : rattrapage des validations completes, et courriel aux valideurs qui ne l'ont pas recu.
             'tribe-changes' => fn () => TribeChangeService::completeApproved() + TribeChangeService::mailPendingApprovers(),
             // Secours de app:push-outbox : aucun push ne reste bloque si seule cette tache tourne.
+            // Notifications personnalisees programmees dans le centre de notifications (jamais suspendues).
+            'scheduled-notifications' => fn () => NotificationCenter::sendDue(),
             'push-outbox' => fn () => Notifier::flushOutbox(),
             // Secours de app:send-outbox : courriels, textos et courriel du jour des pasteurs.
             'send-outbox' => function () {
@@ -349,6 +352,10 @@ class AutomationTick extends Command
                 continue;
             }
             $date = $start->toDateString();
+            // Rappels coupes pour cette date (periode de coupure, ex. jeune) : rien pour cette occurrence.
+            if ($event->isMutedOn($date)) {
+                continue;
+            }
             if ($event->remind_all && ! $event->is_personal) {
                 if ($minutes > PlatformSettings::int('reminders.service_lead_minutes') || $event->all_day) {
                     continue;
@@ -567,7 +574,8 @@ class AutomationTick extends Command
         $occurrences = CalendarService::occurrences(
             Event::query()->where('remind_all', true)->where('is_personal', false)->where('muted', false)->with('scopes'),
             $day, $day->copy()->endOfDay(),
-        )->sortBy(fn ($o) => $o['start']->timestamp)->values();
+        )->reject(fn ($o) => $o['event']->isMutedOn($o['start']))
+            ->sortBy(fn ($o) => $o['start']->timestamp)->values();
         if ($occurrences->isEmpty()) {
             return 0;
         }

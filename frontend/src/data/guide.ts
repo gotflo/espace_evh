@@ -286,7 +286,7 @@ export const GUIDE_CHAPTERS: GuideChapter[] = [
     summary: 'Votre méditation, votre parcours, votre journal et vos exercices.',
     sections: [
       {
-        id: 'meditation-remplir', title: 'Méditation',
+        id: 'meditation-remplir', title: 'Méditation', module: 'meditation',
         shots: [
           { name: 'fidele-meditation-remplir', caption: '« Remplir ma fiche » de méditation' },
           { name: 'fidele-meditation-liste', caption: 'Mes fiches de méditation' },
@@ -373,7 +373,7 @@ export const GUIDE_CHAPTERS: GuideChapter[] = [
         link: { to: '/rendez-vous', label: 'Prendre rendez-vous' },
       },
       {
-        id: 'contact', title: 'Nous contacter',
+        id: 'contact', title: 'Nous contacter', module: 'contact',
         shots: [
           { name: 'fidele-contact', caption: 'Nouvelle demande' },
           { name: 'fidele-contact-reponse', caption: 'La réponse, dans « Mes demandes »' },
@@ -525,7 +525,7 @@ export const GUIDE_CHAPTERS: GuideChapter[] = [
     summary: 'Chaque semaine, une minute pour dire à votre patriarche et à votre AP comment va votre GEM.',
     sections: [
       {
-        id: 'rapport-remplir', title: 'Remplir le rapport',
+        id: 'rapport-remplir', title: 'Remplir le rapport', module: 'gem_reports',
         shots: [
           { name: 'rapport-haut', caption: 'Le rapport à envoyer' },
           { name: 'rapport-tableau', caption: 'Culte du dimanche et rencontre de la tribu' },
@@ -537,7 +537,7 @@ export const GUIDE_CHAPTERS: GuideChapter[] = [
         ],
       },
       {
-        id: 'rapport-envoyer', title: 'Envoyer le rapport',
+        id: 'rapport-envoyer', title: 'Envoyer le rapport', module: 'gem_reports',
         shots: [
           { name: 'rapport-envoyer', caption: 'Un mot sur la semaine, puis « Envoyer le rapport »' },
           { name: 'rapport-envoye', caption: 'Le rapport envoyé et son résumé' },
@@ -549,7 +549,7 @@ export const GUIDE_CHAPTERS: GuideChapter[] = [
         ],
       },
       {
-        id: 'rapport-apres', title: 'Après l’envoi',
+        id: 'rapport-apres', title: 'Après l’envoi', module: 'gem_reports',
         shots: [
           { name: 'patriarche-notification', caption: 'Ce que reçoit votre patriarche' },
           { name: 'rapport-historique', caption: '« Corriger » et les semaines précédentes' },
@@ -561,7 +561,7 @@ export const GUIDE_CHAPTERS: GuideChapter[] = [
         ],
       },
       {
-        id: 'rapport-calendrier', title: 'Le calendrier du rapport',
+        id: 'rapport-calendrier', title: 'Le calendrier du rapport', module: 'gem_reports',
         timeline: [
           { when: 'Lundi → dimanche', what: 'La semaine du rapport' },
           { when: 'Dimanche', what: 'Le rapport s’ouvre ; faites l’appel au culte' },

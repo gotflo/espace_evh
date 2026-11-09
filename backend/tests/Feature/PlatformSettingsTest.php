@@ -228,6 +228,50 @@ class PlatformSettingsTest extends TestCase
         $this->assertTrue(PlatformSettings::stepEnabled('vertumetre'));
     }
 
+    public function test_the_new_modules_close_their_pages_and_their_reminders(): void
+    {
+        $this->actAs($this->marie);
+        $modules = $this->getJson('/api/me')->assertOk()->json('settings.modules');
+        foreach (['meditation', 'contact', 'verse', 'guide', 'gem_reports', 'leader_reports'] as $name) {
+            $this->assertTrue($modules[$name], "{$name} ouvert par defaut");
+        }
+        $this->getJson('/api/me/meditations')->assertOk();
+        $this->getJson('/api/me/requests')->assertOk();
+
+        $this->actAs($this->pastor);
+        $this->putJson('/api/admin/settings', ['values' => ['module.meditation' => false, 'module.contact' => false,
+            'module.gem_reports' => false, 'module.leader_reports' => false, 'module.verse' => false, 'module.guide' => false]])->assertOk();
+
+        $this->actAs($this->marie);
+        $me = $this->getJson('/api/me')->assertOk();
+        foreach (['meditation', 'contact', 'verse', 'guide', 'gem_reports', 'leader_reports'] as $name) {
+            $me->assertJsonPath("settings.modules.{$name}", false);
+        }
+        $this->getJson('/api/me/meditations')->assertForbidden()->assertJsonPath('module', 'meditation');
+        $this->postJson('/api/me/meditations', [])->assertForbidden();
+        $this->getJson('/api/me/requests')->assertForbidden()->assertJsonPath('module', 'contact');
+        $this->postJson('/api/me/requests', ['subject' => 'X', 'message' => 'Bonjour'])->assertForbidden();
+        // Les autres espaces du membre restent ouverts (la famille n'est pas un module : enfants et conjoint du profil).
+        $this->getJson('/api/me/family')->assertOk();
+
+        $this->actAs($this->pastor);
+        $this->getJson('/api/admin/leader-reports')->assertForbidden()->assertJsonPath('module', 'leader_reports');
+        $this->getJson('/api/admin/gem-reports')->assertForbidden()->assertJsonPath('module', 'gem_reports');
+        $this->getJson("/api/admin/members/{$this->marie->id}/meditations")->assertForbidden();
+        // Rappels des rapports arretes avec leur module.
+        $this->assertFalse(PlatformSettings::stepEnabled('gem-reports'));
+        $this->assertFalse(PlatformSettings::stepEnabled('leader-reports'));
+        $this->assertTrue(PlatformSettings::stepEnabled('fiss'));
+
+        $this->putJson('/api/admin/settings', ['values' => ['module.meditation' => true, 'module.contact' => true,
+            'module.gem_reports' => true, 'module.leader_reports' => true, 'module.verse' => true, 'module.guide' => true]])->assertOk();
+        $this->getJson('/api/admin/leader-reports')->assertOk();
+        $this->assertTrue(PlatformSettings::stepEnabled('gem-reports'));
+        $this->actAs($this->marie);
+        $this->getJson('/api/me/meditations')->assertOk();
+        $this->getJson('/api/me/requests')->assertOk();
+    }
+
     public function test_service_requests_are_followed_up_then_approved_automatically_when_chosen(): void
     {
         $leader = $this->member('+14185580040', 'Responsable');

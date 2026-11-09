@@ -9,16 +9,16 @@ import { Icon } from './Icon'
 
 /** Bandeau du tableau de bord : rapport mensuel du mois ecoule pas encore envoye (patriarche, responsable de departement). */
 export function LeaderReportReminder() {
-  const { roles } = useAuth()
+  const { roles, moduleOn } = useAuth()
   const navigate = useNavigate()
-  const concerned = roles.some((r) => (r.key === 'patriarche' && r.scope_kind === 'tribe') || r.key === 'department_leader')
+  const concerned = moduleOn('leader_reports') && roles.some((r) => (r.key === 'patriarche' && r.scope_kind === 'tribe') || r.key === 'department_leader')
   const [data, setData] = useState<LeaderReportsData | null>(() => peek<LeaderReportsData>('/admin/leader-reports') ?? null)
 
   useEffect(() => {
     if (concerned) api<LeaderReportsData>('/admin/leader-reports').then(setData).catch(() => setData(null))
   }, [concerned])
 
-  if (!data) return null
+  if (!data || !concerned) return null
   const due = data.mine.filter((s) => s.periods.some((p) => p.period === data.due_period && p.status !== 'submitted'))
 
   return (
@@ -40,9 +40,9 @@ export function LeaderReportReminder() {
 
 /** Bandeau du tableau de bord : rapport de la semaine pas encore envoye (Garde). */
 export function GemReportReminder() {
-  const { roles } = useAuth()
+  const { roles, moduleOn } = useAuth()
   const navigate = useNavigate()
-  const isGarde = roles.some((r) => r.key === 'garde' && r.scope_kind === 'gem')
+  const isGarde = moduleOn('gem_reports') && roles.some((r) => r.key === 'garde' && r.scope_kind === 'gem')
   const [data, setData] = useState<GemReportsData | null>(() => peek<GemReportsData>('/admin/gem-reports') ?? null)
 
   useEffect(() => {
@@ -50,7 +50,7 @@ export function GemReportReminder() {
   }, [isGarde])
 
   const due = data?.gems.filter((g) => !g.current && g.members.length > 0) ?? []
-  if (!data || due.length === 0) return null
+  if (!data || !isGarde || due.length === 0) return null
 
   return (
     <button className="fiss-reminder fiss-reminder-advance fiss-reminder-btn" onClick={() => navigate('/admin/rapport-gem')}>

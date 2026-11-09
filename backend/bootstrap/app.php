@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureModule;
+use App\Http\Middleware\EnsurePlatformManager;
 use App\Http\Middleware\EnsurePermission;
 use App\Http\Middleware\MonitorRequests;
 use App\Http\Middleware\RefreshPulse;
@@ -30,6 +31,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'permission' => EnsurePermission::class,
             'module' => EnsureModule::class,
+            'platform.manager' => EnsurePlatformManager::class,
         ]);
 
         // Supervision : identifiant et mesure de chaque requete de l'API (y compris les refus).

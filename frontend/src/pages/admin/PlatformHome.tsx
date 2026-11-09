@@ -19,7 +19,8 @@ interface Overview {
 }
 
 /** Raccourcis de gestion, affiches selon les permissions. */
-const SHORTCUTS: { to: string; label: string; hint: string; icon: string; perm: string }[] = [
+const SHORTCUTS: { to: string; label: string; hint: string; icon: string; perm: string; manager?: boolean }[] = [
+  { to: '/admin/notifications', label: 'Notifications', hint: 'Lancer, couper, programmer des notifications', icon: ICONS.bell, perm: 'settings.manage', manager: true },
   { to: '/admin/ressources', label: 'Ressources', hint: 'Liens et vidéos YouTube', icon: ICONS.link, perm: 'resources.view' },
   { to: '/admin/versets', label: 'Versets', hint: 'Textes bibliques du tableau de bord', icon: ICONS.book, perm: 'verses.view' },
   { to: '/admin/devoirs-rm', label: 'Devoirs (DS)', hint: 'Publier une vidéo ou un audio', icon: ICONS.devoir, perm: 'assignments.publish' },
@@ -32,7 +33,7 @@ const SHORTCUTS: { to: string; label: string; hint: string; icon: string; perm: 
   { to: '/admin/organisation', label: 'Organisation', hint: 'Tribus et départements', icon: ICONS.org, perm: 'tribes.manage' },
   { to: '/admin/gems', label: 'GEMs', hint: 'Groupes des tribus', icon: ICONS.gem, perm: 'gems.manage' },
   { to: '/admin/apparence', label: 'Apparence', hint: 'Images de l’accueil et de la connexion, textes', icon: ICONS.image, perm: 'settings.manage' },
-  { to: '/admin/reglages', label: 'Réglages', hint: 'Modules, rappels automatiques, délais', icon: ICONS.settings, perm: 'settings.manage' },
+  { to: '/admin/reglages', label: 'Réglages', hint: 'Modules de l’application, rappels automatiques, délais', icon: ICONS.settings, perm: 'settings.manage' },
   { to: '/admin/journal', label: 'Journal', hint: 'Opérations de gestion', icon: ICONS.audit, perm: 'audit.view' },
 ]
 
@@ -106,7 +107,7 @@ export default function PlatformHome() {
 
       <h2 className="pm-section">Raccourcis</h2>
       <div className="pm-shortcuts">
-        {SHORTCUTS.filter((s) => hasPermission(s.perm)).map((s) => (
+        {SHORTCUTS.filter((s) => hasPermission(s.perm) && (!s.manager || isPlatformManager)).map((s) => (
           <Link key={s.to} to={s.to} className="panel pm-shortcut">
             <span className="pm-shortcut-icon"><Icon path={s.icon} size={20} /></span>
             <span className="pm-shortcut-text"><strong>{s.label}</strong><small>{s.hint}</small></span>

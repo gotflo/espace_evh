@@ -3,7 +3,7 @@
  * A chaque mise en ligne qui ajoute une fonctionnalite : nouvelle version en tete, une ligne courte par ajout
  * (pas de detail, pas de simple correction). La premiere entree est la version affichee.
  * Une ligne qui ne concerne qu'une fonction (gestion, validations, reglages...) porte les permissions qui la
- * rendent visible : un fidele ne voit que ce qui le concerne.
+ * rendent visible : un fidele ne voit que ce qui le concerne. PLATFORM = le compte de gestion seulement.
  */
 export type VersionItem = string | { text: string; perms: string[] }
 
@@ -14,8 +14,11 @@ export interface AppVersion {
 
 const LEADERS = ['members.view_scope', 'members.view_all']
 const VALIDATORS = ['fiss.review', 'tribes.transfer', 'members.approve', 'departments.approve']
+/** Pseudo-permission : l'administration de la plateforme (compte de gestion), aucun role ne la donne. */
+export const PLATFORM = 'platform.manager'
 
 export const APP_VERSIONS: AppVersion[] = [
+  { version: '2.8', items: ['Animations légères.', { text: 'Centre de notifications.', perms: [PLATFORM] }, { text: 'Plus de modules à activer ou couper.', perms: ['settings.manage'] }] },
   { version: '2.7', items: [{ text: 'Demandes à valider signalées sur l’accueil et dans le menu.', perms: VALIDATORS }] },
   { version: '2.6', items: [{ text: 'Chaque groupe séparé pour les responsables.', perms: LEADERS }, 'Version et politique de confidentialité.'] },
   { version: '2.5', items: ['Onglet Paramètres.', 'Votre GEM et votre Garde dans Mon profil.', 'Changement de tribu suivi par courriel.'] },

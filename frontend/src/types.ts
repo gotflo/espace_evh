@@ -85,6 +85,7 @@ export interface Membership {
 
 /** Modules activables dans Gestion > Reglages. */
 export type ModuleName = 'vertumetre' | 'resolutions' | 'assignments' | 'exercises' | 'appointments' | 'spiritual'
+  | 'meditation' | 'contact' | 'verse' | 'guide' | 'gem_reports' | 'leader_reports'
 export interface AppSettings { modules: Partial<Record<ModuleName, boolean>>; push_prompt_snooze_days: number }
 
 /** GEM du membre et son Garde (nom et photo seulement). */

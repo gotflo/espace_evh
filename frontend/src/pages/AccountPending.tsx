@@ -18,7 +18,7 @@ const CHECK_EVERY = 45_000
  * etre prevenu (conseillee, pas obligatoire). L'espace s'ouvre tout seul des que le compte est valide.
  */
 export function AccountPending() {
-  const { profile, setProfile, refresh, logout, membership } = useAuth()
+  const { profile, setProfile, refresh, logout, membership, moduleOn } = useAuth()
   const pendingMessage = useAppearance(false).appearance.texts.pending_message
   const [email, setEmail] = useState(profile?.email ?? '')
   const [editing, setEditing] = useState(!profile?.email)
@@ -78,7 +78,7 @@ export function AccountPending() {
           </div>
         </header>
 
-        <VerseBanner />
+        {moduleOn('verse') && <VerseBanner />}
 
         <section className="pending-status" role="status" aria-live="polite">
           <span className="pending-status-icon"><Icon name="clock" size={20} /></span>

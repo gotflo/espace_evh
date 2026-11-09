@@ -98,6 +98,8 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
   const canAccounts = hasPermission('accounts.view')
   const canPlatform = hasPermission('platform.manage')
   const canSettings = hasPermission('settings.manage')
+  // Centre de notifications : l'administration de la plateforme (compte de gestion) seulement.
+  const canNotify = isPlatformManager
   const canManageOrg = hasPermission('tribes.manage') || hasPermission('departments.manage')
   const canManageGems = hasPermission('gems.manage')
   const canAttendance = hasPermission('attendance.view')
@@ -112,13 +114,13 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
   const canSchedule = hasPermission('schedule.view')
   const canResources = hasPermission('resources.view')
   // Rapports mensuels : a remplir (patriarche, responsable de departement) ou a lire (rapports).
-  const canLeaderReports = canReports
-    || roles.some((r) => (r.key === 'patriarche' && r.scope_kind === 'tribe') || r.key === 'department_leader')
+  const canLeaderReports = moduleOn('leader_reports') && (canReports
+    || roles.some((r) => (r.key === 'patriarche' && r.scope_kind === 'tribe') || r.key === 'department_leader'))
   // Annuaire des responsables : pasteurs (toute l'eglise), AP et patriarches (leurs tribus).
   const canLeaders = hasPermission('members.view_all')
     || (hasPermission('members.view_scope') && roles.some((r) => r.scope_kind === 'tribe' && r.key !== 'department_leader'))
   // Rapport hebdomadaire : le Garde d'un GEM.
-  const isGarde = roles.some((r) => r.key === 'garde' && r.scope_kind === 'gem')
+  const isGarde = moduleOn('gem_reports') && roles.some((r) => r.key === 'garde' && r.scope_kind === 'gem')
   // Suivi du mois : publication des devoirs, et suivi (pasteurs, patriarches et AP de leurs tribus).
   const canTrack = hasPermission('spiritual.view') && (hasPermission('members.view_all') || roles.some((r) => r.scope_kind === 'tribe'))
   const canGrowth = (hasPermission('assignments.publish') || canTrack) && (moduleOn('assignments') || moduleOn('resolutions'))
@@ -128,7 +130,7 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
   const canAppointments = (isPastorHost || hasPermission('appointments.organize')) && moduleOn('appointments')
   const isLeader = canAppointments || canViewMembers || canAttendance || canExercises || canAnnounce || canEvents
     || canRequests || canManageRoles || canAccounts || canPlatform || canSettings || canManageGems || canManageOrg || canValidate || canReports
-    || canLeaderReports || canAudit || canVerses || canSchedule || canResources || canGrowth
+    || canLeaderReports || canAudit || canVerses || canSchedule || canResources || canGrowth || canNotify
 
   const initials = ((profile?.first_name?.[0] ?? '') + (profile?.last_name?.[0] ?? '')).toUpperCase()
   const mainRole = mainRoleLabel(roles)
@@ -195,13 +197,13 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
               <NavLink to="/servir" className="nav-item"><Icon path={ICONS.serve} /><span>Service</span></NavLink>
               {moduleOn('spiritual') && <NavLink to="/ma-vie-spirituelle" className="nav-item"><Icon path={ICONS.spiritual} /><span>Ma vie spirituelle</span></NavLink>}
               <NavLink to="/ma-fiche" className="nav-item"><Icon path={ICONS.fiss} /><span>Ma fiche (FISS)</span></NavLink>
-              <NavLink to="/meditation" className="nav-item"><Icon path={ICONS.book} /><span>Méditation</span></NavLink>
+              {moduleOn('meditation') && <NavLink to="/meditation" className="nav-item"><Icon path={ICONS.book} /><span>Méditation</span></NavLink>}
               {moduleOn('vertumetre') && <NavLink to="/vertumetre" className="nav-item"><Icon path={ICONS.reports} /><span>Mon Vertumètre</span></NavLink>}
               {moduleOn('resolutions') && <NavLink to="/mes-resolutions" className="nav-item"><Icon path={ICONS.target} /><span>Mes RM</span></NavLink>}
               {moduleOn('assignments') && <NavLink to="/mon-devoir" className="nav-item"><Icon path={ICONS.devoir} /><span>Mon devoir (DS)</span></NavLink>}
               {moduleOn('exercises') && <NavLink to="/exercices" className="nav-item"><Icon path={ICONS.play} /><span>Mes exercices</span></NavLink>}
               {!isPastorHost && moduleOn('appointments') && <NavLink to="/rendez-vous" className="nav-item"><Icon path={ICONS.clock} /><span>Prendre rendez-vous</span></NavLink>}
-              <NavLink to="/contact" className="nav-item"><Icon path={ICONS.requests} /><span>Nous contacter</span></NavLink>
+              {moduleOn('contact') && <NavLink to="/contact" className="nav-item"><Icon path={ICONS.requests} /><span>Nous contacter</span></NavLink>}
               {/* Installation, notifications, Guide (rubrique Aide) et compte : pour tout le monde. */}
               <NavLink to="/parametres" className="nav-item"><Icon path={ICONS.settings} /><span>Paramètres</span></NavLink>
             </>
@@ -219,7 +221,7 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
           {canValidate && (
             <NavLink to="/admin/validations" className="nav-item">
               <Icon path={ICONS.validate} /><span>Validations</span>
-              {toValidate > 0 && <span className="nav-badge" aria-label={`${toValidate} en attente`}>{toValidate > 99 ? '99+' : toValidate}</span>}
+              {toValidate > 0 && <span key={toValidate} className="nav-badge" aria-label={`${toValidate} en attente`}>{toValidate > 99 ? '99+' : toValidate}</span>}
             </NavLink>
           )}
           {canAttendance && <NavLink to="/admin/presences" className="nav-item"><Icon path={ICONS.attendance} /><span>Présences</span></NavLink>}
@@ -236,6 +238,7 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
           {canManageRoles && <NavLink to="/admin/roles" className="nav-item"><Icon path={ICONS.roles} /><span>Rôles</span></NavLink>}
           {canAudit && <NavLink to="/admin/journal" className="nav-item"><Icon path={ICONS.audit} /><span>Journal</span></NavLink>}
           {canSettings && <NavLink to="/admin/apparence" className="nav-item"><Icon path={ICONS.image} /><span>Apparence</span></NavLink>}
+          {canNotify && <NavLink to="/admin/notifications" className="nav-item"><Icon path={ICONS.bell} /><span>Notifications</span></NavLink>}
           {canSettings && <NavLink to="/admin/reglages" className="nav-item"><Icon path={ICONS.settings} /><span>Réglages</span></NavLink>}
           {/* Compte de gestion (sans espace membre) : ses parametres aussi. */}
           {isPlatformManager && <NavLink to="/parametres" className="nav-item"><Icon path={ICONS.settings} /><span>Paramètres</span></NavLink>}
@@ -295,11 +298,11 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
           </>
         )}
         <NavLink to="/notifications" className="bottom-item">
-          <span className="bottom-icon"><Icon path={ICONS.bell} />{unread > 0 && <span className="bottom-badge">{unread > 9 ? '9+' : unread}</span>}</span>
+          <span className="bottom-icon"><Icon path={ICONS.bell} />{unread > 0 && <span key={unread} className="bottom-badge">{unread > 9 ? '9+' : unread}</span>}</span>
           <span>Alertes</span>
         </NavLink>
         <button className={`bottom-item ${menuOpen ? 'active' : ''}`} onClick={() => setMenuOpen(true)}>
-          <span className="bottom-icon"><Icon path={ICONS.menu} />{toValidate > 0 && <span className="bottom-badge" aria-label={`${toValidate} demande(s) à valider`}>{toValidate > 9 ? '9+' : toValidate}</span>}</span>
+          <span className="bottom-icon"><Icon path={ICONS.menu} />{toValidate > 0 && <span key={toValidate} className="bottom-badge" aria-label={`${toValidate} demande(s) à valider`}>{toValidate > 9 ? '9+' : toValidate}</span>}</span>
           <span>Menu</span>
         </button>
       </nav>
