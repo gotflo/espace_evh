@@ -9,6 +9,7 @@
 @keyframes motion-tab-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes motion-tab-pop { 0% { transform: scale(1); } 45% { transform: scale(1.12); } 100% { transform: scale(1); } }
 @keyframes motion-badge-pop { from { transform: scale(0.4); opacity: 0; } 70% { transform: scale(1.12); opacity: 1; } to { transform: scale(1); opacity: 1; } }
+@keyframes motion-card-out { to { opacity: 0; transform: translateX(28px) scale(0.98); } }
 @keyframes motion-row-reveal { from { opacity: 0.35; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -70,5 +71,16 @@
       animation-timeline: view();
       animation-range: entry 0% entry 45%;
     }
+  }
+
+  /*
+   * 6. Demande traitee (Validations) : la carte glisse et s'efface (0,34 s) avant que la liste se mette a jour.
+   * Deux classes : passe devant l'apparition au defilement (dont la ligne de temps est remise a zero).
+   */
+  .validation-card.is-leaving {
+    animation: motion-card-out 0.34s cubic-bezier(0.4, 0, 0.9, 0.6) forwards;
+    animation-timeline: auto;
+    animation-range: normal;
+    pointer-events: none;
   }
 }

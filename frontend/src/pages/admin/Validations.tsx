@@ -69,11 +69,11 @@ function DecisionBox({ onDecide, busy }: { onDecide: (approve: boolean, comment:
 }
 
 /** Nouvelle inscription : profil complet, puis « Valider » ou « Rejeter » (un compte refuse peut etre valide). */
-function MembershipCard({ m, busy, onDecide }: { m: MembershipRequest; busy: boolean; onDecide: (approve: boolean) => void }) {
+function MembershipCard({ m, busy, leaving = false, onDecide }: { m: MembershipRequest; busy: boolean; leaving?: boolean; onDecide: (approve: boolean) => void }) {
   const initials = `${m.first_name?.[0] ?? ''}${m.last_name?.[0] ?? ''}`.toUpperCase() || '?'
   const rejected = m.status === 'rejected'
   return (
-    <article className={`validation-card membership-card ${rejected ? 'is-rejected' : ''}`}>
+    <article className={`validation-card membership-card ${rejected ? 'is-rejected' : ''} ${leaving ? 'is-leaving' : ''}`}>
       <div className="membership-head">
         {m.photo_url ? <img className="membership-photo" src={m.photo_url} alt="" width={52} height={52} loading="lazy" decoding="async" /> : <span className="membership-photo">{initials}</span>}
         <div className="membership-who">
@@ -162,6 +162,19 @@ function DeletionDecisionBanner({ params, onClose }: { params: URLSearchParams; 
   )
 }
 
+/** Cles des cartes affichees (la meme que celle de la decision) : inscriptions en attente / refusees separees. */
+function presentKeys(d: ValidationsData): Set<string> {
+  return new Set([
+    ...(d.memberships ?? []).map((m) => `m${m.user_id}`),
+    ...(d.memberships_rejected ?? []).map((m) => `mr${m.user_id}`),
+    ...(d.services ?? []).map((r) => `s${r.id}`),
+    ...(d.deletions ?? []).map((r) => `d${r.id}`),
+    ...(d.vertumetre ?? []).map((r) => `v${r.id}`),
+    ...d.fiss.map((r) => `f${r.id}`),
+    ...d.tribes.map((r) => `t${r.id}`),
+  ])
+}
+
 /** Inscriptions regroupees par service (ordre d'arrivee conserve dans chaque groupe), services par ordre alphabetique. */
 function byDepartment(list: ServiceJoinRequest[]): [ServiceJoinRequest['department'], ServiceJoinRequest[]][] {
   const groups = new Map<number, [ServiceJoinRequest['department'], ServiceJoinRequest[]]>()
@@ -180,6 +193,9 @@ export default function Validations() {
   const [busy, setBusy] = useState<string | null>(null)
   const [rejecting, setRejecting] = useState<MembershipRequest | null>(null)
   const [loadError, setLoadError] = useState('')
+  // Demande traitee : sa carte s'efface doucement avant que la liste se mette a jour.
+  const [leaving, setLeaving] = useState<string | null>(null)
+  const deciding = useRef(false)
 
   // Echec de lecture : jamais « Tout est à jour » (des demandes peuvent attendre) ; la derniere
   // liste connue reste affichee, sinon message et « Réessayer ».
@@ -190,7 +206,40 @@ export default function Validations() {
       .catch((err) => setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.'))
   }, [])
   useEffect(() => { load() }, [load])
-  usePulse('validations', load)
+  // Pendant une decision, la liste est rechargee par la decision elle-meme (sortie de la carte comprise).
+  usePulse('validations', () => { if (!deciding.current) load() })
+
+  /**
+   * Apres une decision : nouvelle liste lue d'abord ; si la demande l'a quittee (et pas une approbation partielle,
+   * ex. une seule des deux tribus), sa carte s'efface en 0,34 s, puis la liste a jour s'affiche. Rien a attendre
+   * pour qui a demande a son appareil de reduire les animations.
+   */
+  async function settle(key: string) {
+    try {
+      const fresh = await api<ValidationsData>('/admin/validations')
+      const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      if (!reduce && !presentKeys(fresh).has(key)) {
+        setLeaving(key)
+        await new Promise((r) => setTimeout(r, 340))
+      }
+      setData(fresh)
+      setLoadError('')
+      void refreshValidationsCount()
+    } catch { load() } finally { setLeaving(null) }
+  }
+
+  /**
+   * Decision envoyee puis liste mise a jour ; le serveur affiche son message (et son erreur). Meme en cas d'erreur
+   * (ex. demande deja traitee sur un autre appareil), la liste est relue : une carte perimee s'en va aussi.
+   */
+  async function decide(busyKey: string, cardKey: string, send: () => Promise<unknown>) {
+    setBusy(busyKey)
+    deciding.current = true
+    let failure: unknown = null
+    try { await send() } catch (e) { failure = e }
+    try { await settle(cardKey) } finally { deciding.current = false; setBusy(null) }
+    if (failure) throw failure
+  }
 
   // Lien d'une notification ou d'un courriel (#tribus, #services) : la section vient a l'ecran une fois chargee.
   const location = useLocation()
@@ -206,51 +255,34 @@ export default function Validations() {
 
   async function decideDeletion(id: number, name: string, approve: boolean, comment: string) {
     if (approve && !confirm(`Supprimer définitivement ${name} ?`)) return
-    setBusy(`d${id}`)
-    try {
-      await api(`/admin/validations/deletions/${id}`, { method: 'POST', body: { decision: approve ? 'approved' : 'rejected', comment: comment || null } })
-      load()
-    } catch { /* toast */ } finally { setBusy(null) }
+    await decide(`d${id}`, `d${id}`, () => api(`/admin/validations/deletions/${id}`, { method: 'POST', body: { decision: approve ? 'approved' : 'rejected', comment: comment || null } }))
+      .catch(() => { /* toast */ })
   }
 
   async function decideMembership(m: MembershipRequest, approve: boolean) {
-    setBusy(`m${m.user_id}`)
-    try {
-      await api(`/admin/validations/memberships/${m.user_id}`, { method: 'POST', body: { decision: approve ? 'approved' : 'rejected' } })
-      load()
-    } finally { setBusy(null) }
+    // Refusee puis validee : la carte quitte la liste des refus (cle « mr »).
+    await decide(`m${m.user_id}`, `${m.status === 'rejected' ? 'mr' : 'm'}${m.user_id}`,
+      () => api(`/admin/validations/memberships/${m.user_id}`, { method: 'POST', body: { decision: approve ? 'approved' : 'rejected' } }))
   }
 
   async function decideService(id: number, approve: boolean) {
-    setBusy(`s${id}`)
-    try {
-      await api(`/admin/validations/services/${id}`, { method: 'POST', body: { decision: approve ? 'approved' : 'rejected' } })
-      load()
-    } catch { /* toast */ } finally { setBusy(null) }
+    await decide(`s${id}`, `s${id}`, () => api(`/admin/validations/services/${id}`, { method: 'POST', body: { decision: approve ? 'approved' : 'rejected' } }))
+      .catch(() => { /* toast */ })
   }
 
   async function decideVertumetre(id: number, approve: boolean, comment: string) {
-    setBusy(`v${id}`)
-    try {
-      await api(`/admin/validations/vertumetre/${id}`, { method: 'POST', body: { decision: approve ? 'approved' : 'rejected', comment: comment || null } })
-      load()
-    } catch { /* toast */ } finally { setBusy(null) }
+    await decide(`v${id}`, `v${id}`, () => api(`/admin/validations/vertumetre/${id}`, { method: 'POST', body: { decision: approve ? 'approved' : 'rejected', comment: comment || null } }))
+      .catch(() => { /* toast */ })
   }
 
   async function decideFiss(item: ValidationFissItem, approve: boolean, comment: string) {
-    setBusy(`f${item.id}`)
-    try {
-      await api(`/admin/validations/fiss/${item.id}`, { method: 'POST', body: { decision: approve ? 'approved' : 'rejected', comment: comment || null } })
-      load()
-    } catch { /* toast */ } finally { setBusy(null) }
+    await decide(`f${item.id}`, `f${item.id}`, () => api(`/admin/validations/fiss/${item.id}`, { method: 'POST', body: { decision: approve ? 'approved' : 'rejected', comment: comment || null } }))
+      .catch(() => { /* toast */ })
   }
 
   async function decideTribe(item: ValidationTribeItem, approve: boolean, comment: string) {
-    setBusy(`t${item.id}`)
-    try {
-      await api(`/admin/validations/tribe/${item.id}`, { method: 'POST', body: { decision: approve ? 'approved' : 'rejected', comment: comment || null } })
-      load()
-    } catch { /* toast */ } finally { setBusy(null) }
+    await decide(`t${item.id}`, `t${item.id}`, () => api(`/admin/validations/tribe/${item.id}`, { method: 'POST', body: { decision: approve ? 'approved' : 'rejected', comment: comment || null } }))
+      .catch(() => { /* toast */ })
   }
 
   return (
@@ -261,7 +293,7 @@ export default function Validations() {
           <h3 className="ex-group">Nouvelles inscriptions <span className="count-soft">{data.memberships!.length}</span></h3>
           <div className="validation-grid">
             {data.memberships!.map((m) => (
-              <MembershipCard key={m.user_id} m={m} busy={busy === `m${m.user_id}`}
+              <MembershipCard key={m.user_id} m={m} busy={busy === `m${m.user_id}`} leaving={leaving === `m${m.user_id}`}
                 onDecide={(approve) => (approve ? void decideMembership(m, true).catch(() => {}) : setRejecting(m))} />
             ))}
           </div>
@@ -281,7 +313,7 @@ export default function Validations() {
           {groups.length > 1 && <h4 className="validation-dept-title">{department.name} <span className="count-soft">{requests.length}</span></h4>}
           <div className="validation-grid">
             {requests.map((r) => (
-              <article key={r.id} className="validation-card">
+              <article key={r.id} className={`validation-card ${leaving === `s${r.id}` ? 'is-leaving' : ''}`}>
                 <div className="validation-head">
                   {r.member.photo_url ? <img className="mini-avatar" src={r.member.photo_url} alt="" width={34} height={34} loading="lazy" decoding="async" /> : <span className="validation-icon"><Icon name="serve" size={20} /></span>}
                   <div>
@@ -308,7 +340,7 @@ export default function Validations() {
           <h3 className="ex-group">Demandes de suppression <span className="count-soft">{data.deletions!.length}</span></h3>
           <div className="validation-grid">
             {data.deletions!.map((r) => (
-              <article key={r.id} className="validation-card danger-zone">
+              <article key={r.id} className={`validation-card danger-zone ${leaving === `d${r.id}` ? 'is-leaving' : ''}`}>
                 <div className="validation-head">
                   <span className="validation-icon"><Icon name="trash" size={20} /></span>
                   <div>
@@ -330,7 +362,7 @@ export default function Validations() {
           <h3 className="ex-group">Modifications du Vertumètre <span className="count-soft">{data.vertumetre!.length}</span></h3>
           <div className="validation-grid">
             {data.vertumetre!.map((r) => (
-              <article key={r.id} className="validation-card">
+              <article key={r.id} className={`validation-card ${leaving === `v${r.id}` ? 'is-leaving' : ''}`}>
                 <div className="validation-head">
                   <span className="validation-icon"><Icon name="reports" size={20} /></span>
                   <div>
@@ -364,7 +396,7 @@ export default function Validations() {
               <h3 className="section-label">Modifications de FISS ({data.fiss.length})</h3>
               <div className="validation-grid">
                 {data.fiss.map((r) => (
-                  <article key={r.id} className="validation-card">
+                  <article key={r.id} className={`validation-card ${leaving === `f${r.id}` ? 'is-leaving' : ''}`}>
                     <div className="validation-head">
                       <span className="validation-icon"><Icon name="fiss" size={20} /></span>
                       <div>
@@ -388,7 +420,7 @@ export default function Validations() {
               <h3 className="section-label">Changements de tribu ({data.tribes.length})</h3>
               <div className="validation-grid">
                 {data.tribes.map((r) => (
-                  <article key={r.id} className="validation-card">
+                  <article key={r.id} className={`validation-card ${leaving === `t${r.id}` ? 'is-leaving' : ''}`}>
                     <div className="validation-head">
                       <span className="validation-icon"><Icon name="swap" size={20} /></span>
                       <div>
@@ -424,7 +456,7 @@ export default function Validations() {
           <summary><strong>Inscriptions refusées</strong> <span className="helper">30 derniers jours · une erreur se corrige ici</span></summary>
           <div className="validation-grid mt-sm">
             {data.memberships_rejected!.map((m) => (
-              <MembershipCard key={m.user_id} m={m} busy={busy === `m${m.user_id}`} onDecide={() => void decideMembership(m, true).catch(() => {})} />
+              <MembershipCard key={m.user_id} m={m} busy={busy === `m${m.user_id}`} leaving={leaving === `mr${m.user_id}`} onDecide={() => void decideMembership(m, true).catch(() => {})} />
             ))}
           </div>
         </details>
