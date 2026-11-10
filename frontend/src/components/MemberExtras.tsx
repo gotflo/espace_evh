@@ -30,14 +30,9 @@ export function MemberCompletion({ completion }: { completion: ProfileCompletion
   )
 }
 
-/** « 3 mai 2014 · 12 ans » */
-function childAge(iso: string): string {
-  const d = new Date(`${iso}T12:00:00`)
-  const now = new Date()
-  let age = now.getFullYear() - d.getFullYear()
-  if (now.getMonth() < d.getMonth() || (now.getMonth() === d.getMonth() && now.getDate() < d.getDate())) age--
-  const date = d.toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' })
-  return age < 1 ? `${date} · moins d'un an` : `${date} · ${age} an${age > 1 ? 's' : ''}`
+/** « 12 ans », « 1 an », « moins d'un an » */
+function ageLabel(age: number): string {
+  return age < 1 ? "moins d'un an" : `${age} an${age > 1 ? 's' : ''}`
 }
 
 /** Famille du membre (lecture seule cote responsable). */
@@ -69,7 +64,7 @@ export function MemberFamily({ family, maritalStatus, wedding }: { family: Famil
                 <span key={c.id}>
                   {i > 0 && ', '}
                   {c.user_id && c.can_open !== false ? <Link to={`/admin/membres/${c.user_id}`}>{c.name}</Link> : c.name}
-                  {c.birth_date ? ` (${childAge(c.birth_date)})` : c.birth_year ? ` (${c.birth_year})` : ''}
+                  {c.age != null ? ` (${ageLabel(c.age)})` : ''}
                 </span>
               ))}
             </strong>

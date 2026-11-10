@@ -18,6 +18,7 @@ const VALIDATORS = ['fiss.review', 'tribes.transfer', 'members.approve', 'depart
 export const PLATFORM = 'platform.manager'
 
 export const APP_VERSIONS: AppVersion[] = [
+  { version: '2.9', items: ['Âge des enfants dans le profil.', { text: 'Vidéo du guide envoyée aux nouveaux membres.', perms: ['members.approve'] }] },
   { version: '2.8', items: ['Animations légères.', { text: 'Centre de notifications.', perms: [PLATFORM] }, { text: 'Plus de modules à activer ou couper.', perms: ['settings.manage'] }] },
   { version: '2.7', items: [{ text: 'Demandes à valider signalées sur l’accueil et dans le menu.', perms: VALIDATORS }] },
   { version: '2.6', items: [{ text: 'Chaque groupe séparé pour les responsables.', perms: LEADERS }, 'Version et politique de confidentialité.'] },

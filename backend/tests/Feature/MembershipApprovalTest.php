@@ -156,8 +156,13 @@ class MembershipApprovalTest extends TestCase
         // La personne est prevenue (courriel + notification) ; ses responsables peuvent l'accueillir.
         $welcome = OutboundMessage::where('kind', 'membership_approved')->sole();
         $this->assertSame('degaulle@exemple.test', $welcome->recipient);
-        $this->assertStringContainsString('Le pasteur a validé votre compte', (new NotificationMail($welcome->subject, $welcome->view, $welcome->payload))->render());
+        $html = (new NotificationMail($welcome->subject, $welcome->view, $welcome->payload))->render();
+        $this->assertStringContainsString('Le pasteur a validé votre compte', $html);
+        // La video du guide de l'application part avec le courriel de bienvenue ; la notification ouvre le Guide.
+        $this->assertStringContainsString('https://youtu.be/vYO2_5nEEx8', $html);
+        $this->assertStringContainsString('Regarder la vidéo', $html);
         $this->assertSame(1, UserNotification::where('user_id', $user->id)->where('title', 'Votre compte est validé')->count());
+        $this->assertSame('/guide', UserNotification::where('user_id', $user->id)->where('title', 'Le guide de l’application en vidéo')->sole()->url);
         $this->assertSame(1, UserNotification::where('user_id', $this->patriarch->id)->where('title', 'Nouveau membre : Degaulle Kaswende')->count());
 
         // Acces complet, et l'application confirme la decision au pasteur.

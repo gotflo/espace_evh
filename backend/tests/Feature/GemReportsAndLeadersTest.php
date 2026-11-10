@@ -310,10 +310,13 @@ class GemReportsAndLeadersTest extends TestCase
             ->map(fn ($e) => substr($e['starts_at'], 11, 5).' '.$e['title'])->all();
         $this->assertSame(['18:30 Samedi des miracles'], $titles);
 
-        // Rappel a tous 30 minutes avant, comme les autres rendez-vous du programme.
+        // Une seule notification, la veille (programme du lendemain), rien le jour meme.
         Carbon::setTestNow(Carbon::parse($saturday.' 18:00:00'));
         $this->artisan('app:tick', ['--only' => 'event-reminders'])->assertSuccessful();
-        $this->assertSame('Bientôt : Samedi des miracles', UserNotification::where('user_id', $this->members[0]->id)->where('type', 'event_reminder')->sole()->title);
+        $this->assertSame(0, UserNotification::where('user_id', $this->members[0]->id)->where('type', 'event_reminder')->count());
+        Carbon::setTestNow(Carbon::parse($saturday.' 18:00:00')->subDay()->setTime(19, 0));
+        $this->artisan('app:tick', ['--only' => 'service-digest'])->assertSuccessful();
+        $this->assertSame('Demain samedi : 18h30 Samedi des miracles', UserNotification::where('user_id', $this->members[0]->id)->where('type', 'event_reminder')->sole()->title);
     }
 
     public function test_exporting_a_monthly_report_to_pdf_is_traced_and_limited_to_its_readers(): void

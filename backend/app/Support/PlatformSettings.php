@@ -102,8 +102,10 @@ class PlatformSettings
                 'label' => 'Nouvelle invitation à activer les notifications', 'help' => 'Un membre sans notifications sur son téléphone est réinvité (un seul clic suffit) après ce délai s’il a répondu « Plus tard ».'],
         ]],
         'horaires' => ['Horaires et délais', 'Quand les messages partent.', [
+            'reminders.service_same_day' => ['type' => 'bool', 'default' => false, 'label' => 'Rappel le jour même des cultes',
+                'help' => 'Désactivé : une seule notification par culte, la veille. Activé : aussi un rappel peu avant le début.'],
             'reminders.service_lead_minutes' => ['type' => 'int', 'default' => 35, 'min' => 15, 'max' => 120, 'unit' => 'minutes',
-                'label' => 'Rappel avant chaque culte', 'help' => 'Combien de temps avant le début d’un culte régulier le rappel est envoyé.'],
+                'label' => 'Rappel avant chaque culte', 'help' => 'Si le rappel du jour même est activé : combien de temps avant le début il part.'],
             'reminders.digest_hour' => ['type' => 'int', 'default' => 18, 'min' => 16, 'max' => 21, 'unit' => 'h',
                 'label' => 'Programme du lendemain envoyé à partir de', 'help' => 'Heure à partir de laquelle part le programme du lendemain.'],
             'fiss.reminder_from_day' => ['type' => 'int', 'default' => 8, 'min' => 1, 'max' => 20, 'unit' => 'du mois',

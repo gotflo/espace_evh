@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Support\Audit;
 use App\Support\Like;
 use App\Support\ProfileCompletion;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +22,7 @@ use Illuminate\Support\Facades\DB;
  * mutuellement, la confirmation est immediate.
  * Conjoint non inscrit : son nom est garde ; a son inscription, une suggestion est proposee
  * (sans lien automatique).
- * Enfants : nom + annee de naissance ; lien vers un profil existant sur confirmation.
+ * Enfants : nom + age ; lien vers un profil existant sur confirmation.
  */
 class FamilyService
 {
@@ -178,13 +179,13 @@ class FamilyService
     /**
      * Enfants declares (remplace la liste).
      *
-     * @param  array<int, array{name: string, birth_date?: string|null, birth_year?: int|null, user_id?: int|null}>  $children
+     * @param  array<int, array{name: string, age?: int|null, birth_date?: string|null, birth_year?: int|null, user_id?: int|null}>  $children
      */
     public static function setChildren(User $me, bool $hasChildren, array $children): void
     {
         DB::transaction(function () use ($me, $hasChildren, $children) {
-            $before = FamilyLink::where('user_id', $me->id)->where('relation', 'child')->get(['relative_name', 'birth_date', 'birth_year', 'relative_user_id'])
-                ->map(fn ($l) => ['relative_name' => $l->relative_name, 'birth_date' => $l->birth_date?->toDateString(), 'birth_year' => $l->birth_year, 'relative_user_id' => $l->relative_user_id])->all();
+            $before = FamilyLink::where('user_id', $me->id)->where('relation', 'child')->get()
+                ->map(fn ($l) => ['relative_name' => $l->relative_name, 'age' => $l->currentAge(), 'relative_user_id' => $l->relative_user_id])->all();
             $existing = FamilyLink::where('user_id', $me->id)->where('relation', 'child')->get()->keyBy('id');
             FamilyLink::where('user_id', $me->id)->where('relation', 'child')->delete();
 
@@ -194,21 +195,19 @@ class FamilyService
                 abort_if($userId === $me->id, 422, 'Vous ne pouvez pas vous désigner comme enfant.');
                 abort_if($userId && ! self::designable(User::with('profile')->find($userId)), 422, 'Personne introuvable.');
                 $wasConfirmed = $userId && $existing->contains(fn ($l) => (int) $l->relative_user_id === $userId && $l->status === 'confirmed');
-                $birthDate = $child['birth_date'] ?? null;
-                // Ancienne version de l'application (annee seule, sans champ date) : la date deja connue est gardee.
-                if (! array_key_exists('birth_date', $child)) {
+                $age = self::childAge($child);
+                // Sans age ni date (ancienne version de l'application) : l'age deja connu de cet enfant est garde.
+                if ($age === null) {
                     $prev = $existing->first(fn ($l) => ($userId && (int) $l->relative_user_id === $userId)
                         || mb_strtolower(trim((string) $l->relative_name)) === mb_strtolower(trim($child['name'])));
-                    if ($prev?->birth_date && (empty($child['birth_year']) || (int) $child['birth_year'] === $prev->birth_date->year)) {
-                        $birthDate = $prev->birth_date->toDateString();
-                    }
+                    $age = $prev?->currentAge();
                 }
                 $link = FamilyLink::create([
                     'user_id' => $me->id, 'relation' => 'child', 'relative_user_id' => $userId,
                     'relative_name' => mb_substr(trim($child['name']), 0, 150),
-                    // Date complete ; l'annee seule reste acceptee (anciennes versions de l'application).
-                    'birth_date' => $birthDate,
-                    'birth_year' => $birthDate ? (int) substr($birthDate, 0, 4) : ($child['birth_year'] ?? null),
+                    // Age (en annees) donne aujourd'hui ; plus de date de naissance pour les enfants.
+                    'age' => $age, 'age_on' => $age === null ? null : now()->toDateString(),
+                    'birth_date' => null, 'birth_year' => null,
                     'status' => $userId && ! $wasConfirmed ? 'pending' : 'confirmed',
                     'confirmed_at' => $userId && ! $wasConfirmed ? null : now(),
                 ]);
@@ -216,7 +215,7 @@ class FamilyService
                     self::notifyOnce($userId, $me, 'child', ($me->profile?->full_name ?: 'Un membre').' vous a indiqué comme son enfant',
                         'Confirmez ce lien dans votre profil.');
                 }
-                $kept[] = ['relative_name' => $link->relative_name, 'birth_date' => $link->birth_date?->toDateString(), 'birth_year' => $link->birth_year, 'relative_user_id' => $userId];
+                $kept[] = ['relative_name' => $link->relative_name, 'age' => $link->currentAge(), 'relative_user_id' => $userId];
             }
 
             $me->profile->forceFill(['has_children' => $hasChildren, 'children_count' => count($kept)])->save();
@@ -226,6 +225,22 @@ class FamilyService
             }
             ProfileCompletion::refresh($me->profile->fresh());
         });
+    }
+
+    /** Age d'un enfant envoye par l'application : l'age, sinon calcule depuis une date ou une annee (anciennes versions). */
+    private static function childAge(array $child): ?int
+    {
+        if (isset($child['age']) && $child['age'] !== '') {
+            return min(99, max(0, (int) $child['age']));
+        }
+        if (! empty($child['birth_date'])) {
+            return min(99, (int) Carbon::parse($child['birth_date'])->startOfDay()->diffInYears(now()->startOfDay()));
+        }
+        if (! empty($child['birth_year'])) {
+            return min(99, max(0, now()->year - (int) $child['birth_year']));
+        }
+
+        return null;
     }
 
     /**
@@ -257,8 +272,7 @@ class FamilyService
             'children' => $links->where('relation', 'child')->map(fn (FamilyLink $l) => [
                 'id' => $l->id,
                 'name' => $l->relative?->profile?->full_name ?: $l->relative_name,
-                'birth_year' => $l->birth_year,
-                'birth_date' => $l->birth_date?->toDateString(),
+                'age' => $l->currentAge(),
                 'user_id' => $l->relative_user_id,
                 'status' => $l->status,
             ])->values()->all(),

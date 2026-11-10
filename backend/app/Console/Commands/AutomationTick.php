@@ -356,8 +356,11 @@ class AutomationTick extends Command
             if ($event->isMutedOn($date)) {
                 continue;
             }
+            // Cultes : une seule notification, la veille (programme du lendemain) ; le rappel du jour meme seulement
+            // si le compte de gestion l'a active dans les Reglages.
+            $sameDay = PlatformSettings::enabled('reminders.service_same_day');
             if ($event->remind_all && ! $event->is_personal) {
-                if ($minutes > PlatformSettings::int('reminders.service_lead_minutes') || $event->all_day) {
+                if (! $sameDay || $minutes > PlatformSettings::int('reminders.service_lead_minutes') || $event->all_day) {
                     continue;
                 }
                 $sent += $this->serviceReminder($event, $start, $date);
@@ -365,6 +368,9 @@ class AutomationTick extends Command
                 continue;
             }
             $kind = $minutes <= 90 && ! $event->all_day ? 'hour' : 'day';
+            if ($event->category === 'culte' && ! $event->is_personal && ! $sameDay && ($kind === 'hour' || $start->isSameDay($now))) {
+                continue;
+            }
 
             // Evenement quotidien : pas de rappel « veille » (ce serait tous les jours).
             if ($kind === 'day' && $event->recurrence === 'daily') {
@@ -766,11 +772,10 @@ class AutomationTick extends Command
 
     /** Taches (exercices) a rendre demain ou aujourd'hui, non faites (a partir de 9 h). */
     /**
-     * Exercices : invitations nominatives a ceux qui ne l'ont pas termine (video regardee en
-     * entier et/ou reponse envoyee), en journee (8 h - 21 h) :
+     * Exercices : deux rappels au plus (regle de l'eglise : un au debut, un vers la fin), seulement a ceux qui ne
+     * l'ont pas termine (video regardee en entier et/ou reponse envoyee), en journee (8 h - 21 h) :
      * - 2 jours apres la publication (s'il reste plus de 2 jours) ;
-     * - la veille de la fermeture (moins de 24 h) ;
-     * - dernier rappel moins de 3 h avant la fermeture.
+     * - la veille de la fermeture (moins de 24 h).
      * A la fermeture, l'auteur recoit le bilan. Un exercice ferme n'accepte plus rien.
      */
     private function taskReminders(): int
@@ -787,7 +792,6 @@ class AutomationTick extends Command
             foreach ($open as $ex) {
                 $hoursLeft = $ex->closes_at ? $now->diffInMinutes($ex->closes_at, false) / 60 : null;
                 $stage = match (true) {
-                    $hoursLeft !== null && $hoursLeft <= 3 => 'last',
                     $hoursLeft !== null && $hoursLeft <= 24 => 'eve',
                     $ex->created_at->lte($now->copy()->subDays(2)) && ($hoursLeft === null || $hoursLeft > 48) => 'nudge',
                     default => null,
@@ -800,7 +804,7 @@ class AutomationTick extends Command
                     [$title, $body] = $this->taskReminderText($ex, $stage);
 
                     return Notifier::send($recipients, 'task_reminder', $title, $body, '/exercices/'.$ex->id,
-                        ['exercise_id' => $ex->id], $stage === 'last' ? 'high' : 'normal');
+                        ['exercise_id' => $ex->id], $stage === 'eve' ? 'high' : 'normal');
                 });
             }
         }
@@ -832,7 +836,6 @@ class AutomationTick extends Command
         $when = $deadline ? ($deadline->isToday() ? "aujourd'hui à ".$deadline->format('H\\hi') : $deadline->isoFormat('dddd D MMMM [à] H[h]mm')) : null;
 
         return match ($stage) {
-            'last' => ['Dernier rappel : « '.$ex->title.' »', ucfirst($what).". L'exercice se ferme {$when}."],
             'eve' => ['Rappel : « '.$ex->title.' »', ucfirst($what).". Il se ferme {$when}."],
             default => ['À faire : « '.$ex->title.' »', ucfirst($what).($when ? ", avant le {$when}." : '.')],
         };
@@ -946,7 +949,7 @@ class AutomationTick extends Command
         });
     }
 
-    /** Profils incomplets : rappel au membre toutes les 2 semaines (a partir de 10 h), avec les informations manquantes. */
+    /** Profils incomplets : deux rappels au plus (a partir de 10 h), avec les informations manquantes. */
     /**
      * Membres sans adresse courriel (le courriel porte devoirs, rappels et messages importants) : une
      * invitation (notification et push, de 11 h a 19 h), puis un seul rappel 3 semaines plus tard ;
@@ -1007,25 +1010,51 @@ class AutomationTick extends Command
         return $this->settled('profiles', fn () => $this->sendProfileReminders($now));
     }
 
+    /**
+     * Profil incomplet : deux rappels au plus (regle de l'eglise : un au debut, un plus tard), puis plus rien.
+     * Le premier 2 jours apres l'inscription, le second 2 semaines plus tard s'il manque encore quelque chose.
+     * Les rappels deja recus avant cette regle comptent (anciennes cles d'envoi, gardees 4 mois), et chaque envoi
+     * est note sur le compte (au-dela des 4 mois).
+     */
     private function sendProfileReminders(Carbon $now): int
     {
-        $slot = $now->format('o').'-'.intdiv((int) $now->format('W'), 2);
+        // Rappels deja envoyes, par membre : dates (anciennes cles « profile-incomplete:{membre}:{quinzaine} »).
+        $history = [];
+        foreach (DB::table('notification_dispatches')->where('key', 'like', 'profile-incomplete:%')->get(['key', 'sent_at']) as $row) {
+            $uid = (int) explode(':', $row->key)[1];
+            $history[$uid][] = Carbon::parse($row->sent_at)->toDateString();
+        }
         $sent = 0;
         Profile::where('is_completed', true)->where('completion', '<', 100)
             ->whereHas('user', fn ($u) => ActivityService::whereEffective($u))
             ->where('created_at', '<=', $now->copy()->subDays(2))
+            ->with('user:id,notification_prefs')
             // Une transaction par lot : une seule ecriture disque pour 200 rappels au lieu de 400
             // (mesure MySQL, 5 000 membres : 191 s -> quelques secondes). Anti-doublon inchange.
-            ->chunkById(200, function ($profiles) use (&$sent, $slot) {
-                DB::transaction(function () use ($profiles, &$sent, $slot) {
+            ->chunkById(200, function ($profiles) use (&$sent, $now, $history) {
+                DB::transaction(function () use ($profiles, &$sent, $now, $history) {
                     foreach ($profiles as $p) {
-                        $sent += $this->sendOnce("profile-incomplete:{$p->user_id}:{$slot}", function () use ($p) {
+                        $user = $p->user;
+                        if (! $user) {
+                            continue;
+                        }
+                        $prefs = is_array($user->notification_prefs) ? $user->notification_prefs : [];
+                        $dates = array_values(array_unique(array_merge($history[$p->user_id] ?? [], (array) ($prefs['profile_reminders'] ?? []))));
+                        sort($dates);
+                        $count = count($dates);
+                        $due = $count === 0 || ($count === 1 && Carbon::parse(end($dates))->lte($now->copy()->subDays(14)));
+                        if (! $due) {
+                            continue;
+                        }
+                        $sent += $this->sendOnce('profile-reminder:'.$p->user_id.':'.($count + 1), function () use ($p, $user, $prefs, $dates, $now) {
                             $c = ProfileCompletion::for($p);
                             if (! $c['missing']) {
                                 ProfileCompletion::refresh($p);
 
                                 return 0;
                             }
+                            $prefs['profile_reminders'] = array_merge($dates, [$now->toDateString()]);
+                            $user->forceFill(['notification_prefs' => $prefs])->save();
 
                             return Notifier::send([$p->user_id], 'profile', "Complétez votre profil ({$c['percent']} %)",
                                 'Il manque : '.implode(', ', array_slice(array_column($c['missing'], 'label'), 0, 4)).'.', '/mon-profil', [], 'low');

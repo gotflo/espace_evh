@@ -16,4 +16,8 @@ return [
         // Duree de validite d'un code d'activation genere sur le serveur (heures).
         'activation_code_ttl_hours' => (int) env('PLATFORM_MANAGER_ACTIVATION_TTL_HOURS', 24),
     ],
+
+    // Video du guide de l'application, envoyee a chaque nouveau membre quand le pasteur valide son inscription
+    // (courriel). Lien donne par l'eglise le 09/11/2026.
+    'guide_video_url' => env('GUIDE_VIDEO_URL', 'https://youtu.be/vYO2_5nEEx8'),
 ];

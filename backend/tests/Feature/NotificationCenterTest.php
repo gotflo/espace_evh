@@ -108,7 +108,7 @@ class NotificationCenterTest extends TestCase
         $this->artisan('app:tick', ['--only' => 'service-digest'])->assertSuccessful();
         $this->travelTo(Carbon::parse($soon('2026-12-20')));
         $this->artisan('app:tick', ['--only' => 'event-reminders'])->assertSuccessful();
-        $this->assertGreaterThanOrEqual($event->all_day ? 1 : 2, $cocktail(), 'programme de la veille (et rappel juste avant) : revenus');
+        $this->assertSame(1, $cocktail(), 'programme de la veille revenu (une seule notification, rien le jour meme)');
     }
 
     public function test_an_automatic_reminder_can_be_turned_off_or_paused_for_a_period(): void

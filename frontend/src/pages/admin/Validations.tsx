@@ -211,7 +211,7 @@ export default function Validations() {
 
   /**
    * Apres une decision : nouvelle liste lue d'abord ; si la demande l'a quittee (et pas une approbation partielle,
-   * ex. une seule des deux tribus), sa carte s'efface en 0,34 s, puis la liste a jour s'affiche. Rien a attendre
+   * ex. une seule des deux tribus), sa carte s'efface en 0,26 s, puis la liste a jour s'affiche. Rien a attendre
    * pour qui a demande a son appareil de reduire les animations.
    */
   async function settle(key: string) {
@@ -220,7 +220,7 @@ export default function Validations() {
       const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
       if (!reduce && !presentKeys(fresh).has(key)) {
         setLeaving(key)
-        await new Promise((r) => setTimeout(r, 340))
+        await new Promise((r) => setTimeout(r, 260))
       }
       setData(fresh)
       setLoadError('')

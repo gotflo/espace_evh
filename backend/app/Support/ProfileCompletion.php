@@ -45,9 +45,9 @@ class ProfileCompletion
         }
         if ($p->has_children) {
             $count = $family !== null ? $family['children'] : FamilyLink::where('user_id', $p->user_id)->where('relation', 'child')->count();
-            // Date de naissance complete de chaque enfant (les enfants saisis avec la seule annee restent a completer).
-            $dated = $family !== null ? ($family['children_dated'] ?? $count) : FamilyLink::where('user_id', $p->user_id)->where('relation', 'child')->whereNotNull('birth_date')->count();
-            $checks['children'] = ['Nom et date de naissance des enfants', $count > 0 && $dated >= $count && (! $p->children_count || $count >= $p->children_count)];
+            // Nom et age de chaque enfant.
+            $dated = $family !== null ? ($family['children_dated'] ?? $count) : FamilyLink::where('user_id', $p->user_id)->where('relation', 'child')->whereNotNull('age')->count();
+            $checks['children'] = ['Nom et âge des enfants', $count > 0 && $dated >= $count && (! $p->children_count || $count >= $p->children_count)];
         }
 
         $missing = [];
@@ -85,7 +85,7 @@ class ProfileCompletion
         $spouses = FamilyLink::whereIn('user_id', $ids)->where('relation', 'spouse')
             ->whereIn('status', ['pending', 'confirmed'])->pluck('user_id')->flip();
         $children = FamilyLink::whereIn('user_id', $ids)->where('relation', 'child')
-            ->selectRaw('user_id, count(*) as n, count(birth_date) as d')->groupBy('user_id')->get()->keyBy('user_id');
+            ->selectRaw('user_id, count(*) as n, count(age) as d')->groupBy('user_id')->get()->keyBy('user_id');
         // Profils sans tribu : roles lus en une fois (dispense de tribu), et non un par un.
         EloquentCollection::make($list->filter(fn ($p) => ! $p->tribe_id)->values()->all())->loadMissing('user.roles');
         $changed = 0;

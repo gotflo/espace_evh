@@ -94,17 +94,17 @@
 .tribe-locked .helper { margin-top: 0; }
 @media (max-width: 420px) { .tribe-grid { grid-template-columns: repeat(2, 1fr); } }
 
-/* ---------- Enfants : date de naissance complete ---------- */
-.child-row { grid-template-columns: 28px minmax(0, 1fr) 160px auto; }
-.child-date { min-width: 0; }
-.child-hint { grid-column: 2 / -1; margin: -0.15rem 0 0; font-size: 0.78rem; color: #8a5a00; }
-/* Ordinateur : le lien vers un membre reste sur la ligne de l'enfant, l'indication passe dessous. */
+/* ---------- Enfants : nom et age ---------- */
+.child-row { grid-template-columns: 28px minmax(0, 1fr) 104px auto; }
+.child-age { display: flex; align-items: center; gap: 0.35rem; min-width: 0; font-size: 0.85rem; color: var(--text-soft); }
+.child-age .input { min-width: 0; width: 100%; text-align: center; padding-left: 0.4rem; padding-right: 0.4rem; }
+/* Ordinateur : le lien vers un membre reste sur la ligne de l'enfant. */
 .child-row > .child-link, .child-row > .chip-toggle { grid-row: 1; grid-column: 4; }
 .child-row > .child-link[open] { grid-row: auto; grid-column: 1 / -1; }
 @media (max-width: 640px) {
-  .child-row { grid-template-columns: 26px minmax(0, 1fr); }
-  .child-row .child-date, .child-row .child-hint, .child-row .child-link, .child-row > .chip-toggle { grid-column: 2 / -1; justify-self: stretch; }
-  .child-row .child-link, .child-row > .chip-toggle { justify-self: start; grid-row: auto; }
+  /* Telephone : nom et age sur la meme ligne, le lien vers un membre dessous. */
+  .child-row { grid-template-columns: 26px minmax(0, 1fr) 92px; }
+  .child-row .child-link, .child-row > .chip-toggle { grid-column: 2 / -1; justify-self: start; grid-row: auto; }
 }
 
 /* ---------- FISS : vie interieure ---------- */

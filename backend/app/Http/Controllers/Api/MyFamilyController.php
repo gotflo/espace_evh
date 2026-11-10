@@ -44,6 +44,9 @@ class MyFamilyController extends Controller
             'has_children' => ['required', 'boolean'],
             'children' => ['array', 'max:20'],
             'children.*.name' => ['required', 'string', 'min:2', 'max:150'],
+            // Age de chaque enfant (en annees). Date ou annee de naissance encore acceptees (ancienne version de
+            // l'application) : converties en age.
+            'children.*.age' => ['nullable', 'integer', 'min:0', 'max:99'],
             'children.*.birth_year' => ['nullable', 'integer', 'min:1900', 'max:'.now()->year],
             'children.*.birth_date' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:1900-01-01', 'before_or_equal:today'],
             'children.*.user_id' => ['nullable', 'integer', 'exists:users,id'],

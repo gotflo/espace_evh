@@ -18,4 +18,16 @@
   </table>
 
   @include('emails.partials.button', ['url' => $url, 'label' => 'Ouvrir mon espace'])
+
+  @if (! empty($videoUrl))
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="c-tint" bgcolor="#eef6f4" style="margin:22px 0 0; background:#eef6f4; border-radius:14px;">
+    <tr>
+      <td style="padding:14px 18px; font-family:Arial,Helvetica,sans-serif; font-size:14px;">
+        <strong class="c-h" style="color:#0d3f3a;">Le guide de l'application en vidéo</strong><br>
+        <span class="c-t" style="color:#44524f;">Regardez la présentation de l'application pour bien commencer.</span>
+        @include('emails.partials.button', ['url' => $videoUrl, 'label' => 'Regarder la vidéo', 'bg' => '#ffffff', 'fg' => '#0d5f57', 'border' => 'border:2px solid #0d5f57;', 'margin' => '12px 0 2px'])
+      </td>
+    </tr>
+  </table>
+  @endif
 @endsection

@@ -266,7 +266,8 @@ export default function MyProfile() {
         <section className="panel form-panel" id="famille">
           <FamilySection marital={marital} onMarital={setMarital} weddingDay={weddingDay} weddingMonth={weddingMonth}
             onWedding={(d, m) => { setWeddingDay(d); setWeddingMonth(m) }} onSaveProfile={savePersonal} busy={busy} changed={personal.dirty}
-            hasChildrenInitial={profile?.has_children ?? null} />
+            hasChildrenInitial={profile?.has_children ?? null}
+            onFamilySaved={() => { api<{ completion: ProfileCompletion | null }>('/profile').then((r) => setCompletion(r.completion)).catch(() => {}) }} />
         </section>
       )}
 

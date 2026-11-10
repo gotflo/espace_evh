@@ -10,7 +10,7 @@
 @keyframes motion-tab-pop { 0% { transform: scale(1); } 45% { transform: scale(1.12); } 100% { transform: scale(1); } }
 @keyframes motion-badge-pop { from { transform: scale(0.4); opacity: 0; } 70% { transform: scale(1.12); opacity: 1; } to { transform: scale(1); opacity: 1; } }
 @keyframes motion-card-out { to { opacity: 0; transform: translateX(28px) scale(0.98); } }
-@keyframes motion-row-reveal { from { opacity: 0.35; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes motion-row-reveal { from { opacity: 0.7; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 @media (prefers-reduced-motion: no-preference) {
   /* 1. Toucher : leger enfoncement des boutons, onglets et cartes cliquables (reprend leurs transitions existantes). */
@@ -27,31 +27,28 @@
   .chip-toggle:active, .pill-choice:active { transform: scale(0.95); }
 
   /*
-   * 2. Telephone : a l'ouverture du menu, le tiroir glisse (0,25 s) puis ses lignes viennent s'aligner en cascade
-   * rapide ; a l'arrivee de la barre d'onglets du bas (ouverture de l'application), ses onglets montent l'un apres
+   * 2. Telephone : a l'ouverture du menu, le tiroir glisse (0,25 s) et ses lignes viennent s'aligner en cascade
+   * rapide (0,45 s chacune, toutes en place en moins de 0,8 s) ; a l'arrivee de la barre d'onglets du bas (ouverture de l'application), ses onglets montent l'un apres
    * l'autre. La barre reste en place d'une page a l'autre : l'effet ne se rejoue pas a chaque page.
    */
   @media (max-width: 860px) {
-    .sidebar.open .sidebar-nav > * { animation: motion-nav-in 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) 0.12s backwards; }
-    .sidebar.open .sidebar-nav > :nth-child(2) { animation-delay: 0.16s; }
-    .sidebar.open .sidebar-nav > :nth-child(3) { animation-delay: 0.20s; }
-    .sidebar.open .sidebar-nav > :nth-child(4) { animation-delay: 0.24s; }
-    .sidebar.open .sidebar-nav > :nth-child(5) { animation-delay: 0.28s; }
-    .sidebar.open .sidebar-nav > :nth-child(6) { animation-delay: 0.32s; }
-    .sidebar.open .sidebar-nav > :nth-child(7) { animation-delay: 0.36s; }
-    .sidebar.open .sidebar-nav > :nth-child(8) { animation-delay: 0.40s; }
-    .sidebar.open .sidebar-nav > :nth-child(9) { animation-delay: 0.44s; }
-    .sidebar.open .sidebar-nav > :nth-child(10) { animation-delay: 0.48s; }
-    .sidebar.open .sidebar-nav > :nth-child(11) { animation-delay: 0.52s; }
-    .sidebar.open .sidebar-nav > :nth-child(12) { animation-delay: 0.56s; }
-    .sidebar.open .sidebar-nav > :nth-child(n + 13) { animation-delay: 0.56s; }
-    .sidebar.open .sidebar-foot { animation: motion-nav-in 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) 0.56s backwards; }
+    .sidebar.open .sidebar-nav > * { animation: motion-nav-in 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) 0.08s backwards; }
+    .sidebar.open .sidebar-nav > :nth-child(2) { animation-delay: 0.105s; }
+    .sidebar.open .sidebar-nav > :nth-child(3) { animation-delay: 0.130s; }
+    .sidebar.open .sidebar-nav > :nth-child(4) { animation-delay: 0.155s; }
+    .sidebar.open .sidebar-nav > :nth-child(5) { animation-delay: 0.180s; }
+    .sidebar.open .sidebar-nav > :nth-child(6) { animation-delay: 0.205s; }
+    .sidebar.open .sidebar-nav > :nth-child(7) { animation-delay: 0.230s; }
+    .sidebar.open .sidebar-nav > :nth-child(8) { animation-delay: 0.255s; }
+    .sidebar.open .sidebar-nav > :nth-child(9) { animation-delay: 0.280s; }
+    .sidebar.open .sidebar-nav > :nth-child(n + 10) { animation-delay: 0.3s; }
+    .sidebar.open .sidebar-foot { animation: motion-nav-in 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) 0.3s backwards; }
 
-    .bottom-nav > .bottom-item { animation: motion-tab-in 0.48s cubic-bezier(0.22, 0.61, 0.36, 1) 0.06s backwards; }
-    .bottom-nav > .bottom-item:nth-child(2) { animation-delay: 0.13s; }
-    .bottom-nav > .bottom-item:nth-child(3) { animation-delay: 0.20s; }
-    .bottom-nav > .bottom-item:nth-child(4) { animation-delay: 0.27s; }
-    .bottom-nav > .bottom-item:nth-child(5) { animation-delay: 0.34s; }
+    .bottom-nav > .bottom-item { animation: motion-tab-in 0.32s cubic-bezier(0.22, 0.61, 0.36, 1) 0.03s backwards; }
+    .bottom-nav > .bottom-item:nth-child(2) { animation-delay: 0.07s; }
+    .bottom-nav > .bottom-item:nth-child(3) { animation-delay: 0.11s; }
+    .bottom-nav > .bottom-item:nth-child(4) { animation-delay: 0.15s; }
+    .bottom-nav > .bottom-item:nth-child(5) { animation-delay: 0.19s; }
   }
 
   /* 3. Onglet du bas qui devient actif : petite impulsion de l'icone. */
@@ -69,16 +66,16 @@
     .member-row, .validation-card, .serve-card, .agenda-row, .lr-row, .dash-group, .newcomer-row, .settings-news > li {
       animation: motion-row-reveal linear backwards;
       animation-timeline: view();
-      animation-range: entry 0% entry 45%;
+      animation-range: entry 0% entry 30%;
     }
   }
 
   /*
-   * 6. Demande traitee (Validations) : la carte glisse et s'efface (0,34 s) avant que la liste se mette a jour.
+   * 6. Demande traitee (Validations) : la carte glisse et s'efface (0,26 s) avant que la liste se mette a jour.
    * Deux classes : passe devant l'apparition au defilement (dont la ligne de temps est remise a zero).
    */
   .validation-card.is-leaving {
-    animation: motion-card-out 0.34s cubic-bezier(0.4, 0, 0.9, 0.6) forwards;
+    animation: motion-card-out 0.26s cubic-bezier(0.4, 0, 0.9, 0.6) forwards;
     animation-timeline: auto;
     animation-range: normal;
     pointer-events: none;

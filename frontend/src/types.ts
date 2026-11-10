@@ -747,7 +747,8 @@ export interface FamilyOverview {
   /** can_open (vue d'un responsable) : la fiche du proche s'ouvrira pour lui. */
   spouse: { id: number; user_id: number | null; name: string | null; tribe: string | null; photo_url: string | null; status: 'pending' | 'confirmed' | 'declined'; can_open?: boolean } | null
   spouse_name: string | null
-  children: { id: number; name: string; birth_year: number | null; birth_date?: string | null; user_id: number | null; status: string; can_open?: boolean }[]
+  /** age : en annees (il avance d'un an chaque annee depuis le jour ou il a ete donne). */
+  children: { id: number; name: string; age: number | null; user_id: number | null; status: string; can_open?: boolean }[]
   incoming: { id: number; relation: 'spouse' | 'child'; from: string; from_user_id: number }[]
   suggestions: FamilyPerson[]
 }

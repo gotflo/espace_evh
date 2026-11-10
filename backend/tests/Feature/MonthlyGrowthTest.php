@@ -143,48 +143,78 @@ class MonthlyGrowthTest extends TestCase
         $this->putJson('/api/admin/service-schedule/'.$other->id, ['title' => 'Culte', 'day' => 1, 'start' => '10:00'])->assertNotFound();
     }
 
-    // ---------------------------------------------------------------- 2. Enfants : date de naissance complete
+    // ---------------------------------------------------------------- 2. Enfants : nom et age (demande du 09/11)
 
-    public function test_children_are_saved_with_their_full_birth_date(): void
+    public function test_children_are_saved_with_their_name_and_age(): void
     {
         $this->as($this->marie);
-        $this->putJson('/api/me/family/children', ['has_children' => true, 'children' => [
-            ['name' => 'Paul', 'birth_date' => '2014-05-03'],
-            ['name' => 'Léa', 'birth_date' => '2030-01-01'],
-        ]])->assertStatus(422)->assertJsonValidationErrors('children.1.birth_date');
+        foreach ([120, -1] as $bad) {
+            $this->putJson('/api/me/family/children', ['has_children' => true, 'children' => [['name' => 'Paul', 'age' => $bad]]])
+                ->assertStatus(422)->assertJsonValidationErrors('children.0.age');
+        }
 
         $res = $this->putJson('/api/me/family/children', ['has_children' => true, 'children' => [
-            ['name' => 'Paul', 'birth_date' => '2014-05-03'],
-            ['name' => 'Léa', 'birth_date' => '2019-12-24'],
+            ['name' => 'Paul', 'age' => 12], ['name' => 'Léa', 'age' => 0],
         ]])->assertOk();
-        $this->assertSame(['2014-05-03', '2019-12-24'], collect($res->json('family.children'))->pluck('birth_date')->all());
-        $this->assertSame(2014, FamilyLink::where('relative_name', 'Paul')->value('birth_year'));
+        $this->assertSame([12, 0], collect($res->json('family.children'))->pluck('age')->all());
+        $paul = FamilyLink::where('relative_name', 'Paul')->first();
+        $this->assertSame([12, '2026-10-14', null, null], [$paul->age, $paul->age_on->toDateString(), $paul->birth_date, $paul->birth_year]);
 
-        // Ancienne version de l'application (annee seule) : la date connue n'est pas perdue.
+        // Ancienne version de l'application : une date (ou une annee) est convertie en age ; sans rien, l'age connu reste.
         $this->putJson('/api/me/family/children', ['has_children' => true, 'children' => [
-            ['name' => 'Paul', 'birth_year' => 2014], ['name' => 'Léa', 'birth_year' => 2019],
+            ['name' => 'Paul'], ['name' => 'Léa', 'birth_date' => '2019-12-24'], ['name' => 'Tom', 'birth_year' => 2020],
         ]])->assertOk();
-        $this->assertSame('2014-05-03', FamilyLink::where('relative_name', 'Paul')->first()->birth_date->toDateString());
+        $this->assertSame([12, 6, 6], FamilyLink::where('user_id', $this->marie->id)->where('relation', 'child')->orderBy('id')->pluck('age')->all());
+        $this->assertSame(0, FamilyLink::whereNotNull('birth_date')->count(), 'plus aucune date de naissance d\'enfant enregistree');
 
-        // Le responsable voit la date complete.
+        // Un an plus tard : l'age a avance d'un an, pour le parent comme pour le responsable.
+        Carbon::setTestNow(Carbon::parse('2027-10-15 11:00:00'));
+        $this->assertSame(13, $this->getJson('/api/me/family')->assertOk()->json('children.0.age'));
         $this->as($this->patriarch);
         $children = $this->getJson('/api/admin/members/'.$this->marie->id)->assertOk()->json('family.children');
-        $this->assertSame('2019-12-24', $children[1]['birth_date']);
+        $this->assertSame([13, 7, 7], array_column($children, 'age'));
+        $this->assertArrayNotHasKey('birth_date', $children[0]);
     }
 
-    public function test_a_child_with_only_a_birth_year_keeps_the_profile_incomplete(): void
+    public function test_a_child_without_age_keeps_the_profile_incomplete(): void
     {
         $profile = $this->marie->profile;
         $profile->forceFill(['has_children' => true, 'children_count' => 1, 'marital_status' => 'celibataire', 'birth_day' => 2, 'birth_month' => 3])->save();
-        FamilyLink::create(['user_id' => $this->marie->id, 'relation' => 'child', 'relative_name' => 'Paul', 'birth_year' => 2014, 'status' => 'confirmed']);
+        FamilyLink::create(['user_id' => $this->marie->id, 'relation' => 'child', 'relative_name' => 'Paul', 'status' => 'confirmed']);
         $missing = collect(ProfileCompletion::for($profile->fresh())['missing'])->pluck('label');
-        $this->assertContains('Nom et date de naissance des enfants', $missing);
+        $this->assertContains('Nom et âge des enfants', $missing);
 
-        FamilyLink::where('user_id', $this->marie->id)->update(['birth_date' => '2014-05-03']);
+        FamilyLink::where('user_id', $this->marie->id)->update(['age' => 12, 'age_on' => '2026-10-14']);
         $this->assertSame(100, ProfileCompletion::for($profile->fresh())['percent']);
         // Calcul groupe (tache quotidienne) : meme resultat.
         ProfileCompletion::refreshMany(Profile::whereKey($profile->id)->get());
         $this->assertSame(100, $profile->fresh()->completion);
+    }
+
+    public function test_birth_dates_already_entered_are_replaced_by_the_age(): void
+    {
+        $migration = require database_path('migrations/2026_11_09_100001_children_age.php');
+        $migration->down();
+        $id = fn (string $name, array $birth) => \Illuminate\Support\Facades\DB::table('family_links')->insertGetId($birth + [
+            'user_id' => $this->marie->id, 'relation' => 'child', 'relative_name' => $name, 'status' => 'confirmed', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        // Le 14 octobre 2026 : Paul a eu 12 ans en mai, Lea aura 7 ans en decembre (6 ans aujourd'hui), Tom ne connait que son annee.
+        $paul = $id('Paul', ['birth_date' => '2014-05-03', 'birth_year' => 2014]);
+        $lea = $id('Léa', ['birth_date' => '2019-12-24', 'birth_year' => 2019]);
+        $tom = $id('Tom', ['birth_year' => 2020]);
+        $sans = $id('Sans', []);
+        $spouse = \Illuminate\Support\Facades\DB::table('family_links')->insertGetId(['user_id' => $this->marie->id, 'relation' => 'spouse',
+            'relative_name' => 'Jean', 'birth_year' => 1990, 'status' => 'confirmed', 'created_at' => now(), 'updated_at' => now()]);
+        $migration->up();
+
+        $rows = FamilyLink::whereIn('id', [$paul, $lea, $tom, $sans, $spouse])->get()->keyBy('id');
+        $this->assertSame([12, 6, 6, null], [$rows[$paul]->age, $rows[$lea]->age, $rows[$tom]->age, $rows[$sans]->age]);
+        $this->assertSame('2026-10-14', $rows[$paul]->age_on->toDateString());
+        foreach ([$paul, $lea, $tom] as $child) {
+            $this->assertNull($rows[$child]->birth_date);
+            $this->assertNull($rows[$child]->birth_year);
+        }
+        $this->assertSame(1990, $rows[$spouse]->birth_year, 'seuls les enfants sont convertis');
     }
 
     // ---------------------------------------------------------------- 3. Tribu obligatoire a l'inscription

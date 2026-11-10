@@ -6,6 +6,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Support\Audit;
 use App\Support\LocalTestMode;
+use App\Support\PlatformSettings;
 use App\Support\ProfileCompletion;
 use App\Support\Recipients;
 use Illuminate\Support\Carbon;
@@ -144,6 +145,12 @@ class MembershipService
                 '/admin/membres/'.$member->id, ['user_id' => $member->id]);
             Notifier::send([$member->id], 'system', 'Votre compte est validé',
                 'Bienvenue sur My vasesdhonneur ! Votre espace est ouvert.', '/tableau-de-bord', [], 'high');
+            // Video du guide de l'application : dans le courriel de bienvenue (lien de la video), et ici une
+            // notification qui ouvre le Guide (la meme presentation, dans l'application).
+            if (PlatformSettings::module('guide')) {
+                Notifier::send([$member->id], 'system', 'Le guide de l’application en vidéo',
+                    'Regardez la présentation de l’application pour bien commencer.', '/guide');
+            }
             self::mailPatriarchs($member, $by, $patriarchs);
         } else {
             Audit::log('member.rejected', $profile, $member->id, ['approval_status' => 'pending'], ['approval_status' => 'rejected'], [], $by);
@@ -208,7 +215,8 @@ class MembershipService
         Messenger::queueEmail($email, $member->id, $approve ? 'membership_approved' : 'membership_rejected',
             $approve ? 'Votre compte My vasesdhonneur est validé' : 'Votre demande d\'inscription à My vasesdhonneur',
             $approve ? 'membership-approved' : 'membership-rejected',
-            ['firstName' => $member->profile?->first_name ?: '', 'url' => $url],
+            ['firstName' => $member->profile?->first_name ?: '', 'url' => $url]
+                + ($approve && config('platform.guide_video_url') ? ['videoUrl' => (string) config('platform.guide_video_url')] : []),
             "membership-decision:{$member->id}:".($approve ? 'approved' : 'rejected').':'.$member->approval_decided_at?->timestamp);
     }
 

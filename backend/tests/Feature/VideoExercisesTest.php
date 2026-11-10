@@ -221,9 +221,11 @@ class VideoExercisesTest extends TestCase
         $this->assertSame('Rappel : « Enseignement : la foi »', $reminder->title);
         $this->assertStringContainsString("aujourd'hui à 21h00", $reminder->body);
 
+        // Deux rappels au plus (un au debut, un vers la fin) : le rappel de la veille est le dernier, rien 2 h avant.
+        $this->assertSame('high', $reminder->priority);
         Carbon::setTestNow(Carbon::parse('2026-10-08 19:00'));
         $this->artisan('app:tick', ['--only' => 'tasks'])->assertSuccessful();
-        $this->assertSame('high', UserNotification::where('user_id', $this->member->id)->where('title', 'Dernier rappel : « Enseignement : la foi »')->value('priority'));
+        $this->assertSame(1, UserNotification::where('user_id', $this->member->id)->where('type', 'task_reminder')->count());
 
         // Apres 21 h : ferme, plus rien n'est accepte, et l'auteur recoit le bilan.
         Carbon::setTestNow(Carbon::parse('2026-10-08 21:05'));

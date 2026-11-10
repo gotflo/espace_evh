@@ -97,9 +97,20 @@ class ServiceScheduleTest extends TestCase
         $this->assertStringNotContainsString('Culte de contemplation', $forB[0]->body);
     }
 
-    public function test_everyone_is_reminded_about_30_minutes_before_each_service(): void
+    public function test_a_service_is_reminded_only_the_day_before_unless_same_day_is_turned_on(): void
     {
         $member = $this->member('+14185557004');
+
+        // Regle de l'eglise : une seule notification par culte, la veille. Le jour meme : rien.
+        foreach ([[8, 15], [9, 0], [12, 0], [12, 30]] as [$h, $m]) {
+            Carbon::setTestNow($this->sunday->copy()->setTime($h, $m));
+            $this->artisan('app:tick', ['--only' => 'event-reminders'])->assertSuccessful();
+        }
+        $this->assertSame(0, UserNotification::where('user_id', $member->id)->count(), 'aucun rappel le jour meme');
+
+        // Reglage « Rappel le jour meme des cultes » active : le rappel peu avant revient.
+        \App\Support\PlatformSettings::update(['reminders.service_same_day' => true], null);
+        $this->sunday = $this->sunday->copy()->addWeek();
 
         // 8 h : rien encore (le rappel part dans les 35 minutes qui precedent ; debut a 8 h 45).
         Carbon::setTestNow($this->sunday->copy()->setTime(8, 0));
@@ -168,12 +179,8 @@ class ServiceScheduleTest extends TestCase
         }
         $sent = UserNotification::where('user_id', $member->id)->orderBy('id')->get();
         $this->assertSame("08h45 Temps de prière & d'intercession · 09h30 Culte de contemplation et de célébration · 12h30 Healing Time", $sent[0]->body);
-        $this->assertSame([
-            'Demain dimanche : programme du culte',
-            "Bientôt : Temps de prière & d'intercession",
-            'Bientôt : Culte de contemplation et de célébration',
-            'Bientôt : Healing Time',
-        ], $sent->pluck('title')->all());
+        // Une seule notification : le programme de la veille (rien le jour meme).
+        $this->assertSame(['Demain dimanche : programme du culte'], $sent->pluck('title')->all());
 
         // Ni « Événement modifié » ni « Événement annulé » pour l'inscrit.
         Carbon::setTestNow($this->sunday->copy()->subDays(3)->setTime(10, 0));

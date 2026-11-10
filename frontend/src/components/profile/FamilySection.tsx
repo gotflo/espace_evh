@@ -59,18 +59,17 @@ function PersonSearch({ onPick, placeholder, excludeMarried }: { onPick: (p: Fam
   )
 }
 
-interface ChildRow { name: string; birth_date: string; legacy_year?: number | null; user_id: number | null; linked?: string }
+/** Enfant : nom et age en annees (texte du champ, 0 pour moins d'un an). */
+interface ChildRow { name: string; age: string; user_id: number | null; linked?: string }
 
-const todayIso = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
+/** Age valable : un nombre entier de 0 a 99. */
+const badAge = (a: string) => !/^\d{1,2}$/.test(a.trim())
 
 /**
  * Famille : situation matrimoniale, conjoint(e) (lie seulement apres sa confirmation),
  * date de mariage (ajoutee au calendrier), enfants (lignes generees selon le nombre).
  */
-export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, onWedding, onSaveProfile, busy, changed, hasChildrenInitial }: {
+export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, onWedding, onSaveProfile, busy, changed, hasChildrenInitial, onFamilySaved }: {
   marital: string
   onMarital: (v: string) => void
   weddingDay: string
@@ -81,6 +80,8 @@ export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, on
   /** Situation modifiee depuis le dernier enregistrement (active le bouton). */
   changed: boolean
   hasChildrenInitial?: boolean | null
+  /** Enfants ou conjoint enregistres : la carte « Completez votre profil » se met a jour. */
+  onFamilySaved?: () => void
 }) {
   const [family, setFamily] = useState<FamilyOverview | null>(null)
   const [pick, setPick] = useState<FamilyPerson | null>(null)
@@ -95,7 +96,7 @@ export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, on
   const apply = useCallback((f: FamilyOverview) => {
     setFamily(f)
     setSpouseName(f.spouse_name ?? '')
-    setRows(f.children.map((c) => ({ name: c.name, birth_date: c.birth_date ?? '', legacy_year: c.birth_date ? null : c.birth_year, user_id: c.user_id, linked: c.user_id ? c.name : undefined })))
+    setRows(f.children.map((c) => ({ name: c.name, age: c.age == null ? '' : String(c.age), user_id: c.user_id, linked: c.user_id ? c.name : undefined })))
     setHasChildren(f.children.length > 0 ? true : (hasChildrenInitial ?? null))
     resetKids()
   }, [hasChildrenInitial, resetKids])
@@ -108,6 +109,7 @@ export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, on
     try {
       const r = await fn() as { family?: FamilyOverview }
       if (r?.family) apply(r.family); else load()
+      onFamilySaved?.()
       return true
     } catch { return false /* toast */ } finally { setWorking(false) }
   }
@@ -119,18 +121,16 @@ export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, on
   const respond = (id: number, ok: boolean) => run(() => api(ok ? `/me/family/links/${id}/confirm` : `/me/family/links/${id}/decline`, { method: 'POST' }))
 
   function setCount(n: number) {
-    setRows((prev) => Array.from({ length: n }, (_, i) => prev[i] ?? { name: '', birth_date: '', user_id: null }))
+    setRows((prev) => Array.from({ length: n }, (_, i) => prev[i] ?? { name: '', age: '', user_id: null }))
   }
   const saveChildren = () => run(() => api('/me/family/children', {
     method: 'PUT',
     body: {
       has_children: !!hasChildren,
-      children: hasChildren ? rows.filter((r) => r.name.trim()).map((r) => ({ name: r.name.trim(), birth_date: r.birth_date || null, user_id: r.user_id })) : [],
+      children: hasChildren ? rows.filter((r) => r.name.trim()).map((r) => ({ name: r.name.trim(), age: Number(r.age.trim()), user_id: r.user_id })) : [],
     },
   }))
 
-  const today = todayIso()
-  const badDate = (d: string) => !d || d > today || d < '1900-01-01'
   const spouse = family?.spouse
 
   return (
@@ -249,9 +249,12 @@ export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, on
                   <span className="child-index">{i + 1}</span>
                   <input aria-label="Nom de l'enfant" className="input" value={r.name} placeholder="Nom de l'enfant"
                     onChange={(e) => setRows((p) => p.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} />
-                  <input aria-label={`Date de naissance de ${r.name.trim() || 'l\'enfant'}`} className="input child-date" type="date" min="1900-01-01" max={today} value={r.birth_date}
-                    onChange={(e) => setRows((p) => p.map((x, j) => j === i ? { ...x, birth_date: e.target.value } : x))} />
-                  {!r.birth_date && r.legacy_year ? <p className="child-hint">Né(e) en {r.legacy_year} : précisez le jour et le mois.</p> : null}
+                  <label className="child-age">
+                    <input aria-label={`Âge de ${r.name.trim() || 'l\'enfant'} (en années)`} className="input" type="text" inputMode="numeric" maxLength={2}
+                      placeholder="Âge" value={r.age}
+                      onChange={(e) => { const v = e.target.value.replace(/\D/g, '').slice(0, 2); setRows((p) => p.map((x, j) => j === i ? { ...x, age: v } : x)) }} />
+                    <span aria-hidden>ans</span>
+                  </label>
                   {r.user_id
                     ? <button type="button" className="chip-toggle on" title="Lien avec son profil" onClick={() => setRows((p) => p.map((x, j) => j === i ? { ...x, user_id: null, linked: undefined } : x))}><Icon name="link" size={14} /> {r.linked ?? 'Lié'} ×</button>
                     : <details className="child-link"><summary>Lier à un membre</summary>
@@ -264,10 +267,10 @@ export function FamilySection({ marital, onMarital, weddingDay, weddingMonth, on
         )}
         {hasChildren !== null && (
           <>
-            {hasChildren && rows.some((r) => badDate(r.birth_date)) && (
-              <p className="helper">Indiquez le nom et la date de naissance complète (jour, mois, année) de chaque enfant.</p>
+            {hasChildren && rows.some((r) => badAge(r.age)) && (
+              <p className="helper">Indiquez le nom et l’âge de chaque enfant (0 pour moins d’un an).</p>
             )}
-            <button className="btn btn-ghost" disabled={working || !kids.dirty || (!!hasChildren && rows.some((r) => !r.name.trim() || badDate(r.birth_date)))} onClick={saveChildren}>
+            <button className="btn btn-ghost" disabled={working || !kids.dirty || (!!hasChildren && rows.some((r) => !r.name.trim() || badAge(r.age)))} onClick={saveChildren}>
               {working ? <span className="spinner" /> : 'Enregistrer les enfants'}
             </button>
           </>
