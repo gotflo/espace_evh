@@ -72,8 +72,10 @@ class PlatformSettingsTest extends TestCase
 
     public function test_defaults_keep_the_previous_behaviour(): void
     {
-        $this->assertSame(35, PlatformSettings::int('reminders.service_lead_minutes'));
         $this->assertSame(18, PlatformSettings::int('reminders.digest_hour'));
+        // Plus de rappel le jour meme des cultes (retire a la demande de l'eglise, 09/11) : aucun reglage.
+        $this->assertArrayNotHasKey('reminders.service_same_day', PlatformSettings::definitions());
+        $this->assertArrayNotHasKey('reminders.service_lead_minutes', PlatformSettings::definitions());
         $this->assertSame(6, PlatformSettings::int('push.hourly_limit'));
         $this->assertSame(25, PlatformSettings::int('leader_reports.opens_on_day'));
         $this->assertSame(30, PlatformSettings::int('new_members.window_days'));
@@ -120,14 +122,14 @@ class PlatformSettingsTest extends TestCase
     public function test_a_change_is_saved_logged_and_can_be_reset(): void
     {
         $this->actAs($this->pastor);
-        $this->putJson('/api/admin/settings', ['values' => ['automation.birthdays' => false, 'reminders.service_lead_minutes' => 20]])
+        $this->putJson('/api/admin/settings', ['values' => ['automation.birthdays' => false, 'reminders.digest_hour' => 20]])
             ->assertOk()->assertJsonPath('message', 'Réglages enregistrés.');
         $this->assertFalse(PlatformSettings::enabled('automation.birthdays'));
-        $this->assertSame(20, PlatformSettings::int('reminders.service_lead_minutes'));
+        $this->assertSame(20, PlatformSettings::int('reminders.digest_hour'));
 
         $log = AuditLog::where('action', 'settings.updated')->latest('id')->first();
-        $this->assertSame(['automation.birthdays' => true, 'reminders.service_lead_minutes' => 35], $log->old_values);
-        $this->assertSame(['automation.birthdays' => false, 'reminders.service_lead_minutes' => 20], $log->new_values);
+        $this->assertSame(['automation.birthdays' => true, 'reminders.digest_hour' => 18], $log->old_values);
+        $this->assertSame(['automation.birthdays' => false, 'reminders.digest_hour' => 20], $log->new_values);
 
         $row = collect($this->getJson('/api/admin/settings')->json('groups'))->flatMap(fn ($g) => $g['settings'])->firstWhere('key', 'automation.birthdays');
         $this->assertFalse($row['value']);
@@ -135,7 +137,7 @@ class PlatformSettingsTest extends TestCase
         $this->assertTrue($row['default']);
 
         // Retour a la valeur par defaut : la ligne disparait.
-        $this->putJson('/api/admin/settings', ['values' => ['automation.birthdays' => null, 'reminders.service_lead_minutes' => 35]])->assertOk();
+        $this->putJson('/api/admin/settings', ['values' => ['automation.birthdays' => null, 'reminders.digest_hour' => 18]])->assertOk();
         $this->assertSame(0, DB::table('platform_settings')->count());
         $this->assertTrue(PlatformSettings::enabled('automation.birthdays'));
 
@@ -148,8 +150,9 @@ class PlatformSettingsTest extends TestCase
     public function test_out_of_range_or_unknown_values_are_refused(): void
     {
         $this->actAs($this->pastor);
-        $this->putJson('/api/admin/settings', ['values' => ['reminders.service_lead_minutes' => 5]])->assertStatus(422)
-            ->assertJsonValidationErrors(['values.reminders.service_lead_minutes']);
+        $this->putJson('/api/admin/settings', ['values' => ['reminders.digest_hour' => 5]])->assertStatus(422)
+            ->assertJsonValidationErrors(['values.reminders.digest_hour']);
+        $this->putJson('/api/admin/settings', ['values' => ['reminders.service_same_day' => true]])->assertStatus(422);
         $this->putJson('/api/admin/settings', ['values' => ['reminders.digest_hour' => 23]])->assertStatus(422);
         $this->putJson('/api/admin/settings', ['values' => ['push.hourly_limit' => 'beaucoup']])->assertStatus(422);
         $this->putJson('/api/admin/settings', ['values' => ['automation.fiss' => 'non']])->assertStatus(422);

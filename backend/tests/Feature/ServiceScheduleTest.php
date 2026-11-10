@@ -97,44 +97,22 @@ class ServiceScheduleTest extends TestCase
         $this->assertStringNotContainsString('Culte de contemplation', $forB[0]->body);
     }
 
-    public function test_a_service_is_reminded_only_the_day_before_unless_same_day_is_turned_on(): void
+    public function test_a_service_is_reminded_only_the_day_before_never_on_the_same_day(): void
     {
         $member = $this->member('+14185557004');
 
-        // Regle de l'eglise : une seule notification par culte, la veille. Le jour meme : rien.
-        foreach ([[8, 15], [9, 0], [12, 0], [12, 30]] as [$h, $m]) {
+        // Regle de l'eglise : une seule notification par culte, la veille. Le jour meme : rien, a aucune heure.
+        foreach ([[7, 0], [8, 15], [9, 0], [12, 0], [12, 30], [18, 0]] as [$h, $m]) {
             Carbon::setTestNow($this->sunday->copy()->setTime($h, $m));
             $this->artisan('app:tick', ['--only' => 'event-reminders'])->assertSuccessful();
         }
         $this->assertSame(0, UserNotification::where('user_id', $member->id)->count(), 'aucun rappel le jour meme');
 
-        // Reglage « Rappel le jour meme des cultes » active : le rappel peu avant revient.
-        \App\Support\PlatformSettings::update(['reminders.service_same_day' => true], null);
-        $this->sunday = $this->sunday->copy()->addWeek();
-
-        // 8 h : rien encore (le rappel part dans les 35 minutes qui precedent ; debut a 8 h 45).
-        Carbon::setTestNow($this->sunday->copy()->setTime(8, 0));
-        $this->artisan('app:tick', ['--only' => 'event-reminders'])->assertSuccessful();
-        $this->assertSame(0, UserNotification::where('user_id', $member->id)->count());
-
-        Carbon::setTestNow($this->sunday->copy()->setTime(8, 15));
-        $this->artisan('app:tick', ['--only' => 'event-reminders'])->assertSuccessful();
-        $this->artisan('app:tick', ['--only' => 'event-reminders'])->assertSuccessful();
-        Carbon::setTestNow($this->sunday->copy()->setTime(9, 0));
-        $this->artisan('app:tick', ['--only' => 'event-reminders'])->assertSuccessful();
-        Carbon::setTestNow($this->sunday->copy()->setTime(12, 0));
-        $this->artisan('app:tick', ['--only' => 'event-reminders'])->assertSuccessful();
-        Carbon::setTestNow($this->sunday->copy()->setTime(12, 30));
-        $this->artisan('app:tick', ['--only' => 'event-reminders'])->assertSuccessful();
-
-        $titles = UserNotification::where('user_id', $member->id)->orderBy('id')->pluck('title')->all();
-        $this->assertSame([
-            "Bientôt : Temps de prière & d'intercession",
-            'Bientôt : Culte de contemplation et de célébration',
-            'Bientôt : Healing Time',
-            'Bientôt : Bloom Light · Coin cocktail fraternel',
-        ], $titles);
-        $this->assertSame('high', UserNotification::where('user_id', $member->id)->value('priority'));
+        // La veille au soir : le programme du lendemain, une seule fois.
+        Carbon::setTestNow($this->sunday->copy()->subDay()->setTime(18, 5));
+        $this->artisan('app:tick', ['--only' => 'service-digest'])->assertSuccessful();
+        $this->artisan('app:tick', ['--only' => 'service-digest'])->assertSuccessful();
+        $this->assertSame(['Demain dimanche : programme du culte'], UserNotification::where('user_id', $member->id)->pluck('title')->all());
     }
 
     public function test_leader_can_make_a_recurring_event_a_service_with_reminders_for_all(): void

@@ -356,19 +356,13 @@ class AutomationTick extends Command
             if ($event->isMutedOn($date)) {
                 continue;
             }
-            // Cultes : une seule notification, la veille (programme du lendemain) ; le rappel du jour meme seulement
-            // si le compte de gestion l'a active dans les Reglages.
-            $sameDay = PlatformSettings::enabled('reminders.service_same_day');
+            // Cultes (regle de l'eglise) : une seule notification, la veille (programme du lendemain), jamais le
+            // jour meme.
             if ($event->remind_all && ! $event->is_personal) {
-                if (! $sameDay || $minutes > PlatformSettings::int('reminders.service_lead_minutes') || $event->all_day) {
-                    continue;
-                }
-                $sent += $this->serviceReminder($event, $start, $date);
-
                 continue;
             }
             $kind = $minutes <= 90 && ! $event->all_day ? 'hour' : 'day';
-            if ($event->category === 'culte' && ! $event->is_personal && ! $sameDay && ($kind === 'hour' || $start->isSameDay($now))) {
+            if ($event->category === 'culte' && ! $event->is_personal && ($kind === 'hour' || $start->isSameDay($now))) {
                 continue;
             }
 
@@ -539,23 +533,6 @@ class AutomationTick extends Command
         }
 
         return $sent;
-    }
-
-    /** Rappel des rendez-vous reguliers (cultes) : minutes avant le debut. */
-    public const SERVICE_LEAD_MINUTES = 35;
-
-    /** Rappel ~30 min avant un rendez-vous « rappel a tous » : toute l'audience sauf les absents declares. */
-    private function serviceReminder(Event $event, Carbon $start, string $date): int
-    {
-        return $this->sendOnce("event:{$event->id}:{$date}:soon", function () use ($event, $start, $date) {
-            $absent = EventParticipation::where('event_id', $event->id)->where('occurs_on', $date)
-                ->where('response', 'absent')->pluck('user_id')->all();
-            $where = $event->location ? ' · '.$event->location : '';
-
-            return Notifier::send(array_diff(Audience::userIds($event->audienceList()), $absent), 'event_reminder',
-                'Bientôt : '.$event->title, 'Commence à '.$start->format('H\hi').$where,
-                '/calendrier?date='.$date, ['event_id' => $event->id, 'date' => $date, 'kind' => 'service'], 'high');
-        });
     }
 
     /**

@@ -6,7 +6,8 @@ import { AppLayout } from '../../components/AppLayout'
 import { SkeletonCard } from '../../components/Skeleton'
 import { Icon } from '../../components/Icon'
 import { confirmDiscard, useDirty } from '../../utils/dirty'
-import type { ServiceSlot } from '../../types'import { ModalLayer } from '../../components/ModalLayer'
+import type { ServiceSlot } from '../../types'
+import { ModalLayer } from '../../components/ModalLayer'
 
 
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
@@ -94,7 +95,7 @@ function Editor({ slot, onClose, onSaved }: { slot: ServiceSlot | null; onClose:
           <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
           <span>Prévenir toute l'église de ce changement</span>
         </label>
-        <p className="helper">Chacun reçoit déjà le programme la veille au soir et un rappel 30 minutes avant.</p>
+        <p className="helper">Chacun reçoit déjà le programme la veille au soir (une seule notification, rien le jour même).</p>
         <button className="btn btn-primary mt" disabled={busy || title.trim().length < 2 || !start || endBad} onClick={save}>
           {busy ? <span className="spinner" /> : slot ? 'Enregistrer' : 'Ajouter le rendez-vous'}
         </button>
@@ -124,7 +125,7 @@ export default function ServiceTimes() {
   return (
     <AppLayout title="Horaires des cultes" subtitle="Programme hebdomadaire de toute l'église"
       actions={canEdit ? <button className="btn btn-primary small" onClick={() => setEditing('new')}><Icon name="plus" size={16} /> Ajouter</button> : undefined}>
-      <p className="helper st-intro">Ces horaires apparaissent sur le tableau de bord et dans le calendrier de chacun, avec le programme la veille et un rappel avant chaque rendez-vous.</p>
+      <p className="helper st-intro">Ces horaires apparaissent sur le tableau de bord et dans le calendrier de chacun, avec le programme la veille au soir : une seule notification, rien le jour même.</p>
       {!slots ? <div className="panel-grid"><SkeletonCard /></div> : (
         <div className="st-days">
           {days.map(({ d, items }) => (
