@@ -30,9 +30,25 @@ class MyAssignmentController extends Controller
                 + $this->progressOf($a, $views->get($a->id), $mine->get($a->id)) + [
                     'response' => isset($mine[$a->id]) ? $this->presentResponse($mine[$a->id]) : null,
                 ])->values(),
-            'pending' => $assignments->reject(fn ($a) => AssignmentProgress::isDone($a, $views->get($a->id), $mine->get($a->id)))->count(),
+            // Devoirs a faire : pas encore faits, sauf ceux que l'on a publies soi-meme (l'auteur ne fait pas son devoir).
+            'pending' => $assignments->reject(fn ($a) => (int) $a->created_by === (int) $user->id
+                || AssignmentProgress::isDone($a, $views->get($a->id), $mine->get($a->id)))->count(),
             'prayer_reminder' => self::PRAYER_REMINDER,
         ]);
+    }
+
+    /** Pastille du menu « Mon devoir (DS) » : nombre de devoirs a faire (meme regle que la page). */
+    public function count(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $assignments = Assignment::published()->orderByDesc('published_at')->orderByDesc('id')->limit(30)
+            ->get(['id', 'media_type', 'media_url', 'youtube_id', 'audio_path', 'created_by', 'published_at']);
+        $ids = $assignments->pluck('id');
+        $mine = AssignmentResponse::where('user_id', $user->id)->whereIn('assignment_id', $ids)->get()->keyBy('assignment_id');
+        $views = AssignmentView::where('user_id', $user->id)->whereIn('assignment_id', $ids)->get()->keyBy('assignment_id');
+
+        return response()->json(['pending' => $assignments->reject(fn ($a) => (int) $a->created_by === (int) $user->id
+            || AssignmentProgress::isDone($a, $views->get($a->id), $mine->get($a->id)))->count()]);
     }
 
     /** Resume et actions et resolutions (modifiables ensuite). */

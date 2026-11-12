@@ -228,6 +228,7 @@ Route::middleware(['auth:sanctum', 'throttle:300,1', EnsureNotBlocked::class, Tr
     Route::post('/me/resources/{resource}/progress', [MyResolutionController::class, 'progress'])
         ->whereNumber('resource')->middleware('throttle:video-progress')->middleware('module:resolutions');
     Route::get('/me/assignments', [MyAssignmentController::class, 'index'])->middleware('module:assignments');
+    Route::get('/me/assignments/count', [MyAssignmentController::class, 'count'])->middleware('module:assignments');
     Route::put('/me/assignments/{assignment}/response', [MyAssignmentController::class, 'respond'])->whereNumber('assignment')->middleware('module:assignments');
     Route::post('/me/assignments/{assignment}/progress', [MyAssignmentController::class, 'progress'])
         ->whereNumber('assignment')->middleware('throttle:video-progress')->middleware('module:assignments');

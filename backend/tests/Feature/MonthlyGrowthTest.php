@@ -561,6 +561,34 @@ class MonthlyGrowthTest extends TestCase
         $this->assertNull($body($this->pastor));
     }
 
+    public function test_the_menu_badge_counts_the_devoirs_still_to_do(): void
+    {
+        $video = $this->publishDevoir();
+        $link = $this->publishDevoir(['title' => 'Message en ligne', 'url' => 'https://exemple.org/message']);
+
+        $this->as($this->marie);
+        $this->getJson('/api/me/assignments/count')->assertOk()->assertJsonPath('pending', 2);
+        $this->assertSame(2, $this->getJson('/api/me/assignments')->json('pending'), 'meme nombre que la page');
+        // Lien externe : le resume suffit, il ne compte plus.
+        $this->putJson("/api/me/assignments/{$link}/response", ['summary' => 'Résumé du message.', 'actions' => 'Prier.'])->assertOk();
+        $this->getJson('/api/me/assignments/count')->assertJsonPath('pending', 1);
+        // Video : resume envoye mais video pas terminee, toujours a faire ; video terminee, fait.
+        $this->putJson("/api/me/assignments/{$video}/response", ['summary' => 'Résumé du message.', 'actions' => 'Prier.'])->assertOk();
+        $this->getJson('/api/me/assignments/count')->assertJsonPath('pending', 1);
+        AssignmentView::create(['assignment_id' => $video, 'user_id' => $this->marie->id, 'segments' => [[0, 120]], 'watched_seconds' => 120, 'completed_at' => now()]);
+        $this->getJson('/api/me/assignments/count')->assertJsonPath('pending', 0);
+
+        // Le pasteur, auteur des deux devoirs, n'a rien « a faire ».
+        $this->as($this->pastor);
+        $this->getJson('/api/me/assignments/count')->assertJsonPath('pending', 0);
+        $this->assertSame(0, $this->getJson('/api/me/assignments')->json('pending'));
+
+        // Module coupe : pas de pastille (adresse fermee).
+        \App\Support\PlatformSettings::update(['module.assignments' => false], null);
+        $this->as($this->marie);
+        $this->getJson('/api/me/assignments/count')->assertForbidden();
+    }
+
     public function test_skipping_ahead_is_detected_and_does_not_count(): void
     {
         $id = $this->publishDevoir();

@@ -11,6 +11,7 @@ import type { WatchResult } from '../utils/playback'
 import { usePulse } from '../pulse'
 import type { Assignment, MyAssignmentsData } from '../types'
 import { scrollPageTo } from '../utils/pageScroll'
+import { setAssignmentsPending } from '../utils/assignmentsCount'
 
 const fmt = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' }) : '')
 
@@ -153,7 +154,8 @@ export default function MyAssignments() {
   const [params, setParams] = useSearchParams()
   const [loadError, setLoadError] = useState('')
   const load = useCallback(() => {
-    api<MyAssignmentsData>('/me/assignments').then((d) => { setData(d); setLoadError('') })
+    // La pastille du menu suit la page (devoir enregistre, video terminee : le nombre baisse aussitot).
+    api<MyAssignmentsData>('/me/assignments').then((d) => { setData(d); setLoadError(''); setAssignmentsPending(d.pending) })
       .catch((err) => setLoadError(err instanceof ApiError ? err.firstMessage : 'Erreur.'))
   }, [])
   useEffect(() => { load() }, [load])

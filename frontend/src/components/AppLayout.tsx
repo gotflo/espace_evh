@@ -15,6 +15,7 @@ import { enterAppShell, shellOn } from '../utils/iosViewport'
 import { rememberPageScroll, restorePageScroll, scrollPageTo } from '../utils/pageScroll'
 import { mainRoleLabel } from '../utils/roles'
 import { canValidateWith, useValidationsCount } from '../utils/validationsCount'
+import { useAssignmentsCount } from '../utils/assignmentsCount'
 
 /**
  * Cadre persistant : menu lateral, en-tete et barre du bas sont affiches une seule fois pour
@@ -138,6 +139,11 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
   const unread = useUnreadCount()
   // Demandes a valider : pastille rouge sur « Validations » (et sur « Menu » au telephone, ou ce lien est range).
   const toValidate = useValidationsCount(canValidate).count
+  // Devoirs (DS) pas encore faits : pastille rouge sur « Mon devoir (DS) » (espace membre seulement).
+  const toDo = useAssignmentsCount(!isPlatformManager && moduleOn('assignments'))
+  // Bouton « Menu » du telephone : ce qui attend dans le menu (demandes a valider, devoirs a faire).
+  const inMenu = toValidate + toDo
+  const inMenuLabel = [toValidate > 0 && `${toValidate} demande(s) à valider`, toDo > 0 && `${toDo} devoir(s) à faire`].filter(Boolean).join(' · ')
   // Lien clique : fine barre de progression tant que la page suivante n'est pas affichee
   // (l'ancienne reste visible pendant ce temps, sans ecran blanc).
   const location = useLocation()
@@ -200,7 +206,12 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
               {moduleOn('meditation') && <NavLink to="/meditation" className="nav-item"><Icon path={ICONS.book} /><span>Méditation</span></NavLink>}
               {moduleOn('vertumetre') && <NavLink to="/vertumetre" className="nav-item"><Icon path={ICONS.reports} /><span>Mon Vertumètre</span></NavLink>}
               {moduleOn('resolutions') && <NavLink to="/mes-resolutions" className="nav-item"><Icon path={ICONS.target} /><span>Mes RM</span></NavLink>}
-              {moduleOn('assignments') && <NavLink to="/mon-devoir" className="nav-item"><Icon path={ICONS.devoir} /><span>Mon devoir (DS)</span></NavLink>}
+              {moduleOn('assignments') && (
+                <NavLink to="/mon-devoir" className="nav-item">
+                  <Icon path={ICONS.devoir} /><span>Mon devoir (DS)</span>
+                  {toDo > 0 && <span key={toDo} className="nav-badge" aria-label={`${toDo} devoir(s) à faire`}>{toDo > 99 ? '99+' : toDo}</span>}
+                </NavLink>
+              )}
               {moduleOn('exercises') && <NavLink to="/exercices" className="nav-item"><Icon path={ICONS.play} /><span>Mes exercices</span></NavLink>}
               {!isPastorHost && moduleOn('appointments') && <NavLink to="/rendez-vous" className="nav-item"><Icon path={ICONS.clock} /><span>Prendre rendez-vous</span></NavLink>}
               {moduleOn('contact') && <NavLink to="/contact" className="nav-item"><Icon path={ICONS.requests} /><span>Nous contacter</span></NavLink>}
@@ -302,7 +313,7 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
           <span>Alertes</span>
         </NavLink>
         <button className={`bottom-item ${menuOpen ? 'active' : ''}`} onClick={() => setMenuOpen(true)}>
-          <span className="bottom-icon"><Icon path={ICONS.menu} />{toValidate > 0 && <span key={toValidate} className="bottom-badge" aria-label={`${toValidate} demande(s) à valider`}>{toValidate > 9 ? '9+' : toValidate}</span>}</span>
+          <span className="bottom-icon"><Icon path={ICONS.menu} />{inMenu > 0 && <span key={inMenu} className="bottom-badge" aria-label={inMenuLabel}>{inMenu > 9 ? '9+' : inMenu}</span>}</span>
           <span>Menu</span>
         </button>
       </nav>
