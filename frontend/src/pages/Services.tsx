@@ -52,10 +52,11 @@ export default function Services() {
     } catch { /* toast automatique */ } finally { setBusy(null) }
   }
 
-  const mine = (items ?? []).filter((s) => s.joined)
-  const waiting = (items ?? []).filter((s) => s.pending)
+  // Mes services : ceux ou je sers ET ceux que je dirige (un responsable n'a pas a s'inscrire a son propre service).
+  const mine = (items ?? []).filter((s) => s.joined || s.i_lead)
+  const waiting = (items ?? []).filter((s) => s.pending && !s.i_lead)
   const q = query.trim().toLowerCase()
-  const others = (items ?? []).filter((s) => !s.joined && !s.pending && (!q || s.name.toLowerCase().includes(q) || (s.description ?? '').toLowerCase().includes(q)))
+  const others = (items ?? []).filter((s) => !s.joined && !s.i_lead && !s.pending && (!q || s.name.toLowerCase().includes(q) || (s.description ?? '').toLowerCase().includes(q)))
 
   return (
     <AppLayout title="Service" subtitle="Rejoignez un service et mettez vos dons au service de l'église">
@@ -122,15 +123,15 @@ export default function Services() {
 
 function ServiceCard({ s, busy, onJoin, onLeave }: { s: ServiceItem; busy: boolean; onJoin: () => void; onLeave: () => void }) {
   return (
-    <article className={`serve-card ${s.joined ? 'joined' : ''}`}>
+    <article className={`serve-card ${s.joined || s.i_lead ? 'joined' : ''}`}>
       <div className="serve-card-head">
         <span className="serve-initial" aria-hidden>{s.name.charAt(0).toUpperCase()}</span>
         <div className="serve-card-title">
           <h4>{s.name}</h4>
           <span className="serve-count">{s.members_count} serviteur(s)</span>
         </div>
-        {s.joined && <span className="status-pill on">{s.i_lead ? 'Respo' : 'Je sers ici'}</span>}
-        {s.pending && <span className="status-pill pending">En attente</span>}
+        {(s.joined || s.i_lead) && <span className="status-pill on">{s.i_lead ? 'Respo' : 'Je sers ici'}</span>}
+        {s.pending && !s.i_lead && <span className="status-pill pending">En attente</span>}
       </div>
       {s.description && <p className="serve-desc">{s.description}</p>}
       <div className="serve-meta">
@@ -147,7 +148,7 @@ function ServiceCard({ s, busy, onJoin, onLeave }: { s: ServiceItem; busy: boole
       </div>
       <div className={`serve-actions ${s.i_lead && s.joined ? 'two' : ''}`}>
         {s.i_lead && <Link className="btn btn-ghost small" to={`/admin/membres?groupe=department:${s.id}`}>Ses membres</Link>}
-        {s.joined
+        {s.i_lead && !s.joined ? null : s.joined
           ? <button className="btn-link" disabled={busy} onClick={onLeave}>{busy ? <span className="spinner" /> : 'Quitter ce service'}</button>
           : s.pending
             ? <button className="btn-link" disabled={busy} onClick={onLeave}>{busy ? <span className="spinner" /> : 'Retirer ma demande'}</button>

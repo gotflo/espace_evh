@@ -269,6 +269,38 @@ class AutomationTick extends Command
     }
 
     /**
+     * Comme sendOnce, pour un message qui couvre plusieurs sujets (ex. les rapports de tous les groupes d'un
+     * responsable) : chaque sujet garde sa propre cle ; seuls ceux pas encore envoyes sont reclames et passes a
+     * $send. Echec : toutes les cles prises sont liberees.
+     *
+     * @param  array<int, string>  $keys
+     * @param  callable(array<int, string>): int  $send  recoit les cles reclamees
+     */
+    private function sendOnceMany(array $keys, callable $send): int
+    {
+        $claimed = [];
+        try {
+            return (int) DB::transaction(function () use ($keys, $send, &$claimed) {
+                foreach ($keys as $key) {
+                    if (Notifier::once($key)) {
+                        $claimed[] = $key;
+                    }
+                }
+
+                return $claimed ? $send($claimed) : 0;
+            });
+        } catch (\Throwable $e) {
+            $this->failures++;
+            report($e);
+            foreach ($claimed as $key) {
+                rescue(fn () => Notifier::release($key), report: false);
+            }
+
+            return 0;
+        }
+    }
+
+    /**
      * Travail long, deja protege ligne par ligne (trop gros pour une seule transaction) : une seule fois
      * par cle ; en cas d'echec, la cle est liberee et chaque ligne deja faite n'est pas refaite.
      */
@@ -483,22 +515,55 @@ class AutomationTick extends Command
         $month = LeaderReportService::periodLabel($period);
         $late = $stage === 'last';
 
-        $sent = 0;
+        // Un responsable de plusieurs groupes (tribu, departements) recoit UN rappel qui les nomme tous, et un seul
+        // courriel ; chaque rapport garde sa propre cle (un groupe ajoute plus tard part seul, rien n'est repete).
+        $byUser = [];
         foreach (LeaderReportService::pending($period) as $scope) {
-            $what = ($scope['kind'] === 'tribe' ? 'tribu ' : 'département ').$scope['scope_name'];
             foreach ($scope['user_ids'] as $userId) {
-                $key = "leader-report:{$period}:{$scope['kind']}:{$scope['scope_id']}:{$userId}:{$stage}";
-                $sent += $this->sendOnce($key, fn () => Notifier::send([$userId], 'leader_report',
-                    ($late ? 'Rappel : rapport' : 'Rapport').' '.French::de($month).' à remplir · '
-                        .($scope['kind'] === 'tribe' ? 'Tribu '.$scope['scope_name'] : $scope['scope_name']),
-                    ucfirst($what).' · un questionnaire guidé, quelques minutes suffisent.',
-                    "/admin/rapports-mensuels?remplir={$scope['kind']}:{$scope['scope_id']}&mois={$period}",
-                    ['period' => $period, 'kind' => $scope['kind'], 'scope_id' => $scope['scope_id']], $late ? 'high' : 'normal'));
-                $this->queueMailsOnce('mail:'.$key, function () use ($userId, $period, $stage, $scope) {
-                    if ($leader = User::with('profile')->find($userId)) {
-                        MemberMessages::reportReminder($leader, $period, $stage, $scope['kind'], $scope['scope_id'], $scope['scope_name']);
+                $byUser[$userId][] = $scope;
+            }
+        }
+        $sent = 0;
+        foreach ($byUser as $userId => $scopes) {
+            $keyOf = fn (array $s) => "leader-report:{$period}:{$s['kind']}:{$s['scope_id']}:{$userId}:{$stage}";
+            $fresh = array_values(array_filter($scopes, fn ($s) => ! Notifier::alreadyDone($keyOf($s))));
+            if ($fresh) {
+                $sent += $this->sendOnceMany(array_map($keyOf, $fresh), function (array $claimed) use ($fresh, $keyOf, $userId, $period, $month, $late) {
+                    $list = array_values(array_filter($fresh, fn ($s) => in_array($keyOf($s), $claimed, true)));
+                    if (count($list) === 1) {
+                        $scope = $list[0];
+                        $what = ($scope['kind'] === 'tribe' ? 'tribu ' : 'département ').$scope['scope_name'];
+
+                        return Notifier::send([$userId], 'leader_report',
+                            ($late ? 'Rappel : rapport' : 'Rapport').' '.French::de($month).' à remplir · '
+                                .($scope['kind'] === 'tribe' ? 'Tribu '.$scope['scope_name'] : $scope['scope_name']),
+                            ucfirst($what).' · un questionnaire guidé, quelques minutes suffisent.',
+                            "/admin/rapports-mensuels?remplir={$scope['kind']}:{$scope['scope_id']}&mois={$period}",
+                            ['period' => $period, 'kind' => $scope['kind'], 'scope_id' => $scope['scope_id']], $late ? 'high' : 'normal');
                     }
+                    $names = array_map(fn ($s) => $s['kind'] === 'tribe' ? 'Tribu '.$s['scope_name'] : $s['scope_name'], $list);
+
+                    return Notifier::send([$userId], 'leader_report',
+                        ($late ? 'Rappel : ' : '').count($list).' rapports '.French::de($month).' à remplir',
+                        implode(' · ', $names).' · un questionnaire guidé pour chacun, quelques minutes suffisent.',
+                        "/admin/rapports-mensuels?mois={$period}",
+                        ['period' => $period, 'scopes' => array_map(fn ($s) => $s['kind'].':'.$s['scope_id'], $list)], $late ? 'high' : 'normal');
                 });
+            }
+            // Courriel : un seul pour tous les rapports dont le courriel n'est pas encore parti.
+            $mailFresh = array_values(array_filter($scopes, fn ($s) => ! Notifier::alreadyDone('mail:'.$keyOf($s))));
+            if ($mailFresh) {
+                try {
+                    if ($leader = User::with('profile')->find($userId)) {
+                        MemberMessages::reportReminders($leader, $period, $stage, $mailFresh);
+                    }
+                    foreach ($mailFresh as $s) {
+                        Notifier::once('mail:'.$keyOf($s));
+                    }
+                } catch (\Throwable $e) {
+                    $this->failures++;
+                    report($e);
+                }
             }
         }
 
@@ -1079,15 +1144,38 @@ class AutomationTick extends Command
             ->select('profiles.*')->selectRaw("{$arrival} as arrived_at")
             ->whereRaw("{$arrival} between ? and ?", [$now->copy()->subDays(30)->toDateTimeString(), $now->copy()->subDays(PlatformSettings::int('followups.welcome_after_days'))->toDateTimeString()])
             ->with('user')->get();
-        foreach ($newcomers->chunk(200) as $group) {
-            DB::transaction(function () use ($group, $now, &$sent) {
-                foreach ($group as $p) {
-                    if ($p->user) {
-                        $sent += $this->sendOnce("newcomer:{$p->user_id}", fn () => Notifier::send(Recipients::watchersOf($p->user), 'member',
-                            "À accueillir : {$p->full_name}", 'Arrivé(e) depuis '.(int) NewMemberController::arrivedAt($p)->diffInDays($now, true).' jours, pas encore accueilli(e).',
-                            '/admin/membres/'.$p->user_id, ['user_id' => $p->user_id]));
+        // Un message par responsable : un nouveau (son nom, sa fiche) ou plusieurs (la liste, l'accueil). Chaque
+        // nouveau garde sa cle : jamais deux fois, meme s'il est suivi par plusieurs responsables.
+        $fresh = $newcomers->filter(fn ($p) => $p->user && ! Notifier::alreadyDone("newcomer:{$p->user_id}"))->values();
+        if ($fresh->isNotEmpty()) {
+            $sent += $this->sendOnceMany($fresh->map(fn ($p) => "newcomer:{$p->user_id}")->all(), function (array $claimed) use ($fresh, $now) {
+                $claimedIds = array_flip(array_map(fn ($k) => (int) substr($k, strlen('newcomer:')), $claimed));
+                $byLeader = [];
+                foreach ($fresh as $p) {
+                    if (isset($claimedIds[$p->user_id])) {
+                        foreach (Recipients::watchersOf($p->user) as $leaderId) {
+                            $byLeader[$leaderId][] = $p;
+                        }
                     }
                 }
+                $n = 0;
+                $after = PlatformSettings::int('followups.welcome_after_days');
+                foreach ($byLeader as $leaderId => $list) {
+                    if (count($list) === 1) {
+                        $p = $list[0];
+                        $n += Notifier::send([$leaderId], 'member', "À accueillir : {$p->full_name}",
+                            'Arrivé(e) depuis '.(int) NewMemberController::arrivedAt($p)->diffInDays($now, true).' jours, pas encore accueilli(e).',
+                            '/admin/membres/'.$p->user_id, ['user_id' => $p->user_id]);
+
+                        continue;
+                    }
+                    $names = array_map(fn ($p) => $p->full_name, $list);
+                    $n += Notifier::send([$leaderId], 'member', count($list).' nouveaux à accueillir',
+                        CalendarService::joinNames(array_slice($names, 0, 6)).(count($names) > 6 ? '…' : '').' · arrivés depuis plus de '.$after.' jours, pas encore accueillis.',
+                        '/tableau-de-bord', ['user_ids' => array_map(fn ($p) => (int) $p->user_id, $list)]);
+                }
+
+                return $n;
             });
         }
 

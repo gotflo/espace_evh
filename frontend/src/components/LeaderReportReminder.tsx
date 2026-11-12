@@ -21,6 +21,21 @@ export function LeaderReportReminder() {
   if (!data || !concerned) return null
   const due = data.mine.filter((s) => s.periods.some((p) => p.period === data.due_period && p.status !== 'submitted'))
 
+  // Plusieurs groupes (tribu, departements) : un seul bandeau qui les nomme tous, vers la page des rapports.
+  if (due.length > 1) {
+    return (
+      <button className="fiss-reminder fiss-reminder-advance fiss-reminder-btn"
+        onClick={() => navigate(`/admin/rapports-mensuels?mois=${data.due_period}`)}>
+        <span className="fiss-reminder-icon"><Icon name="clipboard" size={26} /></span>
+        <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+          <strong>{due.length} rapports {de(data.due_label)} à envoyer</strong>
+          <small>{due.map((s) => `${s.kind === 'tribe' ? 'Tribu ' : ''}${s.scope_name}`).join(' · ')} · un questionnaire guidé pour chacun.</small>
+        </div>
+        <span className="fiss-reminder-cta">Voir →</span>
+      </button>
+    )
+  }
+
   return (
     <>
       {due.map((s) => (

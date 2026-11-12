@@ -233,12 +233,57 @@ class MultiDepartmentLeaderTest extends TestCase
         $this->getJson('/api/admin/validations/count')->assertJsonPath('count', 0);
     }
 
-    public function test_the_monthly_reminder_names_each_department(): void
+    public function test_the_monthly_reminder_names_each_group_in_one_message(): void
     {
+        Profile::where('user_id', $this->rachel->id)->update(['email' => 'rachel@exemple.test']);
+        Profile::where('user_id', $this->paul->id)->update(['email' => 'paul@exemple.test']);
         $this->travelTo(Carbon::parse('2026-11-02 10:00'));
         $this->artisan('app:tick', ['--only' => 'leader-reports'])->assertSuccessful();
-        $titles = UserNotification::where('user_id', $this->rachel->id)->where('type', 'leader_report')->orderBy('title')->pluck('title')->all();
-        $this->assertSame(['Rapport d’octobre 2026 à remplir · Accueil', 'Rapport d’octobre 2026 à remplir · Chorale'], $titles);
+        $this->artisan('app:tick', ['--only' => 'leader-reports'])->assertSuccessful();
+
+        // Rachel (deux departements) : UNE notification qui nomme les deux, et UN courriel.
+        $mine = UserNotification::where('user_id', $this->rachel->id)->where('type', 'leader_report')->get();
+        $this->assertCount(1, $mine);
+        $this->assertSame('2 rapports d’octobre 2026 à remplir', $mine[0]->title);
+        $this->assertStringContainsString('Accueil · Chorale', $mine[0]->body);
+        $mails = \App\Models\OutboundMessage::where('kind', 'report_reminder')->where('user_id', $this->rachel->id)->get();
+        $this->assertCount(1, $mails);
+        $html = (new \App\Mail\NotificationMail($mails[0]->subject, $mails[0]->view, $mails[0]->payload))->render();
+        $this->assertStringContainsString('Département Accueil', $html);
+        $this->assertStringContainsString('Département Chorale', $html);
+        // Paul (sa tribu et un departement) : pareil, la tribu et le departement dans le meme message.
+        $this->assertSame(['2 rapports d’octobre 2026 à remplir'], UserNotification::where('user_id', $this->paul->id)->where('type', 'leader_report')->pluck('title')->all());
+        // Simon (un seul departement) : le message habituel, qui ouvre directement son rapport.
+        $simon = UserNotification::where('user_id', $this->simon->id)->where('type', 'leader_report')->sole();
+        $this->assertSame('Rapport d’octobre 2026 à remplir · Chorale', $simon->title);
+
+        // Fin du mois : la relance ne nomme plus que le rapport qui manque (Rachel a envoye celui de l'Accueil).
+        \App\Models\LeaderReport::create(['kind' => 'department', 'scope_id' => $this->accueil->id, 'scope_name' => 'Accueil', 'period' => '2026-10',
+            'author_user_id' => $this->rachel->id, 'status' => 'submitted', 'answers' => [], 'souls' => [], 'submitted_at' => now()]);
+        $this->travelTo(Carbon::parse('2026-11-26 10:00'));
+        $this->artisan('app:tick', ['--only' => 'leader-reports'])->assertSuccessful();
+        $last = UserNotification::where('user_id', $this->rachel->id)->where('type', 'leader_report')->latest('id')->first();
+        $this->assertSame('Rappel : rapport d’octobre 2026 à remplir · Chorale', $last->title);
+        $this->assertSame(2, UserNotification::where('user_id', $this->rachel->id)->where('type', 'leader_report')->count());
+    }
+
+    public function test_newcomers_to_welcome_come_as_one_list_per_leader(): void
+    {
+        $this->travelTo(Carbon::parse('2026-11-10 10:00'));
+        foreach (['Anne', 'Bruno', 'Carole'] as $first) {
+            $u = $this->person($first, 'Nouveau', $this->juda);
+            Profile::where('user_id', $u->id)->update(['created_at' => now()->subDays(5), 'welcomed_at' => null]);
+            User::whereKey($u->id)->update(['approval_decided_at' => now()->subDays(5)]);
+        }
+        $this->artisan('app:tick', ['--only' => 'followups'])->assertSuccessful();
+        $this->artisan('app:tick', ['--only' => 'followups'])->assertSuccessful();
+        // Le patriarche de Juda : un seul message avec les trois noms (et non trois notifications).
+        $got = UserNotification::where('user_id', $this->paul->id)->where('type', 'member')->get();
+        $this->assertCount(1, $got);
+        $this->assertSame('3 nouveaux à accueillir', $got[0]->title);
+        foreach (['Anne', 'Bruno', 'Carole'] as $first) {
+            $this->assertStringContainsString($first, $got[0]->body);
+        }
     }
 
     // ------------------------------------------------------------------ Outils

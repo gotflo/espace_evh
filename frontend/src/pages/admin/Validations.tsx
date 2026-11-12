@@ -188,7 +188,9 @@ function byDepartment(list: ServiceJoinRequest[]): [ServiceJoinRequest['departme
 
 export default function Validations() {
   const navigate = useNavigate()
-  const { isSuperAdmin } = useAuth()
+  const { isSuperAdmin, roles } = useAuth()
+  // Departements que la personne dirige : ses demandes passent avant celles qu'elle valide comme pasteur.
+  const led = new Set(roles.filter((r) => r.key === 'department_leader' && r.scope_id).map((r) => Number(r.scope_id)))
   const [data, setData] = useState<ValidationsData | null>(() => peek<ValidationsData>('/admin/validations') ?? null)
   const [busy, setBusy] = useState<string | null>(null)
   const [rejecting, setRejecting] = useState<MembershipRequest | null>(null)
@@ -307,8 +309,18 @@ export default function Validations() {
       {data && (data.services?.length ?? 0) > 0 && (
         <section className="mb-section" id="services">
           <h3 className="ex-group">Inscriptions aux services <span className="count-soft">{data.services!.length}</span></h3>
-          {/* Responsable de plusieurs services : une liste par service, jamais melangees. */}
-          {byDepartment(data.services!).map(([department, requests], _i, groups) => (
+          {/* Responsable de plusieurs services : une liste par service, jamais melangees ; ses services d'abord. */}
+          {(() => {
+            const groups = byDepartment(data.services!)
+            const mine = groups.filter(([d]) => led.has(d.id))
+            const others = groups.filter(([d]) => !led.has(d.id))
+            const sections: [string | null, typeof groups][] = mine.length && others.length
+              ? [['Vos départements', mine], ['Autres départements', others]] : [[null, groups]]
+            return sections.map(([label, list]) => (
+              <div key={label ?? 'tous'} className="validation-section">
+                {label && <h4 className="validation-section-title">{label}</h4>}
+                {label === 'Autres départements' && <p className="helper">Vous pouvez aussi valider ces demandes, comme pasteur.</p>}
+          {list.map(([department, requests]) => (
           <div key={department.id} className="validation-dept">
           {groups.length > 1 && <h4 className="validation-dept-title">{department.name} <span className="count-soft">{requests.length}</span></h4>}
           <div className="validation-grid">
@@ -333,6 +345,9 @@ export default function Validations() {
           </div>
           </div>
           ))}
+              </div>
+            ))
+          })()}
         </section>
       )}
       {data && (data.deletions?.length ?? 0) > 0 && (

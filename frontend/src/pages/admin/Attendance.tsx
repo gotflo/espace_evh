@@ -161,7 +161,17 @@ export default function Attendance() {
             <label htmlFor="attendance-department">Département</label>
             <select id="attendance-department" className="select" value={departmentId} onChange={(e) => { const id = e.target.value; switchSheet(() => setDepartmentId(id)) }}>
               {!departmentOnly && <option value="">{seesAll ? 'Toute l’église' : (baseGroups.join(' · ') || 'Mon périmètre')}</option>}
-              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              {/* Pasteur qui dirige aussi des departements : les siens d'abord, puis tous les autres. */}
+              {seesAll && myDepartments.length > 0 ? (
+                <>
+                  <optgroup label="Vos départements">
+                    {myDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </optgroup>
+                  <optgroup label="Autres départements">
+                    {departments.filter((d) => !myDepartments.some((m) => m.id === d.id)).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </optgroup>
+                </>
+              ) : departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
         )}

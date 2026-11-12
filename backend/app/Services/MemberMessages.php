@@ -151,6 +151,43 @@ class MemberMessages
             .self::url('/admin/rapports-mensuels')) !== null;
     }
 
+    /**
+     * Rappel du rapport mensuel pour un responsable de plusieurs groupes : un seul courriel qui les nomme tous
+     * (un seul groupe : le courriel habituel).
+     *
+     * @param  array<int, array{kind: string, scope_id: int, scope_name: string}>  $scopes
+     */
+    public static function reportReminders(User $leader, string $period, string $stage, array $scopes): bool
+    {
+        if (count($scopes) === 1) {
+            $s = $scopes[0];
+
+            return self::reportReminder($leader, $period, $stage, $s['kind'], (int) $s['scope_id'], $s['scope_name']);
+        }
+        $month = LeaderReportService::periodLabel($period);
+        $deMonth = French::de(preg_replace('/\s+\d{4}$/', '', $month) ?? $month);
+        $closes = LeaderReportService::closesOn($period)->locale('fr')->isoFormat('dddd D MMMM');
+        $leader->loadMissing('profile');
+        $items = array_map(fn ($s) => [
+            'label' => ucfirst(($s['kind'] === 'tribe' ? 'tribu ' : 'département ').$s['scope_name']),
+            'url' => self::url("/admin/rapports-mensuels?remplir={$s['kind']}:{$s['scope_id']}&mois={$period}"),
+        ], $scopes);
+        $ids = array_map(fn ($s) => $s['kind'].$s['scope_id'], $scopes);
+        sort($ids);
+
+        return Messenger::toMember($leader, 'report_reminder', "report:{$period}:{$stage}:".implode(',', $ids).":{$leader->id}", [
+            'subject' => ($stage === 'last' ? 'Rappel : ' : '').count($scopes).' rapports '.$deMonth.' à transmettre',
+            'view' => 'report-reminder',
+            'data' => [
+                'firstName' => $leader->profile?->first_name ?: 'cher responsable',
+                'stage' => $stage, 'deMonth' => $deMonth, 'closesOn' => $closes,
+                'scopeLabel' => implode(', ', array_column($items, 'label')), 'scopeOf' => '',
+                'items' => $items, 'url' => self::url('/admin/rapports-mensuels?mois='.$period),
+            ],
+        ], 'My vasesdhonneur : '.($stage === 'last' ? 'rappel, ' : '').count($scopes)." rapports {$deMonth} sont a transmettre avant le {$closes} : "
+            .self::url('/admin/rapports-mensuels')) !== null;
+    }
+
     // ---------------------------------------------------------------- Services (departements)
 
     /** Demande d'inscription a un service : courriel au responsable (prefs respectees), lien vers la validation. */
