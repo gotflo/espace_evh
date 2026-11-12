@@ -572,3 +572,6 @@
 @media (max-width: 640px) {
   .panel.medit-form { padding-bottom: 1.2rem; }
 }
+
+/* Suivi du devoir : « Pas encore » en un coup d’oeil. */
+.gr-breakdown { margin: 0.25rem 0 0.6rem; }

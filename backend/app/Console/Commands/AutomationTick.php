@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Http\Controllers\Api\Admin\NewMemberController;
 use App\Models\Assignment;
+use App\Models\AssignmentResponse;
 use App\Models\DepartmentJoinRequest;
 use App\Models\Event;
 use App\Models\EventParticipation;
@@ -719,7 +720,10 @@ class AutomationTick extends Command
         });
     }
 
-    /** Mon devoir : 3 jours apres la publication (10 h - 20 h), une relance a ceux qui ne l'ont pas encore fait. */
+    /**
+     * Mon devoir : 3 jours apres la publication (10 h - 20 h), une relance a ceux qui ne l'ont pas encore fait. Celui
+     * qui a deja envoye son resume (lecture pas terminee) recoit le bon message : terminer la video ou l'ecoute.
+     */
     private function assignmentReminders(): int
     {
         $now = now();
@@ -736,11 +740,17 @@ class AutomationTick extends Command
                 $done = AssignmentProgress::doneUserIds($assignment);
                 $missing = User::whereHas('profile', fn ($p) => $p->where('is_completed', true))
                     ->where(fn ($q) => ActivityService::whereEffective($q))->whereNotIn('id', $done)
-                    ->when($assignment->created_by, fn ($q) => $q->where('id', '!=', $assignment->created_by))->pluck('id');
+                    ->when($assignment->created_by, fn ($q) => $q->where('id', '!=', $assignment->created_by))->pluck('id')->all();
+                $summarised = AssignmentResponse::where('assignment_id', $assignment->id)->whereIn('user_id', $missing)->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+                $listen = $assignment->media_type === 'audio' ? 'l’écoute' : 'la vidéo';
+                $data = ['assignment_id' => $assignment->id];
 
-                return Notifier::send($missing, 'assignment', 'Votre devoir : '.$assignment->title,
+                return Notifier::send(array_diff($missing, $summarised), 'assignment', 'Votre devoir : '.$assignment->title,
                     'Prenez un moment pour le faire, puis écrivez votre résumé et vos résolutions.',
-                    '/mon-devoir?d='.$assignment->id, ['assignment_id' => $assignment->id]);
+                    '/mon-devoir?d='.$assignment->id, $data)
+                    + Notifier::send($summarised, 'assignment', 'Votre devoir : '.$assignment->title,
+                        "Votre résumé est bien reçu. Terminez {$listen} pour que le devoir soit fait.",
+                        '/mon-devoir?d='.$assignment->id, $data);
             });
         }
 

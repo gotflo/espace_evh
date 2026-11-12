@@ -264,7 +264,8 @@ html.app-shell #root > .app { height: 100%; min-height: 0; overflow-x: hidden; o
 /* Choix segmentes (Toute l'eglise / Choisir des groupes...) : sur petit ecran, les libelles passent a la
    ligne plutot que d'etre coupes ou caches par un defilement horizontal. */
 @media (max-width: 560px) {
-  .seg button { white-space: normal; line-height: 1.2; text-align: center; min-width: 0; }
+  /* Jamais un mot coupe en deux (« Vertumètr-e ») : le retour a la ligne se fait entre les mots. */
+  .seg button { white-space: normal; line-height: 1.2; text-align: center; min-width: min-content; overflow-wrap: normal; word-break: normal; }
 }
 
 /* Cadrage d'une photo de profil (PhotoCropper) : cercle sur la photo, glisser / pincer / curseur. */

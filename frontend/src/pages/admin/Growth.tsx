@@ -11,11 +11,14 @@ import type { Assignment } from '../../types'
 import { de } from '../../utils/french'
 import { confirmDiscard, useDirty } from '../../utils/dirty'
 import { LoadError } from '../../components/LoadError'
-import { useYouTubePreview } from '../../utils/youtubePreview'import { ModalLayer } from '../../components/ModalLayer'
+import { useYouTubePreview } from '../../utils/youtubePreview'
+import { ModalLayer } from '../../components/ModalLayer'
 
 
 const fmt = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' }) : '')
 const initial = (name: string) => name.trim()[0]?.toUpperCase() ?? '?'
+/** « a » ou « ont » selon le nombre. */
+const verb = (n: number) => (n > 1 ? 'ont' : 'a')
 const duration = (s: number) => (s >= 60 ? `${Math.floor(s / 60)} min${s % 60 ? ` ${s % 60} s` : ''}` : `${s} s`)
 
 // ---------------------------------------------------------------- Devoirs
@@ -143,6 +146,8 @@ interface ResponsesData {
   missing: ({ user_id: number; name: string; tribe: string | null; photo_url: string | null } & Tracked)[]
   responses_total: number
   missing_total: number
+  /** « Pas encore » : lecture terminee (resume a ecrire), commencee, pas commencee. */
+  missing_breakdown?: { media_done: number; started: number; not_started: number }
   per_page: number
 }
 
@@ -177,6 +182,8 @@ function Responses({ id, onClose }: { id: number; onClose: () => void }) {
     } catch { toast.error('Impossible d’afficher la suite. Vérifiez votre réseau puis réessayez.') } finally { setLoadingMore(false) }
   }
 
+  const audio = data?.assignment.media_type === 'audio'
+
   return (
     <ModalLayer className="modal-overlay" onMouseDown={onClose}>
       <div className="modal-box gr-modal" role="dialog" aria-modal="true" aria-label="Réponses au devoir" onMouseDown={(e) => e.stopPropagation()}>
@@ -207,20 +214,35 @@ function Responses({ id, onClose }: { id: number; onClose: () => void }) {
                 </article>
               ))
             ) : (
-              <ul className="gr-member-list">
-                {data.missing.map((m) => (
-                  <li key={m.user_id}>
-                    <Link className="gr-member" to={`/admin/membres/${m.user_id}`}>
-                      <span className="mini-avatar">{initial(m.name)}</span>
-                      <span className="gr-member-text">
-                        <strong>{m.name}</strong>
-                        <small>{m.tribe ? `Tribu ${m.tribe}` : 'Sans tribu'}{m.status === 'in_progress' && m.percent != null ? ` · commencé (${m.percent} %)` : ''}</small>
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-                {data.missing.length === 0 && <p className="helper">Tout le monde a fait ce devoir.</p>}
-              </ul>
+              <>
+                {data.missing_breakdown && data.assignment.trackable && data.missing_total > 0 && (
+                  <p className="helper gr-breakdown">
+                    {[
+                      data.missing_breakdown.media_done > 0 && `${data.missing_breakdown.media_done} ${verb(data.missing_breakdown.media_done)} ${audio ? 'tout écouté' : 'vu toute la vidéo'} (résumé à écrire)`,
+                      data.missing_breakdown.started > 0 && `${data.missing_breakdown.started} ${verb(data.missing_breakdown.started)} ${audio ? 'commencé l’écoute' : 'commencé la vidéo'}`,
+                      data.missing_breakdown.not_started > 0 && `${data.missing_breakdown.not_started} n’${verb(data.missing_breakdown.not_started)} pas encore commencé`,
+                    ].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+                <ul className="gr-member-list">
+                  {data.missing.map((m) => (
+                    <li key={m.user_id}>
+                      <Link className="gr-member" to={`/admin/membres/${m.user_id}`}>
+                        {m.photo_url ? <img className="mini-avatar" src={m.photo_url} alt="" /> : <span className="mini-avatar">{initial(m.name)}</span>}
+                        <span className="gr-member-text">
+                          <strong>{m.name}</strong>
+                          <small>
+                            {m.tribe ? `Tribu ${m.tribe}` : 'Sans tribu'}
+                            {m.media_completed ? ` · ${audio ? 'tout écouté' : 'vidéo vue en entier'}, résumé à écrire`
+                              : m.status === 'in_progress' && m.percent != null ? ` · commencé (${m.percent} %)` : ''}
+                          </small>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                  {data.missing.length === 0 && <p className="helper">Tout le monde a fait ce devoir.</p>}
+                </ul>
+              </>
             )}
             {(view === 'done' ? data.responses.length < data.responses_total : data.missing.length < data.missing_total) && (
               <div className="center mt"><button className="btn btn-ghost" disabled={loadingMore} onClick={() => void more()}>{loadingMore ? <span className="spinner" /> : 'Voir plus'}</button></div>

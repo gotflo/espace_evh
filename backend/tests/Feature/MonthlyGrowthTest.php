@@ -530,6 +530,37 @@ class MonthlyGrowthTest extends TestCase
         $this->assertSame(1, collect($this->getJson('/api/admin/assignments')->json('assignments'))->firstWhere('id', $id)['done_count']);
     }
 
+    public function test_the_pastor_follows_a_devoir_clearly(): void
+    {
+        $id = $this->publishDevoir();
+        // Marie a vu toute la video sans encore ecrire ; le patriarche a commence ; le Garde a envoye son resume
+        // sans finir la video ; l'autre patriarche n'a rien commence. Le pasteur, auteur, ne fait pas son propre devoir.
+        AssignmentView::create(['assignment_id' => $id, 'user_id' => $this->marie->id, 'segments' => [[0, 120]], 'watched_seconds' => 120, 'completed_at' => now()]);
+        AssignmentView::create(['assignment_id' => $id, 'user_id' => $this->patriarch->id, 'segments' => [[0, 40]], 'watched_seconds' => 40]);
+        AssignmentResponse::create(['assignment_id' => $id, 'user_id' => $this->garde->id, 'summary' => 'Résumé du message.', 'actions' => 'Prier.', 'submitted_at' => now()]);
+        Assignment::whereKey($id)->update(['media_duration' => 120]);
+
+        $this->as($this->pastor);
+        $card = collect($this->getJson('/api/admin/assignments')->assertOk()->json('assignments'))->firstWhere('id', $id);
+        $this->assertSame([0, 1, 4], [$card['done_count'], $card['responses_count'], $card['members_count']], 'l\'auteur n\'est pas compte');
+
+        $res = $this->getJson("/api/admin/assignments/{$id}/responses")->assertOk();
+        $this->assertSame([1, 3], [$res->json('responses_total'), $res->json('missing_total')]);
+        $this->assertSame(['media_done' => 1, 'started' => 1, 'not_started' => 1], $res->json('missing_breakdown'));
+        $missing = collect($res->json('missing'))->keyBy('user_id');
+        $this->assertArrayNotHasKey($this->pastor->id, $missing->all(), 'le pasteur ne figure pas dans « Pas encore »');
+        $this->assertTrue($missing[$this->marie->id]['media_completed']);
+        $this->assertSame('in_progress', collect($res->json('responses'))->firstWhere('user_id', $this->garde->id)['status']);
+
+        // Relance (3 jours apres) : le bon message pour chacun ; rien pour l'auteur.
+        Carbon::setTestNow(now()->addDays(3)->setTime(11, 0));
+        $this->artisan('app:tick', ['--only' => 'assignments'])->assertSuccessful();
+        $body = fn (User $u) => UserNotification::where('user_id', $u->id)->where('type', 'assignment')->value('body');
+        $this->assertSame('Votre résumé est bien reçu. Terminez la vidéo pour que le devoir soit fait.', $body($this->garde));
+        $this->assertSame('Prenez un moment pour le faire, puis écrivez votre résumé et vos résolutions.', $body($this->marie));
+        $this->assertNull($body($this->pastor));
+    }
+
     public function test_skipping_ahead_is_detected_and_does_not_count(): void
     {
         $id = $this->publishDevoir();

@@ -63,23 +63,30 @@ class AssignmentController extends Controller
         $assignments = Assignment::with('creator.profile:id,user_id,first_name,last_name')
             ->orderByDesc('published_at')->orderByDesc('id')->limit(100)->get();
         // Deux comptes groupes par la base (et non des dizaines de milliers de lignes chargees) : resumes
-        // envoyes, et resumes envoyes dont la lecture est terminee.
+        // envoyes, et resumes envoyes dont la lecture est terminee. L'auteur du devoir n'est pas compte : il ne fait
+        // pas son propre devoir (il n'en recoit ni la notification ni la relance).
         $ids = $assignments->pluck('id');
-        $responded = AssignmentResponse::whereIn('assignment_id', $ids)->whereIn('user_id', $memberIds)
-            ->toBase()->selectRaw('assignment_id, count(*) as total')->groupBy('assignment_id')->pluck('total', 'assignment_id');
+        $notAuthor = fn ($q) => $q->join('assignments as a', 'a.id', '=', 'assignment_responses.assignment_id')
+            ->where(fn ($w) => $w->whereNull('a.created_by')->orWhereColumn('assignment_responses.user_id', '!=', 'a.created_by'));
+        $responded = AssignmentResponse::query()->whereIn('assignment_responses.assignment_id', $ids)->whereIn('assignment_responses.user_id', $memberIds)
+            ->tap($notAuthor)
+            ->toBase()->selectRaw('assignment_responses.assignment_id as assignment_id, count(*) as total')->groupBy('assignment_responses.assignment_id')->pluck('total', 'assignment_id');
         $completed = AssignmentResponse::query()->whereIn('assignment_responses.assignment_id', $ids)->whereIn('assignment_responses.user_id', (clone $members)->select('user_id'))
+            ->tap($notAuthor)
             ->join('assignment_views as v', fn ($j) => $j->on('v.assignment_id', '=', 'assignment_responses.assignment_id')->on('v.user_id', '=', 'assignment_responses.user_id'))
             ->whereNotNull('v.completed_at')
             ->toBase()->selectRaw('assignment_responses.assignment_id as assignment_id, count(*) as total')->groupBy('assignment_responses.assignment_id')->pluck('total', 'assignment_id');
+        $authorsInScope = (clone $members)->whereIn('user_id', $assignments->pluck('created_by')->filter()->unique()->values())
+            ->pluck('user_id')->map(fn ($id) => (int) $id)->flip();
 
         return response()->json([
-            'assignments' => $assignments->map(function (Assignment $a) use ($responded, $completed, $total) {
+            'assignments' => $assignments->map(function (Assignment $a) use ($responded, $completed, $total, $authorsInScope) {
                 $responses = (int) ($responded[$a->id] ?? 0);
 
                 return $this->present($a) + [
                     'responses_count' => $responses,
                     'done_count' => $a->isTrackable() ? (int) ($completed[$a->id] ?? 0) : $responses,
-                    'members_count' => $total,
+                    'members_count' => $total - ($a->created_by && isset($authorsInScope[(int) $a->created_by]) ? 1 : 0),
                 ];
             })->values(),
             'can_manage' => $canPublish,
@@ -170,10 +177,17 @@ class AssignmentController extends Controller
         ]);
         $page = (int) ($data['page'] ?? 1);
         $view = $data['view'] ?? null;
-        $scope = $this->scopedMembers($request->user());
+        // L'auteur ne fait pas son propre devoir : ni dans les resumes, ni dans « Pas encore ».
+        $scope = $this->scopedMembers($request->user())
+            ->when($assignment->created_by, fn ($q) => $q->where('user_id', '!=', $assignment->created_by));
         $answered = AssignmentResponse::where('assignment_id', $assignment->id)->select('user_id');
         $responsesTotal = (clone $scope)->whereIn('user_id', $answered)->count();
         $missingTotal = (clone $scope)->whereNotIn('user_id', $answered)->count();
+        // « Pas encore » en un coup d'oeil : lecture terminee (resume a ecrire), commencee, pas commencee.
+        $missingViews = AssignmentView::where('assignment_id', $assignment->id)
+            ->whereIn('user_id', (clone $scope)->whereNotIn('user_id', $answered)->select('user_id'));
+        $mediaDone = $assignment->isTrackable() ? (clone $missingViews)->whereNotNull('completed_at')->count() : 0;
+        $started = $assignment->isTrackable() ? (clone $missingViews)->whereNull('completed_at')->where('watched_seconds', '>', 0)->count() : 0;
 
         $columns = ['user_id', 'first_name', 'last_name', 'tribe_id', 'photo_path'];
         // Resumes : les plus recents d'abord.
@@ -200,6 +214,7 @@ class AssignmentController extends Controller
             'missing' => $waiting->map(fn (Profile $p) => $base($p, null))->values(),
             'responses_total' => $responsesTotal,
             'missing_total' => $missingTotal,
+            'missing_breakdown' => ['media_done' => $mediaDone, 'started' => $started, 'not_started' => max(0, $missingTotal - $mediaDone - $started)],
             'page' => $page,
             'per_page' => self::PER_PAGE,
         ]);
