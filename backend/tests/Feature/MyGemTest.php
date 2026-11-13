@@ -125,6 +125,42 @@ class MyGemTest extends TestCase
         $this->getJson('/api/me/gem')->assertForbidden();
     }
 
+    public function test_an_account_waiting_for_the_pastor_rejected_or_blocked_sees_no_list(): void
+    {
+        foreach ([User::PENDING, User::REJECTED] as $status) {
+            $this->marie->forceFill(['approval_status' => $status])->save();
+            Sanctum::actingAs($this->marie->fresh());
+            $this->getJson('/api/me/gem')->assertForbidden()->assertJsonMissingPath('gem');
+        }
+        $this->marie->forceFill(['approval_status' => User::APPROVED, 'blocked_at' => now()])->save();
+        Sanctum::actingAs($this->marie->fresh());
+        $res = $this->getJson('/api/me/gem');
+        $this->assertContains($res->status(), [401, 403]);
+        $res->assertJsonMissingPath('gem');
+    }
+
+    public function test_leaders_see_only_their_own_gem_here_whatever_their_role(): void
+    {
+        // Un patriarche et un pasteur places dans Silo : la page reste leur GEM, jamais Béthel.
+        $patriarch = $this->person('Paul', 'Patriarche', $this->silo);
+        $patriarch->roles()->attach(Role::where('key', 'patriarche')->value('id'), ['scope_kind' => 'tribe', 'scope_id' => $this->juda->id]);
+        $pastor = $this->person('Pierre', 'Pasteur', null);
+        $pastor->roles()->attach(Role::where('key', 'super_admin')->value('id'));
+
+        Sanctum::actingAs($patriarch->fresh());
+        $this->assertSame(['Olga Ailleurs', 'Paul Patriarche'], array_column($this->getJson('/api/me/gem')->assertOk()->json('gem.members'), 'name'));
+        Sanctum::actingAs($pastor->fresh());
+        $this->getJson('/api/me/gem')->assertOk()->assertExactJson(['gem' => null]);
+    }
+
+    public function test_the_address_takes_no_parameter_to_read_another_gem(): void
+    {
+        Sanctum::actingAs($this->marie->fresh());
+        $this->assertSame('GEM Béthel', $this->getJson('/api/me/gem?gem_id='.$this->silo->id.'&gem='.$this->silo->id.'&user_id='.$this->other->id)->assertOk()->json('gem.label'));
+        $this->getJson('/api/me/gem/'.$this->silo->id)->assertNotFound();
+        $this->postJson('/api/me/gem', ['gem_id' => $this->silo->id])->assertStatus(405);
+    }
+
     private function person(string $first, string $last, ?Gem $gem): User
     {
         $n = ++$this->n;
