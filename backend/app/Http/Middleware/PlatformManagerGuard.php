@@ -24,7 +24,7 @@ class PlatformManagerGuard
         '* api/me/home', '* api/me/overview', '* api/me/month', '* api/me/welcome-back',
         '* api/me/fiss*', '* api/me/vertumetre*', '* api/me/resolutions*', '* api/me/assignments*',
         '* api/me/exercises*', '* api/me/appointments*', '* api/me/requests*', '* api/me/spiritual*', '* api/me/meditations*', '* api/me/resources*',
-        '* api/me/evaluations*', '* api/me/tribe-change*', '* api/me/family*', '* api/me/services*',
+        '* api/me/evaluations*', '* api/me/tribe-change*', '* api/me/family*', '* api/me/services*', '* api/me/gem',
         'POST api/me/events*', 'PUT api/me/events*', 'DELETE api/me/events*',
     ];
 

@@ -57,7 +57,7 @@ export default function PrivacyPolicy() {
             <li><strong>Les pasteurs</strong> (Pasteur Résident et Pasteurs Assistants) suivent l’ensemble de l’église.</li>
             <li>L’administration de la plateforme gère l’application sans accès aux renseignements confidentiels (fiches, suivi spirituel).</li>
           </ul>
-          <p>Les autres membres ne voient de vous que ce qui est utile à la vie de l’église (par exemple votre nom dans un service ou un événement), jamais vos fiches ni votre suivi.</p>
+          <p>Les autres membres ne voient de vous que ce qui est utile à la vie de l’église (par exemple votre nom dans un service ou un événement, votre nom et votre photo pour les membres de votre GEM), jamais vos fiches ni votre suivi.</p>
         </section>
 
         <section>

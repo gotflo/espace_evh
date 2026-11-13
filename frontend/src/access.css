@@ -106,6 +106,16 @@
 .my-gem-name { overflow-wrap: anywhere; }
 .my-gem-garde { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
 .my-gem-garde-text { min-width: 0; overflow-wrap: anywhere; }
+/* Page Mon GEM : liste de lecture (aucun lien), le Garde signale par une etiquette. */
+.my-gem-page { max-width: 640px; }
+.my-gem-title { min-width: 0; overflow-wrap: anywhere; }
+.my-gem-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.my-gem-member { display: flex; align-items: center; gap: 0.7rem; min-width: 0; padding: 0.55rem 0.7rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); }
+.my-gem-member.is-garde { border-color: #c9a227; background: rgba(201, 162, 39, 0.08); }
+.my-gem-member .mini-avatar { width: 40px; height: 40px; }
+.my-gem-member-name { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.my-gem-member-name small { font-weight: 400; color: var(--text-muted); }
+.my-gem-badge { flex-shrink: 0; font-size: 0.74rem; font-weight: 700; padding: 0.22rem 0.65rem; border-radius: 999px; background: #f4e3a1; border: 1px solid #c9a227; color: #5c4400; }
 .res-watch { display: flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; font-weight: 600; color: var(--text-muted); margin-top: 0.25rem; font-style: normal; }
 .res-watch .watch-bar { flex: 1; max-width: 90px; }
 

@@ -18,6 +18,7 @@ const VALIDATORS = ['fiss.review', 'tribes.transfer', 'members.approve', 'depart
 export const PLATFORM = 'platform.manager'
 
 export const APP_VERSIONS: AppVersion[] = [
+  { version: '2.11', items: ['Menu « Mon GEM » : les membres de votre GEM et votre Garde.'] },
   { version: '2.10', items: ['Nombre de devoirs à faire sur « Mon devoir (DS) ».'] },
   { version: '2.9', items: ['Âge des enfants dans le profil.', { text: 'Vidéo du guide envoyée aux nouveaux membres.', perms: ['members.approve'] }] },
   { version: '2.8', items: ['Animations légères.', { text: 'Centre de notifications.', perms: [PLATFORM] }, { text: 'Plus de modules à activer ou couper.', perms: ['settings.manage'] }] },

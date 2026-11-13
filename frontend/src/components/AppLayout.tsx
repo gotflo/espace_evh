@@ -201,6 +201,7 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
               <NavLink to="/tableau-de-bord" className="nav-item"><Icon path={ICONS.dashboard} /><span>Accueil</span></NavLink>
               <NavLink to="/calendrier" className="nav-item"><Icon path={ICONS.calendar} /><span>Calendrier</span></NavLink>
               <NavLink to="/servir" className="nav-item"><Icon path={ICONS.serve} /><span>Service</span></NavLink>
+              <NavLink to="/mon-gem" className="nav-item"><Icon path={ICONS.gem} /><span>Mon GEM</span></NavLink>
               {moduleOn('spiritual') && <NavLink to="/ma-vie-spirituelle" className="nav-item"><Icon path={ICONS.spiritual} /><span>Ma vie spirituelle</span></NavLink>}
               <NavLink to="/ma-fiche" className="nav-item"><Icon path={ICONS.fiss} /><span>Ma fiche (FISS)</span></NavLink>
               {moduleOn('meditation') && <NavLink to="/meditation" className="nav-item"><Icon path={ICONS.book} /><span>Méditation</span></NavLink>}

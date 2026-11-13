@@ -97,6 +97,10 @@ export interface MyGem {
   garde: { name: string; photo_url: string | null; is_me: boolean } | null
 }
 
+/** Page « Mon GEM » : qui compose son GEM (nom et photo seulement, aucun identifiant), le Garde en tete. */
+export interface MyGemMember { name: string; photo_url: string | null; is_garde: boolean; is_me: boolean }
+export interface MyGemData { gem: { label: string; tribe: string | null; members: MyGemMember[] } | null }
+
 export interface AuthPayload {
   user: User
   profile: Profile | null

@@ -51,6 +51,7 @@ use App\Http\Controllers\Api\MyEventController;
 use App\Http\Controllers\Api\MyExerciseController;
 use App\Http\Controllers\Api\MyFamilyController;
 use App\Http\Controllers\Api\MyFissController;
+use App\Http\Controllers\Api\MyGemController;
 use App\Http\Controllers\Api\MyHomeController;
 use App\Http\Controllers\Api\MyMeditationController;
 use App\Http\Controllers\Api\MyMonthController;
@@ -237,6 +238,9 @@ Route::middleware(['auth:sanctum', 'throttle:300,1', EnsureNotBlocked::class, Tr
     Route::get('/me/tribe-change', [MyTribeChangeController::class, 'index']);
     Route::post('/me/tribe-change', [MyTribeChangeController::class, 'store'])->middleware('throttle:member-requests');
     Route::delete('/me/tribe-change/{tribeRequest}', [MyTribeChangeController::class, 'destroy']);
+
+    // --- Mon GEM : qui le compose (nom et photo seulement) et qui en est le Garde ---
+    Route::get('/me/gem', [MyGemController::class, 'show']);
 
     // --- Famille (conjoint, enfants) ---
     Route::get('/me/family', [MyFamilyController::class, 'show']);

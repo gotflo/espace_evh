@@ -131,6 +131,7 @@ class ServiceMap
         'me/services' => 'servir',
         'profile' => 'profil',
         'me/family' => 'profil',
+        'me/gem' => 'profil',
         'me/spiritual-profile' => 'profil',
         'me/tribe-change' => 'profil',
         'me/home' => 'accueil',
