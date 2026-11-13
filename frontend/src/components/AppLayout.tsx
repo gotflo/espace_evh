@@ -141,10 +141,9 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
   const toValidate = useValidationsCount(canValidate).count
   // Devoirs (DS) pas encore faits : pastille rouge sur « Mon devoir (DS) » (espace membre seulement).
   const toDo = useAssignmentsCount(!isPlatformManager && moduleOn('assignments'))
-  // Bouton « Menu » du telephone : jamais deux choses melangees. Qui valide y voit ses demandes a valider (comme
-  // avant) ; les autres, leurs devoirs a faire. Chaque nombre reste aussi sur son propre lien dans le menu.
-  const inMenu = canValidate ? toValidate : toDo
-  const inMenuLabel = canValidate ? `${toValidate} demande(s) à valider` : `${toDo} devoir(s) à faire`
+  // Bouton « Menu » du telephone : ce qui attend dans le menu (demandes a valider, devoirs a faire).
+  const inMenu = toValidate + toDo
+  const inMenuLabel = [toValidate > 0 && `${toValidate} demande(s) à valider`, toDo > 0 && `${toDo} devoir(s) à faire`].filter(Boolean).join(' · ')
   // Lien clique : fine barre de progression tant que la page suivante n'est pas affichee
   // (l'ancienne reste visible pendant ce temps, sans ecran blanc).
   const location = useLocation()
