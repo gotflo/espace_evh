@@ -87,6 +87,8 @@ class PermissionCatalog
         'devoirs' => ['Devoirs (DS)', [
             'assignments.publish' => ['Publier et modifier les devoirs (vidéo ou audio)', 'publish', false],
             'assignments.delete' => ['Retirer des devoirs', 'delete', false],
+            // Confidentielle : on lit la reponse du membre pour l'aimer ou la commenter (jamais le compte de gestion).
+            'assignments.feedback' => ['Aimer et commenter les réponses des membres à leur devoir', 'create', true],
         ]],
         'demandes' => ['Demandes des fidèles', [
             'requests.handle' => ['Lire et traiter les demandes des fidèles', 'view_others', true],

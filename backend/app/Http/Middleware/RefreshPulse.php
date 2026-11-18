@@ -17,7 +17,9 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class RefreshPulse
 {
-    private const IGNORED = ['api/me/*/progress', 'api/me/*/*/progress', 'api/me/notifications*', 'api/me/push*', 'api/push/*', 'api/monitor/*', 'api/auth/*', 'api/me/pulse', 'api/me/announcements/read'];
+    private const IGNORED = ['api/me/*/progress', 'api/me/*/*/progress', 'api/me/notifications*', 'api/me/push*', 'api/push/*', 'api/monitor/*', 'api/auth/*', 'api/me/pulse', 'api/me/announcements/read',
+        // Chat : il a sa propre mise a jour en direct, un message ne recharge pas les ecrans de toute l'eglise.
+        'api/me/chat*'];
 
     public function handle(Request $request, Closure $next): Response
     {

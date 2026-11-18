@@ -336,8 +336,8 @@
 .ds-done-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
 .ds-done-badge { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.84rem; font-weight: 700; color: #137a44; padding: 0.3rem 0.75rem; border-radius: 999px; background: rgba(30, 158, 90, 0.12); }
 .ds-answer { padding: 0.75rem 0.9rem; border-radius: 12px; background: #f6f8f8; }
-.ds-answer span { font-size: 0.76rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #0d5f57; }
-.ds-answer p { margin-top: 0.2rem; white-space: pre-line; overflow-wrap: anywhere; font-size: 0.93rem; }
+.ds-answer > span { font-size: 0.76rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #0d5f57; }
+.ds-answer > p { margin-top: 0.2rem; white-space: pre-line; overflow-wrap: anywhere; font-size: 0.93rem; }
 .ds-list { list-style: none; display: flex; flex-direction: column; gap: 0.35rem; }
 .ds-row {
   width: 100%; display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.5rem; min-height: 56px;
@@ -416,8 +416,8 @@
 .gr-response-head a { font-weight: 700; color: var(--text); }
 .gr-response-head small { color: var(--text-soft); font-size: 0.78rem; }
 .gr-block { padding: 0.55rem 0.75rem; border-radius: 10px; background: #f6f8f8; margin-top: 0.35rem; }
-.gr-block span { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #0d5f57; }
-.gr-block p { font-size: 0.9rem; white-space: pre-line; overflow-wrap: anywhere; margin-top: 0.15rem; }
+.gr-block > span { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #0d5f57; }
+.gr-block > p { font-size: 0.9rem; white-space: pre-line; overflow-wrap: anywhere; margin-top: 0.15rem; }
 .gr-modal { width: 680px; }
 .gr-yt-preview { display: flex; gap: 0.7rem; align-items: center; padding: 0.55rem; border-radius: 12px; background: #e2efed; margin: -0.4rem 0 1rem; font-size: 0.85rem; }
 .gr-yt-preview img { width: 96px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; flex-shrink: 0; }

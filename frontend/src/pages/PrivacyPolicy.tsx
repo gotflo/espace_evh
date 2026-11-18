@@ -57,6 +57,8 @@ export default function PrivacyPolicy() {
             <li><strong>Les pasteurs</strong> (Pasteur Résident et Pasteurs Assistants) suivent l’ensemble de l’église.</li>
             <li>L’administration de la plateforme gère l’application sans accès aux renseignements confidentiels (fiches, suivi spirituel).</li>
           </ul>
+          <p><strong>Devoir (DS) :</strong> votre résumé et vos résolutions sont lus par les pasteurs, votre patriarche et l’Assistant Pasteur de votre tribu. Les « j’aime » et commentaires du pasteur sur votre devoir ne sont vus que de vous et de lui.</p>
+          <p><strong>Chat des GEMs :</strong> seuls les participants d’une discussion lisent ses messages et ses photos (les membres de votre GEM pour la discussion de groupe, vous et l’autre personne pour une discussion privée). Ni vos responsables, ni les pasteurs, ni l’administration de la plateforme n’y ont accès ; le texte des messages est chiffré sur le serveur. Seule exception : un message que l’un des participants choisit de signaler est montré, lui seul, au Pasteur Résident.</p>
           <p>Les autres membres ne voient de vous que ce qui est utile à la vie de l’église (par exemple votre nom dans un service ou un événement, votre nom et votre photo pour les membres de votre GEM), jamais vos fiches ni votre suivi.</p>
         </section>
 

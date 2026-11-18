@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, type ComponentType, type ReactNode } from 'react'
+import { chatPushReceived, openConversation } from './chat/chat'
 import { matchPath, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext'
 import { ShellLayout } from './components/AppLayout'
@@ -49,6 +50,7 @@ const Guide = page(() => import('./pages/Guide'), false, '/guide')
 const MySpiritual = page(() => import('./pages/MySpiritual'), false, '/ma-vie-spirituelle')
 const MyProfile = page(() => import('./pages/MyProfile'), false, '/mon-profil')
 const MyGem = page(() => import('./pages/MyGem'), false, '/mon-gem')
+const Chat = page(() => import('./pages/Chat'), false, '/chat')
 const MyFiss = page(() => import('./pages/MyFiss'), false, '/ma-fiche')
 const MyMeditation = page(() => import('./pages/MyMeditation'), false, '/meditation')
 const Calendar = page(() => import('./pages/Calendar'), false, '/calendrier')
@@ -177,7 +179,8 @@ function PushBridge() {
 
   // Lecture automatique : ouvrir la page visee par une notification la marque comme lue.
   useEffect(() => {
-    if (!isAuthenticated || ['/', '/tableau-de-bord', '/connexion', '/profil'].includes(location.pathname)) return
+    // Le chat a ses propres pastilles (rien dans la cloche) : pas d'appel a chaque discussion ouverte.
+    if (!isAuthenticated || ['/', '/tableau-de-bord', '/connexion', '/profil'].includes(location.pathname) || location.pathname.startsWith('/chat')) return
     const url = location.pathname + location.search
     api<{ count: number }>('/me/notifications/read-url', { method: 'POST', body: { url }, toast: false })
       .then((r) => { if (r.count > 0) setUnread(Math.max(0, getUnread() - r.count)) })
@@ -195,6 +198,15 @@ function PushBridge() {
         const url = new URL(e.data.url, window.location.origin)
         if (url.origin === window.location.origin) navigate(url.pathname + url.search + url.hash)
         void pollNow()
+      } else if (e.data?.type === 'evh-push' && e.data.kind === 'chat') {
+        // Message du chat : liste, pastille et discussion ouverte se relisent tout de suite. Le message ne
+        // s'affiche par-dessus que si sa discussion n'est pas deja a l'ecran.
+        chatPushReceived()
+        void pollNow()
+        const open = openConversation()
+        if (document.visibilityState === 'visible' && typeof e.data.title === 'string' && !(open !== null && e.data.url === `/chat/${open}`)) {
+          toast.info(typeof e.data.body === 'string' ? e.data.body : '', { title: e.data.title })
+        }
       } else if (e.data?.type === 'evh-push' && typeof e.data.title === 'string' && document.visibilityState === 'visible') {
         // Application ouverte : la notification s'affiche ici (l'iPhone ne la montre pas dans la barre).
         toast.info(typeof e.data.body === 'string' ? e.data.body : '', { title: e.data.title })
@@ -259,6 +271,8 @@ export default function App() {
         <Route path="/tableau-de-bord" element={<RequireAuth requireComplete memberSpace><Dashboard /></RequireAuth>} />
         <Route path="/mon-profil" element={<RequireAuth requireComplete memberSpace><MyProfile /></RequireAuth>} />
         <Route path="/mon-gem" element={<RequireAuth requireComplete memberSpace><MyGem /></RequireAuth>} />
+        {/* Chat des GEMs : la liste, et la discussion ouverte (meme page : la liste reste affichee a cote). */}
+        <Route path="/chat/:id?" element={<RequireAuth module="chat" requireComplete memberSpace><Chat /></RequireAuth>} />
         <Route path="/ma-vie-spirituelle" element={<RequireAuth module="spiritual" requireComplete memberSpace><MySpiritual /></RequireAuth>} />
         <Route path="/ma-fiche" element={<RequireAuth requireComplete memberSpace><MyFiss /></RequireAuth>} />
         <Route path="/meditation" element={<RequireAuth module="meditation" requireComplete memberSpace><MyMeditation /></RequireAuth>} />

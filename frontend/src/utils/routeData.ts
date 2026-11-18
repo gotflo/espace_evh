@@ -18,6 +18,7 @@ const ROUTE_DATA: Record<string, string[]> = {
   '/exercices': ['/me/exercises'],
   '/servir': ['/me/services'],
   '/mon-gem': ['/me/gem'],
+  '/chat': ['/me/chat'],
   '/ma-vie-spirituelle': ['/me/spiritual'],
   '/contact': ['/me/requests'],
   '/rendez-vous': ['/me/appointments'],

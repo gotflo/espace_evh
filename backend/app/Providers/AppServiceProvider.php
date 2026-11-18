@@ -69,6 +69,12 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('profile-photo', fn (Request $r) => $r->hasFile('photo')
             ? Limit::perMinute(6)->by('profile-photo:'.($r->user()?->id ?: $r->ip()))
             : Limit::none());
+        // Chat : envoi de messages (une rafale normale passe, pas un robot), photos et reactions a part.
+        RateLimiter::for('chat-send', fn (Request $r) => [
+            Limit::perMinute($r->hasFile('photo') ? 8 : 40)->by('chat-send:'.($r->hasFile('photo') ? 'p:' : '').($r->user()?->id ?: $r->ip())),
+            Limit::perHour(600)->by('chat-send-h:'.($r->user()?->id ?: $r->ip())),
+        ]);
+        RateLimiter::for('chat-react', fn (Request $r) => Limit::perMinute(60)->by('chat-react:'.($r->user()?->id ?: $r->ip())));
         // Compte de gestion (autorisation d'un appareil) : 5 essais par minute et par adresse, verrouillage apres 5 codes faux.
         RateLimiter::for('manager-activation', fn (Request $r) => Limit::perMinute(5)->by('manager-activation:'.$r->ip()));
 

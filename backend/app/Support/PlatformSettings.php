@@ -42,6 +42,8 @@ class PlatformSettings
                 'help' => 'Journal personnel du membre (témoignages, étapes de la foi).'],
             'module.meditation' => ['type' => 'bool', 'default' => true, 'label' => 'Méditation',
                 'help' => 'Fiches de méditation des membres, lues par leur patriarche et les pasteurs.'],
+            'module.chat' => ['type' => 'bool', 'default' => true, 'label' => 'Chat des GEMs',
+                'help' => 'Discussion de groupe de chaque GEM et messages privés entre ses membres. Seuls les participants lisent les messages.'],
             'module.contact' => ['type' => 'bool', 'default' => true, 'label' => 'Nous contacter',
                 'help' => 'Questions, besoins et sujets de prière envoyés par les membres à leurs responsables.'],
             'module.verse' => ['type' => 'bool', 'default' => true, 'label' => 'Verset du moment',

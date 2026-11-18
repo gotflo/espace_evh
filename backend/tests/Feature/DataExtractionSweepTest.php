@@ -3,6 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\Appointment;
+use App\Models\Assignment;
+use App\Models\AssignmentComment;
+use App\Models\AssignmentResponse;
+use App\Models\ChatMessage;
 use App\Models\Department;
 use App\Models\Evaluation;
 use App\Models\Gem;
@@ -17,6 +21,7 @@ use App\Models\SpiritualHealthForm;
 use App\Models\Tribe;
 use App\Models\User;
 use App\Models\VertumetreForm;
+use App\Services\ChatService;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Route;
@@ -50,6 +55,7 @@ class DataExtractionSweepTest extends TestCase
     private const SECRETS = [
         'SECRET-FISS-1', 'SECRET-SUIVI-2', 'SECRET-NOTE-3', 'SECRET-DEMANDE-4', 'SECRET-MEDITATION-5',
         'SECRET-RM-6', 'SECRET-VERTU-7', 'SECRET-RDV-8', '+14185557777', 'victime@secret.test',
+        'SECRET-DEVOIR-9', 'SECRET-COMMENTAIRE-10', 'SECRET-CHAT-11',
     ];
 
     private int $n = 0;
@@ -134,11 +140,22 @@ class DataExtractionSweepTest extends TestCase
         $appointment = Appointment::create(['host_id' => $pastor->id, 'user_id' => $victim->id, 'status' => 'pending', 'urgency' => 'normal',
             'preference' => 'any', 'message' => 'SECRET-RDV-8']);
 
+        // Devoir (DS) de la victime, commente par le pasteur ; message dans le chat de son GEM.
+        $devoir = Assignment::create(['title' => 'Devoir', 'media_type' => 'audio', 'media_url' => 'https://exemple.test/a.mp3', 'published_at' => now()->subDay(), 'created_by' => $pastor->id]);
+        $answer = AssignmentResponse::create(['assignment_id' => $devoir->id, 'user_id' => $victim->id, 'summary' => 'SECRET-DEVOIR-9',
+            'summary_doc' => ['type' => 'doc', 'content' => [['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'SECRET-DEVOIR-9']]]]],
+            'actions' => 'SECRET-DEVOIR-9', 'submitted_at' => now()]);
+        $comment = AssignmentComment::create(['response_id' => $answer->id, 'member_id' => $victim->id, 'author_id' => $pastor->id, 'body' => 'SECRET-COMMENTAIRE-10']);
+        $chat = ChatService::groupFor($silo);
+        $message = ChatMessage::create(['conversation_id' => $chat->id, 'sender_id' => $victim->id, 'body' => 'SECRET-CHAT-11', 'client_id' => 'secret-0001', 'rev' => 1]);
+        $chat->forceFill(['rev' => 1, 'last_message_id' => $message->id, 'last_message_at' => now()])->save();
+
         $this->ids = [
             'user' => $victim->id, 'member' => $victim->id, 'tribe' => $levi->id, 'gem' => $silo->id, 'department' => $kitchen->id,
             'request' => $request->id, 'memberRequest' => $request->id, 'sheet' => $sheet->id, 'meditationSheet' => $sheet->id,
             'evaluation' => $evaluation->id, 'entry' => $entry->id, 'form' => $fiss->id, 'fissForm' => $fiss->id,
             'appointment' => $appointment->id, 'resolution' => $rm->id, 'vertumetre' => $vertu->id,
+            'assignment' => $devoir->id, 'response' => $answer->id, 'comment' => $comment->id, 'conversation' => $chat->id, 'message' => $message->id,
         ];
 
         // Les « attaquants » : aucun ne suit la victime (autre tribu, autre GEM, autre service), roles cumules compris.
@@ -182,6 +199,13 @@ class DataExtractionSweepTest extends TestCase
         Sanctum::actingAs($author);
         $this->assertStringContainsString('SECRET-SUIVI-2', $this->getJson("/api/admin/members/{$victim->id}/spiritual")->assertOk()->getContent());
         $this->assertStringContainsString('SECRET-FISS-1', $this->getJson("/api/admin/members/{$victim->id}/fiss")->assertOk()->getContent());
+        // Le patriarche lit le devoir, mais pas le commentaire du pasteur (choix du 18/11) ; la victime lit les deux et son chat.
+        $ds = $this->getJson("/api/admin/members/{$victim->id}/assignments")->assertOk()->getContent();
+        $this->assertStringContainsString('SECRET-DEVOIR-9', $ds);
+        $this->assertStringNotContainsString('SECRET-COMMENTAIRE-10', $ds);
+        Sanctum::actingAs($victim);
+        $this->assertStringContainsString('SECRET-COMMENTAIRE-10', $this->getJson('/api/me/assignments')->assertOk()->getContent());
+        $this->assertStringContainsString('SECRET-CHAT-11', $this->getJson("/api/me/chat/{$chat->id}")->assertOk()->getContent());
     }
 
     public function test_without_a_session_every_non_public_address_refuses(): void

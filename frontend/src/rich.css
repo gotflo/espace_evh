@@ -1,0 +1,62 @@
+/* Texte enrichi des devoirs : editeur (TipTap) et affichage. Memes styles des deux cotes : ce qu'on ecrit est ce qu'on lit. */
+.rich { position: relative; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--card-bg); transition: border-color 0.15s, box-shadow 0.15s; min-width: 0; }
+.rich:focus-within { border-color: #0d5f57; box-shadow: 0 0 0 3px rgba(13, 95, 87, 0.12); }
+.rich.is-disabled { opacity: 0.6; }
+.rich-toolbar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 0.3rem 0.35rem; border-bottom: 1px solid var(--border-subtle);
+  background: var(--card-bg); border-radius: 14px 14px 0 0; }
+.rich-tool { flex-shrink: 0; display: grid; place-items: center; min-width: 34px; height: 34px; padding: 0 0.35rem; border: 0; border-radius: 9px; background: none;
+  color: var(--text-muted); font: inherit; font-size: 0.95rem; cursor: pointer; transition: background 0.12s, color 0.12s; }
+.rich-tool:hover:not(:disabled) { background: var(--hover-bg); color: var(--text); }
+.rich-tool.is-on { background: rgba(13, 95, 87, 0.12); color: #0d5f57; }
+.rich-tool:disabled { opacity: 0.35; cursor: default; }
+.rich-tool b, .rich-tool i, .rich-tool u, .rich-tool s { font-size: 1rem; line-height: 1; font-family: Georgia, serif; }
+.rich-sep { flex-shrink: 0; width: 1px; height: 20px; margin: 0 3px; background: var(--border-subtle); }
+.rich-color-icon { position: relative; display: grid; place-items: center; }
+.rich-color-icon i { position: absolute; left: 2px; right: 2px; bottom: -3px; height: 3px; border-radius: 2px; }
+.rich-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border-subtle); background: #fafbfb; animation: rich-in 0.14s ease; }
+@keyframes rich-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+.rich-swatch { width: 34px; height: 34px; border-radius: 50%; border: 2px solid transparent; background: #fff; box-shadow: inset 0 0 0 1px var(--border-subtle);
+  font: 700 1.05rem Georgia, serif; cursor: pointer; transition: transform 0.12s; }
+.rich-swatch:hover { transform: scale(1.08); }
+.rich-swatch.is-on { border-color: #0d5f57; }
+.rich-swatch.is-mark { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08); }
+.rich-swatch-reset { border: 1px solid var(--border-subtle); border-radius: 999px; background: #fff; color: var(--text-muted); font: inherit; font-size: 0.8rem; padding: 0.35rem 0.75rem; cursor: pointer; }
+.rich-help { flex-direction: column; align-items: flex-start; gap: 0.3rem; font-size: 0.82rem; color: var(--text-muted); }
+.rich-help ul { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.2rem; }
+.rich-help kbd { font: 600 0.78rem ui-monospace, Menlo, monospace; padding: 0.05rem 0.35rem; border-radius: 5px; background: #fff; border: 1px solid var(--border-subtle); color: var(--text); }
+.rich-body { min-width: 0; }
+.rich-input { min-height: 7.5rem; max-height: 60vh; overflow-y: auto; padding: 0.7rem 0.85rem 0.4rem; outline: none; font-size: 1rem; line-height: 1.5; color: var(--text); overflow-wrap: anywhere; word-break: break-word; }
+.rich.is-compact .rich-input { min-height: 3.2rem; max-height: 40vh; }
+.rich-wait { background: linear-gradient(90deg, transparent, rgba(13, 95, 87, 0.05), transparent); background-size: 200% 100%; animation: rich-wait 1.2s infinite linear; }
+.rich-wait-bar { height: 44px; }
+@keyframes rich-wait { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.rich-input p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: left; height: 0; pointer-events: none; color: var(--text-soft); }
+.rich-foot { display: flex; justify-content: flex-end; padding: 0 0.8rem 0.4rem; font-size: 0.72rem; color: var(--text-soft); }
+.rich-foot .is-short { color: #8a5a00; }
+.rich-foot .is-over { color: #b42318; font-weight: 600; }
+
+/* Contenu (editeur et affichage) */
+.rich-input > :first-child, .rich-text > :first-child { margin-top: 0; }
+.rich-input p, .rich-text p { margin: 0 0 0.45rem; }
+.rich-input h2, .rich-text h4 { font-family: var(--font-sans); font-size: 1.08rem; font-weight: 700; color: #0d3f3a; margin: 0.7rem 0 0.35rem; line-height: 1.3; }
+.rich-input h3, .rich-text h5 { font-family: var(--font-sans); font-size: 0.98rem; font-weight: 700; color: #0d5f57; margin: 0.6rem 0 0.3rem; }
+.rich-input ul, .rich-input ol, .rich-text ul, .rich-text ol { margin: 0 0 0.5rem; padding-left: 1.35rem; }
+.rich-input li, .rich-text li { margin: 0.1rem 0; }
+.rich-input li > p, .rich-text li > p { margin: 0; }
+.rich-input li::marker, .rich-text li::marker { color: #0d5f57; font-weight: 700; }
+.rich-input blockquote, .rich-text blockquote { margin: 0.3rem 0 0.55rem; padding: 0.35rem 0.8rem; border-left: 3px solid #c9a227; background: rgba(201, 162, 39, 0.08); border-radius: 0 8px 8px 0; color: #4f4a36; font-style: italic; }
+.rich-input blockquote p, .rich-text blockquote p { margin: 0.1rem 0; }
+.rich-input hr, .rich-text hr { border: 0; border-top: 1px solid var(--border-subtle); margin: 0.7rem 0; }
+.rich-input mark, .rich-text .rich-mark { border-radius: 3px; padding: 0 2px; color: inherit; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.rich-text { font-size: 0.94rem; line-height: 1.5; overflow-wrap: anywhere; word-break: break-word; }
+.rich-text > :last-child { margin-bottom: 0; }
+.rich-text a { color: #0b6b9a; text-decoration: underline; }
+
+@media (max-width: 640px) {
+  .rich-input { font-size: 1rem; min-height: 8.5rem; } /* 16 px : l'iPhone ne zoome pas sur le champ */
+  .rich.is-compact .rich-input { min-height: 3rem; }
+  .rich-toolbar { gap: 1px; padding: 0.25rem; }
+  .rich-tool { min-width: 35px; height: 36px; padding: 0 0.2rem; }
+  .rich-sep { display: none; } /* la barre passe sur deux lignes : les separateurs y prendraient une place utile */
+}
+@media (prefers-reduced-motion: reduce) { .rich-panel, .rich-wait { animation: none; } }

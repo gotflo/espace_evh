@@ -7,6 +7,7 @@ use App\Models\Profile;
 use App\Models\Role;
 use App\Models\Tribe;
 use App\Models\User;
+use App\Services\ChatService;
 use App\Support\PlatformManager;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -62,13 +63,14 @@ class MyGemTest extends TestCase
 
         // Le Garde en tete, puis les autres par prenom ; personne d'un autre GEM.
         $this->assertSame([
-            ['name' => 'Gaston Garde', 'photo_url' => null, 'is_garde' => true, 'is_me' => false],
-            ['name' => 'Marie Fidèle', 'photo_url' => null, 'is_garde' => false, 'is_me' => true],
-            ['name' => 'Zoé Zacharie', 'photo_url' => null, 'is_garde' => false, 'is_me' => false],
+            ['name' => 'Gaston Garde', 'photo_url' => null, 'is_garde' => true, 'is_me' => false, 'chat_key' => ChatService::key($this->garde->id)],
+            ['name' => 'Marie Fidèle', 'photo_url' => null, 'is_garde' => false, 'is_me' => true, 'chat_key' => null],
+            ['name' => 'Zoé Zacharie', 'photo_url' => null, 'is_garde' => false, 'is_me' => false, 'chat_key' => ChatService::key($this->zoe->id)],
         ], $res->json('gem.members'));
         $this->assertSame(['label', 'tribe', 'members'], array_keys($res->json('gem')));
 
-        // Rien qui mene a une fiche : ni identifiant, ni numero, ni courriel.
+        // Rien qui mene a une fiche : ni identifiant, ni numero, ni courriel (la cle du chat est opaque).
+        $this->assertStringNotContainsString('"'.$this->garde->id.'"', $res->getContent());
         $body = $res->getContent();
         foreach ([$this->garde, $this->zoe, $this->other] as $u) {
             $this->assertStringNotContainsString($u->phone, $body);
@@ -89,13 +91,13 @@ class MyGemTest extends TestCase
     {
         Sanctum::actingAs($this->garde->fresh());
         $members = $this->getJson('/api/me/gem')->assertOk()->json('gem.members');
-        $this->assertSame(['name' => 'Gaston Garde', 'photo_url' => null, 'is_garde' => true, 'is_me' => true], $members[0]);
+        $this->assertSame(['name' => 'Gaston Garde', 'photo_url' => null, 'is_garde' => true, 'is_me' => true, 'chat_key' => null], $members[0]);
         $this->assertCount(3, $members);
 
         // Autre GEM, sans Garde : sa propre liste, personne de marque ; nom deja prefixe : pas de « GEM GEM ».
         Sanctum::actingAs($this->other->fresh());
         $res = $this->getJson('/api/me/gem')->assertOk()->assertJsonPath('gem.label', 'GEM Silo');
-        $this->assertSame([['name' => 'Olga Ailleurs', 'photo_url' => null, 'is_garde' => false, 'is_me' => true]], $res->json('gem.members'));
+        $this->assertSame([['name' => 'Olga Ailleurs', 'photo_url' => null, 'is_garde' => false, 'is_me' => true, 'chat_key' => null]], $res->json('gem.members'));
     }
 
     public function test_the_garde_is_listed_even_when_his_own_profile_is_not_placed_in_the_gem(): void

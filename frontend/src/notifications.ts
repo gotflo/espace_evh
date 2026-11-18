@@ -69,5 +69,9 @@ export const NOTIF_ICON: Record<string, IconName> = {
   assignment: 'devoir',
   resolution: 'target',
   appointment: 'clock',
+  chat: 'mail',
+  chat_report: 'alert',
+  assignment_comment: 'mail',
+  assignment_like: 'star',
   system: 'bell',
 }

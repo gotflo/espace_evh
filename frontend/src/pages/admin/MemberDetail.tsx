@@ -365,7 +365,7 @@ function MemberDetailView() {
 
       {canViewSpiritual && data.can_view_fiss && id && <MemberFissPanel userId={id} />}
       {canFissHistory && data.can_view_fiss && id && <MemberFissHistory userId={id} />}
-      {canViewSpiritual && data.can_view_fiss && id && <MemberGrowth userId={id} />}
+      {canViewSpiritual && data.can_view_fiss && id && <MemberGrowth userId={id} memberName={p?.full_name} />}
       {/* Fiches de meditation : patriarche de la tribu et pasteurs seulement (le serveur decide). */}
       {data.can_view_meditations && moduleOn('meditation') && id && <MemberMeditationPanel userId={id} />}
       {ab.exercises_view && id && <MemberExercises userId={id} />}

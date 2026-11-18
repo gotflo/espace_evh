@@ -115,6 +115,14 @@
 .my-gem-member .mini-avatar { width: 40px; height: 40px; }
 .my-gem-member-name { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
 .my-gem-member-name small { font-weight: 400; color: var(--text-muted); }
+/* Un membre se touche pour lui ecrire (chat) ; la ligne garde exactement la meme forme. */
+.my-gem-item { display: flex; }
+.my-gem-item > .my-gem-member { flex: 1; }
+.my-gem-member-btn { width: 100%; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.my-gem-member-btn:hover { border-color: #0d5f57; }
+.my-gem-write { flex-shrink: 0; display: inline-flex; color: #0d5f57; }
+.my-gem-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 1rem; }
+.my-gem-hint { margin-top: 0.8rem; }
 .my-gem-badge { flex-shrink: 0; font-size: 0.74rem; font-weight: 700; padding: 0.22rem 0.65rem; border-radius: 999px; background: #f4e3a1; border: 1px solid #c9a227; color: #5c4400; }
 .res-watch { display: flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; font-weight: 600; color: var(--text-muted); margin-top: 0.25rem; font-style: normal; }
 .res-watch .watch-bar { flex: 1; max-width: 90px; }

@@ -8,6 +8,7 @@ use App\Models\AssignmentResponse;
 use App\Models\AssignmentView;
 use App\Models\Profile;
 use App\Models\User;
+use App\Services\AssignmentFeedback;
 use App\Services\AssignmentProgress;
 use App\Services\MemberMessages;
 use App\Services\Notifier;
@@ -204,12 +205,22 @@ class AssignmentController extends Controller
             + AssignmentProgress::tracking($assignment, $views->get($p->user_id))
             + ['status' => AssignmentProgress::status($assignment, $views->get($p->user_id), $response)];
 
+        // « J'aime » et commentaires : seulement pour ceux qui ont le droit de les donner (pas le patriarche ni l'AP).
+        $viewer = $request->user();
+        $canFeedback = AssignmentFeedback::enabledFor($viewer) && ! $assignment->trashed();
+        $feedback = $canFeedback ? AssignmentFeedback::forResponses($answers->where('user_id', '!=', $viewer->id)->values(), $viewer) : [];
+
         return response()->json([
             'assignment' => $this->present($assignment) + ['trackable' => $assignment->isTrackable()],
+            'can_feedback' => $canFeedback,
             'responses' => $answers->filter(fn (AssignmentResponse $r) => $answering->has($r->user_id))->map(fn (AssignmentResponse $r) => $base($answering[$r->user_id], $r) + [
+                'id' => $r->id,
                 'summary' => $r->summary,
+                'summary_doc' => $r->summary_doc,
                 'actions' => $r->actions,
+                'actions_doc' => $r->actions_doc,
                 'submitted_at' => $r->submitted_at?->toIso8601String(),
+                'feedback' => $feedback[$r->id] ?? null,
             ])->values(),
             'missing' => $waiting->map(fn (Profile $p) => $base($p, null))->values(),
             'responses_total' => $responsesTotal,
@@ -230,10 +241,16 @@ class AssignmentController extends Controller
         $responses = AssignmentResponse::where('user_id', $user->id)->with('assignment')->latest('submitted_at')->limit(24)->get();
         $views = AssignmentView::where('user_id', $user->id)->whereIn('assignment_id', $responses->pluck('assignment_id'))->get()->keyBy('assignment_id');
         $published = Assignment::published()->count();
+        $canFeedback = AssignmentFeedback::enabledFor($viewer) && (int) $user->id !== (int) $viewer->id;
+        $feedback = $canFeedback ? AssignmentFeedback::forResponses($responses, $viewer) : [];
 
         return response()->json([
+            'can_feedback' => $canFeedback,
             'responses' => $responses->map(fn (AssignmentResponse $r) => [
                 'id' => $r->id,
+                'feedback' => $canFeedback && $r->assignment && ! $r->assignment->trashed() ? ($feedback[$r->id] ?? null) : null,
+                'summary_doc' => $r->summary_doc,
+                'actions_doc' => $r->actions_doc,
                 'assignment_id' => $r->assignment_id,
                 'title' => $r->assignment?->title,
                 'speaker' => $r->assignment?->speaker,

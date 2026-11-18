@@ -73,6 +73,26 @@ class ImageOptimizer
     }
 
     /**
+     * Photo privee (chat) : toujours reencodee en JPEG (un fichier illisible ou sans GD est refuse, jamais garde
+     * tel quel) et enregistree sur le disque PRIVE : aucune adresse publique, elle n'est servie qu'aux participants.
+     *
+     * @return array{path: string, width: int, height: int}
+     *
+     * @throws ValidationException
+     */
+    public static function storePrivate(UploadedFile $file, string $directory, int $maxSide, string $field = 'photo'): array
+    {
+        if (! self::available()) {
+            throw ValidationException::withMessages([$field => 'L’envoi de photos n’est pas disponible pour le moment.']);
+        }
+        $image = self::fit(self::read($file->getRealPath(), $field), $maxSide);
+        $path = $directory.'/'.Str::random(40).'.jpg';
+        Storage::disk('local')->put($path, self::encode($image));
+
+        return ['path' => $path, 'width' => imagesx($image), 'height' => imagesy($image)];
+    }
+
+    /**
      * Image de fond : deux tailles (ordinateur et telephone) a partir d'un seul envoi.
      *
      * @return array{large: string, small: string, large_width: int, small_width: int}

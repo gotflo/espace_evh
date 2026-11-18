@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, ApiError, peek } from '../../api/client'
 import { toast } from '../../toast'
@@ -13,6 +13,11 @@ import { confirmDiscard, useDirty } from '../../utils/dirty'
 import { LoadError } from '../../components/LoadError'
 import { useYouTubePreview } from '../../utils/youtubePreview'
 import { ModalLayer } from '../../components/ModalLayer'
+import { RichText } from '../../rich/RichText'
+import type { RichDoc } from '../../rich/doc'
+import { LikeableBody, PastorFeedback } from '../../components/AssignmentFeedback'
+import type { AssignmentFeedbackData } from '../../types'
+import '../../feedback.css'
 
 
 const fmt = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' }) : '')
@@ -142,7 +147,12 @@ function AssignmentEditor({ item, maxMb, onClose, onSaved }: { item: Assignment 
 interface Tracked { percent: number | null; media_completed: boolean; seek_count: number; skipped_seconds: number; max_rate: number | null; status: 'todo' | 'in_progress' | 'done' }
 interface ResponsesData {
   assignment: Assignment & { trackable: boolean }
-  responses: ({ user_id: number; name: string; tribe: string | null; photo_url: string | null; summary: string; actions: string; submitted_at: string | null } & Tracked)[]
+  can_feedback?: boolean
+  responses: ({
+    id: number; user_id: number; name: string; tribe: string | null; photo_url: string | null
+    summary: string; summary_doc?: RichDoc | null; actions: string; actions_doc?: RichDoc | null; submitted_at: string | null
+    feedback?: AssignmentFeedbackData | null
+  } & Tracked)[]
   missing: ({ user_id: number; name: string; tribe: string | null; photo_url: string | null } & Tracked)[]
   responses_total: number
   missing_total: number
@@ -161,6 +171,33 @@ function TrackLine({ t, audio }: { t: Tracked; audio: boolean }) {
       {t.seek_count > 0 && <span className="gr-flag"><Icon name="forward" size={13} /> avancé {t.seek_count} fois ({duration(t.skipped_seconds)} sautées){t.media_completed ? ', puis tout lu' : ''}</span>}
       {t.max_rate && t.max_rate > 1 ? <span>vitesse ×{t.max_rate}</span> : null}
     </div>
+  )
+}
+
+/**
+ * Reponse d'un membre facon publication : en-tete (passe en enfant), resume et resolutions en texte enrichi, puis
+ * pour le pasteur qui a le droit : double appui pour aimer, coeur, commentaires.
+ */
+function ResponsePost({ r, canFeedback, onFeedback, children }: {
+  r: ResponsesData['responses'][number]
+  canFeedback: boolean
+  onFeedback: (id: number, f: AssignmentFeedbackData) => void
+  children: ReactNode
+}) {
+  const like = useRef<(() => void) | null>(null)
+  const feedback = canFeedback ? r.feedback : null
+  return (
+    <article className="gr-response ds-post">
+      {children}
+      <LikeableBody enabled={!!feedback} liked={!!feedback?.liked} onLike={() => like.current?.()}>
+        <div className="gr-block"><span>Résumé</span><RichText doc={r.summary_doc} text={r.summary} /></div>
+        <div className="gr-block"><span>Actions et résolutions</span><RichText doc={r.actions_doc} text={r.actions} /></div>
+      </LikeableBody>
+      {feedback && (
+        <PastorFeedback responseId={r.id} memberFirstName={r.name.split(' ')[0] || r.name} feedback={feedback}
+          onChange={(f) => onFeedback(r.id, f)} likeRef={like} />
+      )}
+    </article>
   )
 }
 
@@ -183,6 +220,10 @@ function Responses({ id, onClose }: { id: number; onClose: () => void }) {
   }
 
   const audio = data?.assignment.media_type === 'audio'
+  // « J'aime » ou commentaire : seule la reponse concernee change, le reste de la liste ne bouge pas.
+  const setFeedback = useCallback((responseId: number, feedback: AssignmentFeedbackData) => {
+    setData((d) => d && { ...d, responses: d.responses.map((r) => (r.id === responseId ? { ...r, feedback } : r)) })
+  }, [])
 
   return (
     <ModalLayer className="modal-overlay" onMouseDown={onClose}>
@@ -199,7 +240,7 @@ function Responses({ id, onClose }: { id: number; onClose: () => void }) {
             </div>
             {view === 'done' ? (
               data.responses.length === 0 ? <p className="helper">Personne n'a encore répondu.</p> : data.responses.map((r) => (
-                <article key={r.user_id} className="gr-response">
+                <ResponsePost key={r.user_id} r={r} canFeedback={!!data.can_feedback} onFeedback={setFeedback}>
                   <div className="gr-response-head">
                     {r.photo_url ? <img className="mini-avatar" src={r.photo_url} alt="" /> : <span className="mini-avatar">{initial(r.name)}</span>}
                     <div className="gr-member-text">
@@ -209,9 +250,7 @@ function Responses({ id, onClose }: { id: number; onClose: () => void }) {
                     <span className={`gr-pill ${r.status === 'done' ? 'ok' : ''}`}>{r.status === 'done' ? 'Fait' : data.assignment.media_type === 'audio' ? 'Écoute à terminer' : 'Vidéo à terminer'}</span>
                   </div>
                   <TrackLine t={r} audio={data.assignment.media_type === 'audio'} />
-                  <div className="gr-block"><span>Résumé</span><p>{r.summary}</p></div>
-                  <div className="gr-block"><span>Actions et résolutions</span><p>{r.actions}</p></div>
-                </article>
+                </ResponsePost>
               ))
             ) : (
               <>

@@ -165,7 +165,7 @@ self.addEventListener('push', (event) => {
     // n'affiche pas la notification systeme quand l'application est au premier plan).
     try {
       const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-      clients.forEach((c) => c.postMessage({ type: 'evh-push', title, body: options.body }))
+      clients.forEach((c) => c.postMessage({ type: 'evh-push', title, body: options.body, kind: data.type || null, url: options.data.url }))
     } catch { /* ignore */ }
   })())
 })

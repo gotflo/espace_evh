@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Admin\AnnouncementController;
 use App\Http\Controllers\Api\Admin\AppearanceController as AdminAppearanceController;
 use App\Http\Controllers\Api\Admin\AppointmentController;
 use App\Http\Controllers\Api\Admin\AssignmentController;
+use App\Http\Controllers\Api\Admin\AssignmentFeedbackController;
 use App\Http\Controllers\Api\Admin\AttendanceController;
 use App\Http\Controllers\Api\Admin\AudienceController;
 use App\Http\Controllers\Api\Admin\AuditLogController;
@@ -45,6 +46,7 @@ use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\MyAnnouncementController;
 use App\Http\Controllers\Api\MyAppointmentController;
 use App\Http\Controllers\Api\MyAssignmentController;
+use App\Http\Controllers\Api\MyChatController;
 use App\Http\Controllers\Api\MyEmailController;
 use App\Http\Controllers\Api\MyEvaluationController;
 use App\Http\Controllers\Api\MyEventController;
@@ -241,6 +243,25 @@ Route::middleware(['auth:sanctum', 'throttle:300,1', EnsureNotBlocked::class, Tr
 
     // --- Mon GEM : qui le compose (nom et photo seulement) et qui en est le Garde ---
     Route::get('/me/gem', [MyGemController::class, 'show']);
+
+    // --- Chat des GEMs : groupe du GEM et discussions privees entre ses membres (les participants seulement) ---
+    Route::middleware('module:chat')->prefix('me/chat')->group(function () {
+        Route::get('/', [MyChatController::class, 'index']);
+        Route::get('/unread', [MyChatController::class, 'unread']);
+        Route::post('/direct', [MyChatController::class, 'direct'])->middleware('throttle:member-writes');
+        Route::put('/messages/{message}', [MyChatController::class, 'edit'])->whereNumber('message')->middleware('throttle:chat-send');
+        Route::delete('/messages/{message}', [MyChatController::class, 'destroy'])->whereNumber('message')->middleware('throttle:chat-send');
+        Route::put('/messages/{message}/reaction', [MyChatController::class, 'react'])->whereNumber('message')->middleware('throttle:chat-react');
+        Route::get('/messages/{message}/photo', [MyChatController::class, 'photo'])->whereNumber('message');
+        Route::post('/messages/{message}/forward', [MyChatController::class, 'forward'])->whereNumber('message')->middleware('throttle:chat-send');
+        Route::post('/messages/{message}/report', [MyChatController::class, 'report'])->whereNumber('message')->middleware('throttle:member-requests');
+        Route::get('/{conversation}', [MyChatController::class, 'show'])->whereNumber('conversation');
+        Route::get('/{conversation}/sync', [MyChatController::class, 'sync'])->whereNumber('conversation');
+        Route::get('/{conversation}/search', [MyChatController::class, 'search'])->whereNumber('conversation')->middleware('throttle:member-search');
+        Route::post('/{conversation}/messages', [MyChatController::class, 'send'])->whereNumber('conversation')->middleware('throttle:chat-send');
+        Route::post('/{conversation}/read', [MyChatController::class, 'read'])->whereNumber('conversation');
+        Route::post('/{conversation}/typing', [MyChatController::class, 'typing'])->whereNumber('conversation');
+    });
 
     // --- Famille (conjoint, enfants) ---
     Route::get('/me/family', [MyFamilyController::class, 'show']);
@@ -477,6 +498,13 @@ Route::middleware(['auth:sanctum', 'throttle:300,1', EnsureNotBlocked::class, Tr
         Route::post('/assignments', [AssignmentController::class, 'store'])->middleware(['permission:assignments.publish', 'throttle:publish']);
         Route::post('/assignments/{assignment}', [AssignmentController::class, 'update'])->whereNumber('assignment')->middleware(['permission:assignments.publish', 'throttle:publish']);
         Route::delete('/assignments/{assignment}', [AssignmentController::class, 'destroy'])->whereNumber('assignment')->middleware('permission:assignments.delete');
+        // « J'aime » et commentaires du pasteur sur les reponses des membres (vus du membre et du pasteur seulement).
+        Route::middleware(['permission:assignments.feedback', 'module:assignments'])->group(function () {
+            Route::put('/assignment-responses/{response}/like', [AssignmentFeedbackController::class, 'like'])->whereNumber('response')->middleware('throttle:chat-react');
+            Route::post('/assignment-responses/{response}/comments', [AssignmentFeedbackController::class, 'store'])->whereNumber('response')->middleware('throttle:publish');
+            Route::put('/assignment-comments/{comment}', [AssignmentFeedbackController::class, 'update'])->whereNumber('comment')->middleware('throttle:publish');
+            Route::delete('/assignment-comments/{comment}', [AssignmentFeedbackController::class, 'destroy'])->whereNumber('comment');
+        });
 
         // Ressources et liens video (themes des RM : meditation, priere, jeune, culte).
         Route::get('/resolution-resources', [ResolutionController::class, 'resources'])->middleware('permission:resources.view');

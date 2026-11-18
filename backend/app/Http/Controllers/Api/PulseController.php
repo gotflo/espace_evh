@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\ChatService;
 use App\Support\PlatformManager;
+use App\Support\PlatformSettings;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
@@ -88,6 +90,9 @@ class PulseController extends Controller
         'vertumetre_edit_requests' => 'user_id',
         'monthly_resolutions' => 'user_id',
         'assignment_responses' => 'user_id',
+        // Retours du pasteur sur ses devoirs : sa page « Mon devoir » se met a jour d'elle-meme.
+        'assignment_comments' => 'member_id',
+        'assignment_response_likes' => 'member_id',
         'evaluations' => 'user_id',
         'attendances' => 'member_user_id',
         'event_participations' => 'user_id',
@@ -113,6 +118,8 @@ class PulseController extends Controller
 
         return response()->json([
             'unread' => $user->notifications()->whereNull('read_at')->count(),
+            // Messages du chat non lus (pastille du menu) : une lecture, seulement si le module est actif.
+            'chat' => PlatformSettings::module('chat') && ! $user->isPlatformManager() ? ChatService::unreadTotal($user) : 0,
             'versions' => $versions,
         ]);
     }

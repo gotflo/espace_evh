@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Gem;
 use App\Models\Profile;
+use App\Services\ChatService;
 use App\Services\GemReportService;
+use App\Support\PlatformSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -33,6 +35,8 @@ class MyGemController extends Controller
             }
         }
 
+        $chat = PlatformSettings::module('chat');
+
         return response()->json([
             'gem' => [
                 'label' => $gem->label(),
@@ -44,6 +48,8 @@ class MyGemController extends Controller
                         'photo_url' => $p->photo_url,
                         'is_garde' => (int) $p->user_id === $gardeId,
                         'is_me' => (int) $p->user_id === (int) $me->id,
+                        // Cle opaque pour lui ecrire dans le chat (jamais son identifiant de compte).
+                        'chat_key' => $chat && (int) $p->user_id !== (int) $me->id ? ChatService::key((int) $p->user_id) : null,
                     ])->values(),
             ],
         ]);

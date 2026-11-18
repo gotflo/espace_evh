@@ -177,7 +177,7 @@ async function send<T>(path: string, method: string, opts: Options): Promise<T> 
   try {
     const data = await request<T>(path, method, opts)
     // Toute ecriture rend les lectures recentes perimees (sauf l'entretien : notifications lues, appareil).
-    if (method !== 'GET' && !/^\/(me\/notifications|me\/push|monitor|me\/announcements\/read)/.test(path)) markStale()
+    if (method !== 'GET' && !/^\/(me\/notifications|me\/push|monitor|me\/announcements\/read|me\/chat)/.test(path)) markStale()
     if (isAction) changed?.()
     if (isAction) {
       const text = typeof opts.toast === 'string' ? opts.toast : (data as { message?: unknown } | undefined)?.message

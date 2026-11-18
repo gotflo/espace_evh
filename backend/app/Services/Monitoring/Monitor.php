@@ -80,7 +80,7 @@ class Monitor
 
     /** Route generique (jamais l'URL reelle : ni identifiants ni parametres). */
     /** Routes techniques tres frequentes comptees par echantillon (voir recordRequest). */
-    private const SAMPLED_ROUTES = ['api/me/pulse', 'api/push/receipt'];
+    private const SAMPLED_ROUTES = ['api/me/pulse', 'api/push/receipt', 'api/me/chat/{conversation}/sync', 'api/me/chat/{conversation}/typing'];
 
     public static function routeOf(Request $request): string
     {

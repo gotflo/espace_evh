@@ -9,6 +9,7 @@ use App\Models\Role;
 use App\Models\Tribe;
 use App\Models\User;
 use App\Services\BelongingNotices;
+use App\Services\ChatService;
 use App\Services\Notifier;
 use App\Support\Audit;
 use App\Support\GemRules;
@@ -222,7 +223,10 @@ class GemController extends Controller
         abort_unless($this->canManage($request->user(), $gem), 403, 'Ce GEM est hors de votre tribu.');
         // Retire le role Garde lie a ce GEM avant suppression.
         LeaderRole::sync('garde', 'gem', $gem->id, null, $request->user()->id);
+        // La discussion de groupe disparait avec le GEM : ses photos aussi.
+        $photos = ChatService::photoPathsOfGem($gem->id);
         $gem->delete();
+        ChatService::deletePhotos($photos);
 
         return response()->json(['message' => 'GEM supprimé.']);
     }

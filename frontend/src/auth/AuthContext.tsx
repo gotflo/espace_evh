@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { api, ApiError, auth as tokenStore, onForbidden, onSessionExpired } from '../api/client'
 import { forgetPushOnThisDevice } from '../push'
+import { forgetChatPhotos, setChatUnread } from '../chat/chat'
 import { setUnread } from '../notifications'
 import { rememberPreviousVisit } from '../utils/visit'
 import { clearAccountDrafts, setDraftAccount } from '../utils/drafts'
@@ -144,6 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     // Cet appareil ne recoit plus les notifications de ce compte.
     await forgetPushOnThisDevice()
+    forgetChatPhotos(); setChatUnread(0)
     setUnread(0)
     try { await api('/auth/logout', { method: 'POST', toast: false }) } catch { /* ignore */ }
     // Deconnexion volontaire : ses brouillons ne restent pas lisibles sur l'appareil.

@@ -45,6 +45,12 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Temps reel : une modification reussie rend le pouls suivant immediatement a jour.
         $middleware->appendToGroup('api', RefreshPulse::class);
+
+        // Texte enrichi des devoirs (document de l'editeur) : chaque morceau de texte garde ses espaces (« La foi » + « agit »
+        // en gras ne doit pas devenir « La foiagit »). Ces adresses nettoient elles-memes leurs champs (App\Support\RichText).
+        $richText = fn (Request $request) => $request->is('api/me/assignments/*/response', 'api/admin/assignment-responses/*/comments', 'api/admin/assignment-comments/*');
+        $middleware->trimStrings(except: [$richText]);
+        $middleware->convertEmptyStringsToNull(except: [$richText]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

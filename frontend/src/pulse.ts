@@ -5,6 +5,7 @@
 import { useEffect, useRef } from 'react'
 import { api, auth, markStale, onDataChanged } from './api/client'
 import { setUnread } from './notifications'
+import { setChatUnread } from './chat/chat'
 
 export type PulseKey = 'announcements' | 'events' | 'exercises' | 'requests' | 'members' | 'validations' | 'fiss' | 'attendance' | 'leader_reports' | 'gem_reports' | 'resolutions' | 'assignments' | 'appointments' | 'services' | 'verses' | 'settings' | 'unread' | 'mine'
 
@@ -22,9 +23,10 @@ export function pollNow(): Promise<void> {
   if (!auth.get()) return Promise.resolve()
   if (inflight) return inflight
   lastPoll = Date.now()
-  inflight = api<{ unread: number; versions: Versions }>('/me/pulse')
+  inflight = api<{ unread: number; chat?: number; versions: Versions }>('/me/pulse')
     .then((r) => {
       setUnread(r.unread)
+      setChatUnread(r.chat ?? 0)
       const next = { ...r.versions, unread: String(r.unread) }
       // Quelque chose a change sur le serveur : aucune lecture recente n'est reutilisee.
       if (JSON.stringify(next) !== JSON.stringify(versions)) markStale()

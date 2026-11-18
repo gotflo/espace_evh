@@ -3,6 +3,11 @@ import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import type { MonthlyResolution, ResolutionKey, ResolutionOutcome, VertumetreForm, VertumetreSection } from '../types'
 import { VertumetreAnswers } from './VertumetreAnswers'
+import { RichText } from '../rich/RichText'
+import type { RichDoc } from '../rich/doc'
+import { PastorFeedback } from './AssignmentFeedback'
+import type { AssignmentFeedbackData } from '../types'
+import '../feedback.css'
 
 const fmt = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' }) : '')
 
@@ -10,14 +15,16 @@ interface RmData { resolutions: MonthlyResolution[]; fields: Record<ResolutionKe
 interface DsData {
   responses: {
     id: number; title: string | null; speaker: string | null; withdrawn: boolean; summary: string; actions: string; submitted_at: string | null
+    summary_doc?: RichDoc | null; actions_doc?: RichDoc | null; feedback?: AssignmentFeedbackData | null
     // Suivi de lecture (memes regles que les exercices video) ; percent null = lien externe
     percent?: number | null; media_completed?: boolean; seek_count?: number; done?: boolean
   }[]
   published_count: number
+  can_feedback?: boolean
 }
 
 /** Fiche d'un membre : ses résolutions du mois (RM) et ses devoirs (DS), meme confidentialite que la FISS. */
-export function MemberGrowth({ userId }: { userId: string }) {
+export function MemberGrowth({ userId, memberName }: { userId: string; memberName?: string }) {
   const [rm, setRm] = useState<RmData | null>(null)
   const [ds, setDs] = useState<DsData | null>(null)
   const [vt, setVt] = useState<{ sections: VertumetreSection[]; forms: VertumetreForm[] } | null>(null)
@@ -99,8 +106,12 @@ export function MemberGrowth({ userId }: { userId: string }) {
                 </span>
                 <span className={`gr-pill ${r.done ? 'ok' : ''}`}>{r.done ? 'Fait' : 'À terminer'}</span>
               </summary>
-              <div className="gr-block"><span>Résumé</span><p>{r.summary}</p></div>
-              <div className="gr-block"><span>Actions et résolutions</span><p>{r.actions}</p></div>
+              <div className="gr-block"><span>Résumé</span><RichText doc={r.summary_doc} text={r.summary} /></div>
+              <div className="gr-block"><span>Actions et résolutions</span><RichText doc={r.actions_doc} text={r.actions} /></div>
+              {ds.can_feedback && r.feedback && (
+                <PastorFeedback responseId={r.id} memberFirstName={memberName?.split(' ')[0] || 'ce membre'} feedback={r.feedback}
+                  onChange={(f) => setDs((d) => d && { ...d, responses: d.responses.map((x) => (x.id === r.id ? { ...x, feedback: f } : x)) })} />
+              )}
             </details>
           ))}
         </section>

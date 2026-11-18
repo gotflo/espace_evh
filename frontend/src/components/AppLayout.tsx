@@ -16,6 +16,7 @@ import { rememberPageScroll, restorePageScroll, scrollPageTo } from '../utils/pa
 import { mainRoleLabel } from '../utils/roles'
 import { canValidateWith, useValidationsCount } from '../utils/validationsCount'
 import { useAssignmentsCount } from '../utils/assignmentsCount'
+import { useChatUnread } from '../chat/chat'
 
 /**
  * Cadre persistant : menu lateral, en-tete et barre du bas sont affiches une seule fois pour
@@ -142,8 +143,11 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
   // Devoirs (DS) pas encore faits : pastille rouge sur « Mon devoir (DS) » (espace membre seulement).
   const toDo = useAssignmentsCount(!isPlatformManager && moduleOn('assignments'))
   // Bouton « Menu » du telephone : ce qui attend dans le menu (demandes a valider, devoirs a faire).
-  const inMenu = toValidate + toDo
-  const inMenuLabel = [toValidate > 0 && `${toValidate} demande(s) à valider`, toDo > 0 && `${toDo} devoir(s) à faire`].filter(Boolean).join(' · ')
+  // Messages du chat non lus : pastille rouge sur « Messages » (nombre recu avec le pouls, aucune lecture en plus).
+  const chatOn = !isPlatformManager && moduleOn('chat')
+  const toRead = useChatUnread(chatOn)
+  const inMenu = toValidate + toDo + toRead
+  const inMenuLabel = [toValidate > 0 && `${toValidate} demande(s) à valider`, toDo > 0 && `${toDo} devoir(s) à faire`, toRead > 0 && `${toRead} message(s) non lu(s)`].filter(Boolean).join(' · ')
   // Lien clique : fine barre de progression tant que la page suivante n'est pas affichee
   // (l'ancienne reste visible pendant ce temps, sans ecran blanc).
   const location = useLocation()
@@ -202,6 +206,12 @@ function Frame({ head, actions, children }: { head: ReactNode; actions: ReactNod
               <NavLink to="/calendrier" className="nav-item"><Icon path={ICONS.calendar} /><span>Calendrier</span></NavLink>
               <NavLink to="/servir" className="nav-item"><Icon path={ICONS.serve} /><span>Service</span></NavLink>
               <NavLink to="/mon-gem" className="nav-item"><Icon path={ICONS.gem} /><span>Mon GEM</span></NavLink>
+              {chatOn && (
+                <NavLink to="/chat" className="nav-item">
+                  <Icon path={ICONS.mail} /><span>Messages</span>
+                  {toRead > 0 && <span key={toRead} className="nav-badge" aria-label={`${toRead} message(s) non lu(s)`}>{toRead > 99 ? '99+' : toRead}</span>}
+                </NavLink>
+              )}
               {moduleOn('spiritual') && <NavLink to="/ma-vie-spirituelle" className="nav-item"><Icon path={ICONS.spiritual} /><span>Ma vie spirituelle</span></NavLink>}
               <NavLink to="/ma-fiche" className="nav-item"><Icon path={ICONS.fiss} /><span>Ma fiche (FISS)</span></NavLink>
               {moduleOn('meditation') && <NavLink to="/meditation" className="nav-item"><Icon path={ICONS.book} /><span>Méditation</span></NavLink>}

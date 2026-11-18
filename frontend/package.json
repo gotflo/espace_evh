@@ -12,6 +12,13 @@
   "dependencies": {
     "@fontsource/cormorant-garamond": "^5.3.0",
     "@fontsource/inter": "^5.3.0",
+    "@tiptap/core": "3.32.2",
+    "@tiptap/extension-highlight": "3.32.2",
+    "@tiptap/extension-text-style": "3.32.2",
+    "@tiptap/extensions": "3.32.2",
+    "@tiptap/pm": "3.32.2",
+    "@tiptap/react": "3.32.2",
+    "@tiptap/starter-kit": "3.32.2",
     "flag-icons": "^7.5.0",
     "libphonenumber-js": "^1.13.11",
     "pdfmake": "^0.2.20",

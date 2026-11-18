@@ -6,6 +6,7 @@ use App\Models\BlockedPhone;
 use App\Models\Event;
 use App\Models\MemberDeletionRequest;
 use App\Models\User;
+use App\Services\ChatService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -29,10 +30,13 @@ class UserAdmin
         ['spiritual_entries', 'member_user_id', 'Entrées du journal spirituel'],
         ['milestones', 'member_user_id', 'Étapes spirituelles'],
         ['meditation_sheets', 'user_id', 'Fiches de méditation'],
+        ['chat_messages', 'sender_id', 'Messages du chat des GEMs'],
         ['exercise_responses', 'user_id', 'Réponses aux exercices'],
         ['exercise_video_views', 'user_id', 'Suivi des vidéos'],
         ['monthly_resolutions', 'user_id', 'Résolutions du mois (RM)'],
         ['assignment_responses', 'user_id', 'Devoirs faits (résumés, résolutions)'],
+        ['assignment_comments', 'member_id', 'Commentaires du pasteur sur ses devoirs'],
+        ['assignment_response_likes', 'user_id', '« J’aime » donnés sur les devoirs des membres'],
         ['assignment_views', 'user_id', 'Suivi de lecture des devoirs'],
         ['resource_views', 'user_id', 'Suivi de lecture des ressources (RM)'],
         ['department_join_requests', 'user_id', 'Demandes d\'inscription aux services'],
@@ -66,6 +70,7 @@ class UserAdmin
         ['attendances', 'recorded_by', 'Présences saisies pour d\'autres membres'],
         ['leader_reports', 'author_user_id', 'Rapports mensuels rédigés'],
         ['gem_weekly_reports', 'author_user_id', 'Rapports de GEM rédigés'],
+        ['assignment_comments', 'author_id', 'Commentaires laissés sur les devoirs des membres (auteur effacé)'],
         ['audit_logs', 'user_id', 'Entrées du journal d\'audit (auteur)'],
         ['audit_logs', 'member_user_id', 'Entrées du journal d\'audit (membre concerné)'],
         ['security_logs', 'user_id', 'Entrées du journal de sécurité (compte de gestion)'],
@@ -173,6 +178,8 @@ class UserAdmin
     public static function delete(User $user, ?string $reason = null, ?int $by = null): void
     {
         $photo = $user->profile?->photo_path ?? null;
+        // Photos du chat (ses messages et ses discussions privees) : effacees du disque une fois le compte supprime.
+        $chatPhotos = Schema::hasTable('chat_messages') ? ChatService::photoPathsOfUser((int) $user->id) : [];
         DB::transaction(function () use ($user, $reason, $by) {
             if ($user->phone) {
                 BlockedPhone::updateOrCreate(['phone' => $user->phone], [
@@ -197,6 +204,7 @@ class UserAdmin
             DB::table('monitor_user_days')->where('user_id', $user->id)->delete();
             $user->delete();
         });
+        ChatService::deletePhotos($chatPhotos);
         if (is_string($photo) && $photo !== '') {
             try {
                 Storage::disk('public')->delete($photo);

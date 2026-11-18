@@ -12,10 +12,26 @@ import { usePulse } from '../pulse'
 import type { Assignment, MyAssignmentsData } from '../types'
 import { scrollPageTo } from '../utils/pageScroll'
 import { setAssignmentsPending } from '../utils/assignmentsCount'
+import { LazyRichEditor } from '../rich/LazyRichEditor'
+import { RichText } from '../rich/RichText'
+import { docOf, docText, sameDoc, type RichDoc } from '../rich/doc'
+import { MemberFeedback } from '../components/AssignmentFeedback'
+import '../feedback.css'
 
 const fmt = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' }) : '')
 
-interface Draft { summary: string; actions: string }
+interface Draft { summary: RichDoc | null; actions: RichDoc | null }
+
+const SUMMARY_MAX = 5000
+const ACTIONS_MAX = 3000
+
+/** Brouillon enregistre sur l'appareil : documents, ou textes d'une version precedente de l'application. */
+function draftOf(raw: unknown): Draft | null {
+  if (!raw || typeof raw !== 'object') return null
+  const d = raw as { summary?: unknown; actions?: unknown }
+  const one = (v: unknown) => (typeof v === 'string' ? docOf(null, v) : (v as RichDoc | null) ?? null)
+  return { summary: one(d.summary), actions: one(d.actions) }
+}
 
 const STATUS_LABEL = { done: 'Fait', in_progress: 'En cours', todo: 'À faire' } as const
 
@@ -34,17 +50,22 @@ function weekStart(): Date {
 function AssignmentWork({ a, reminder, onSaved }: { a: Assignment; reminder: string; onSaved: () => void }) {
   const key = `ds:${a.id}`
   const [editing, setEditing] = useState(!a.response)
-  const [form, setForm] = useState<Draft>(() => readDraft<Draft>(key) ?? { summary: a.response?.summary ?? '', actions: a.response?.actions ?? '' })
+  const saved = (): Draft => ({ summary: docOf(a.response?.summary_doc, a.response?.summary), actions: docOf(a.response?.actions_doc, a.response?.actions) })
+  const [form, setForm] = useState<Draft>(() => draftOf(readDraft<unknown>(key)) ?? saved())
+  // Annuler une modification : l'editeur repart du devoir enregistre.
+  const [editorKey, setEditorKey] = useState(0)
   const [busy, setBusy] = useState(false)
   const [justSaved, setJustSaved] = useState(false)
   // Avancement de la lecture, mis a jour en direct par le lecteur.
   const [watch, setWatch] = useState({ percent: a.percent ?? 0, completed: !!a.media_completed })
   // Position de reprise figee au premier affichage (sinon le lecteur se rechargerait a chaque signal).
   const [resumeAt] = useState(a.resume_at ?? 0)
-  useDraft(editing ? key : null, form, (v) => !v.summary.trim() && !v.actions.trim())
+  useDraft(editing ? key : null, form, (v) => !docText(v.summary) && !docText(v.actions))
 
-  const ready = form.summary.trim().length >= 10 && form.actions.trim().length >= 5
-  const unchanged = !!a.response && form.summary.trim() === a.response.summary && form.actions.trim() === a.response.actions
+  const summaryText = docText(form.summary)
+  const actionsText = docText(form.actions)
+  const ready = summaryText.length >= 10 && actionsText.length >= 5 && summaryText.length <= SUMMARY_MAX && actionsText.length <= ACTIONS_MAX
+  const unchanged = !!a.response && sameDoc(form.summary, saved().summary) && sameDoc(form.actions, saved().actions)
   const listen = a.media_type === 'audio' ? 'écoute' : 'vidéo'
   const mediaDone = !a.trackable || watch.completed
   const done = !!a.response && mediaDone
@@ -57,7 +78,7 @@ function AssignmentWork({ a, reminder, onSaved }: { a: Assignment; reminder: str
   async function save() {
     setBusy(true)
     try {
-      await api(`/me/assignments/${a.id}/response`, { method: 'PUT', body: { summary: form.summary.trim(), actions: form.actions.trim() } })
+      await api(`/me/assignments/${a.id}/response`, { method: 'PUT', body: { summary_doc: form.summary, actions_doc: form.actions } })
       clearDraft(key)
       setEditing(false)
       setJustSaved(true)
@@ -101,8 +122,9 @@ function AssignmentWork({ a, reminder, onSaved }: { a: Assignment; reminder: str
               : <span className="ds-done-badge pending"><Icon name="clock" size={15} /> Résumé envoyé · {listen} à terminer</span>}
             <button className="btn btn-ghost small" onClick={() => setEditing(true)}><Icon name="edit" size={15} /> Modifier</button>
           </div>
-          <div className="ds-answer"><span>Résumé</span><p>{a.response.summary}</p></div>
-          <div className="ds-answer"><span>Actions et résolutions</span><p>{a.response.actions}</p></div>
+          <div className="ds-answer"><span>Résumé</span><RichText doc={a.response.summary_doc} text={a.response.summary} /></div>
+          <div className="ds-answer"><span>Actions et résolutions</span><RichText doc={a.response.actions_doc} text={a.response.actions} /></div>
+          <MemberFeedback feedback={a.response.feedback} />
           {justSaved && done && (
             <div className="ds-prayer now" role="status">
               <Icon name="spiritual" size={20} />
@@ -122,21 +144,23 @@ function AssignmentWork({ a, reminder, onSaved }: { a: Assignment; reminder: str
             <li><span>4</span>Priez</li>
           </ol>
           <div className="field">
-            <label htmlFor={`ds-sum-${a.id}`}>Résumé</label>
-            <textarea id={`ds-sum-${a.id}`} className="input" rows={5} maxLength={5000} placeholder="Ce que j'ai retenu du message, en quelques phrases…"
-              value={form.summary} onChange={(e) => setForm((f) => ({ ...f, summary: e.target.value }))} />
+            <label id={`ds-sum-${a.id}`}>Résumé</label>
+            <LazyRichEditor key={`s${editorKey}`} labelledBy={`ds-sum-${a.id}`} value={form.summary} max={SUMMARY_MAX} min={10}
+              placeholder="Ce que j'ai retenu du message, en quelques phrases… (« # » pour un titre, « - » pour une liste)"
+              onChange={(doc) => setForm((f) => ({ ...f, summary: doc }))} />
           </div>
           <div className="field">
-            <label htmlFor={`ds-act-${a.id}`}>Actions et résolutions</label>
-            <textarea id={`ds-act-${a.id}`} className="input" rows={3} maxLength={3000} placeholder="Ce que je vais mettre en pratique cette semaine…"
-              value={form.actions} onChange={(e) => setForm((f) => ({ ...f, actions: e.target.value }))} />
+            <label id={`ds-act-${a.id}`}>Actions et résolutions</label>
+            <LazyRichEditor key={`a${editorKey}`} labelledBy={`ds-act-${a.id}`} value={form.actions} max={ACTIONS_MAX} min={5}
+              placeholder="Ce que je vais mettre en pratique cette semaine… (« - » pour une liste)"
+              onChange={(doc) => setForm((f) => ({ ...f, actions: doc }))} />
           </div>
           <div className="ds-prayer">
             <Icon name="spiritual" size={20} />
             <p>{reminder}</p>
           </div>
           <div className="ds-actions">
-            {a.response && <button className="btn btn-ghost" onClick={() => { setForm({ summary: a.response!.summary, actions: a.response!.actions }); clearDraft(key); setEditing(false) }}>Annuler</button>}
+            {a.response && <button className="btn btn-ghost" onClick={() => { setForm(saved()); setEditorKey((n) => n + 1); clearDraft(key); setEditing(false) }}>Annuler</button>}
             <button className="btn btn-primary" disabled={busy || !ready || unchanged} onClick={save}>
               {busy ? <span className="spinner" /> : a.response ? 'Enregistrer les modifications' : 'Enregistrer mon devoir'}
             </button>

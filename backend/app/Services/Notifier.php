@@ -43,8 +43,12 @@ class Notifier
         'leader_report' => 'Rapport mensuel',
         'gem_report' => 'Rapport de GEM',
         'assignment' => 'Devoir',
+        'assignment_comment' => 'Commentaire',
+        'assignment_like' => 'J’aime',
         'resolution' => 'Résolutions',
         'appointment' => 'Rendez-vous',
+        'chat' => 'Message',
+        'chat_report' => 'Signalement',
         'system' => 'Information',
     ];
 
@@ -95,6 +99,7 @@ class Notifier
         'exercises' => 'Exercices, devoirs, résolutions et leurs rappels',
         'birthdays' => 'Anniversaires',
         'followup' => 'Suivi des membres (responsables)',
+        'chat' => 'Messages du chat de mon GEM',
     ];
 
     /** Categorie de preference d'une notification (null = essentielle, jamais coupee). */
@@ -104,9 +109,10 @@ class Notifier
             'event_reminder' => ($data['kind'] ?? null) === 'service' ? 'services' : 'events',
             'event' => 'events',
             'announcement' => 'announcements',
-            'task', 'task_reminder', 'assignment', 'resolution' => 'exercises',
+            'task', 'task_reminder', 'assignment', 'resolution', 'assignment_like' => 'exercises',
             'birthday', 'wedding' => 'birthdays',
             'member', 'activity', 'report', 'request' => 'followup',
+            'chat' => 'chat',
             default => null,
         };
     }
@@ -245,6 +251,20 @@ class Notifier
                 }
                 $job();
             });
+        }
+    }
+
+    /**
+     * Push seul, tout de suite (chat) : rien dans la cloche, pas de limite horaire. A l'appelant de retirer
+     * ceux qui ne veulent pas etre prevenus.
+     *
+     * @param  array<int>  $userIds
+     * @param  array<string, mixed>  $payload
+     */
+    public static function pushOnly(array $userIds, array $payload, string $urgency = 'normal'): void
+    {
+        if (config('services.webpush.enabled') && $userIds) {
+            self::push(array_values($userIds), ['priority' => $urgency] + $payload, $urgency);
         }
     }
 

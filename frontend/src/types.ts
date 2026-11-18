@@ -1,3 +1,5 @@
+import type { RichDoc } from './rich/doc'
+
 export interface Tribe { id: number; name: string }
 export interface Department { id: number; name: string }
 export interface Gem { id: number; name: string; tribe_id?: number }
@@ -85,7 +87,7 @@ export interface Membership {
 
 /** Modules activables dans Gestion > Reglages. */
 export type ModuleName = 'vertumetre' | 'resolutions' | 'assignments' | 'exercises' | 'appointments' | 'spiritual'
-  | 'meditation' | 'contact' | 'verse' | 'guide' | 'gem_reports' | 'leader_reports'
+  | 'meditation' | 'contact' | 'verse' | 'guide' | 'gem_reports' | 'leader_reports' | 'chat'
 export interface AppSettings { modules: Partial<Record<ModuleName, boolean>>; push_prompt_snooze_days: number }
 
 /** GEM du membre et son Garde (nom et photo seulement). */
@@ -98,7 +100,7 @@ export interface MyGem {
 }
 
 /** Page « Mon GEM » : qui compose son GEM (nom et photo seulement, aucun identifiant), le Garde en tete. */
-export interface MyGemMember { name: string; photo_url: string | null; is_garde: boolean; is_me: boolean }
+export interface MyGemMember { name: string; photo_url: string | null; is_garde: boolean; is_me: boolean; /** Cle opaque pour lui ecrire dans le chat (absente pour soi, ou si le chat est coupe). */ chat_key: string | null }
 export interface MyGemData { gem: { label: string; tribe: string | null; members: MyGemMember[] } | null }
 
 export interface AuthPayload {
@@ -1124,7 +1126,15 @@ export interface Assignment {
   media: AssignmentMedia
   thumbnail: string | null
   published_at: string | null
-  response?: { summary: string; actions: string; submitted_at: string | null } | null
+  response?: {
+    summary: string
+    summary_doc?: RichDoc | null
+    actions: string
+    actions_doc?: RichDoc | null
+    submitted_at: string | null
+    /** « J'aime » et commentaires du pasteur (vus du membre et du pasteur seulement). */
+    feedback?: AssignmentFeedbackData
+  } | null
   // Suivi de lecture (memes regles que les exercices video) : null = lien externe, non mesurable
   trackable?: boolean
   percent?: number | null
@@ -1140,6 +1150,15 @@ export interface Assignment {
   members_count?: number
 }
 export interface MyAssignmentsData { assignments: Assignment[]; pending: number; prayer_reminder: string }
+
+/** Commentaire du pasteur sur la reponse d'un membre a son devoir. */
+export interface AssignmentComment { id: number; author: string; photo_url: string | null; mine: boolean; body: string; body_doc: RichDoc | null; edited: boolean; at: string | null }
+/** Retours sur une reponse : « j'aime » (le pasteur qui regarde aime-t-il ?) et commentaires. */
+export interface AssignmentFeedbackData {
+  liked?: boolean
+  likes: { name: string; photo_url: string | null; is_me: boolean }[]
+  comments: AssignmentComment[]
+}
 
 // ---------------------------------------------------------------- Mon mois (tableau de bord)
 export interface MyMonthData {
